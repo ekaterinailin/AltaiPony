@@ -11,7 +11,7 @@ Convenience function: check if K2SC has de-trended LC already available.
 ```detrend.py```
 Either:
  - do K2SC detrending is stitched in here: use ```standalone.py```  
- function ```detrend(dataset, **kwargs)```
+ function ```detrend(dataset, **kwargs)```, latter uses ```self.get_k2data()``` to create dataset
 
 ```findflares.py```
 Split LC into continuous observation chunks.
@@ -21,6 +21,7 @@ Apply thresholds to detect candidates.
 Includes:
 - semi-empirical flare model
 - injection/recovery procedure for synthetic flares.
+
 ```analysis.py```
 - calculates ED, duration, amplitude, uncertainties, observation times
 - possibly other stats about the original flares 
