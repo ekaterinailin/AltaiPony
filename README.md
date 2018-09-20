@@ -31,10 +31,10 @@ Includes:
 
 ```altai.py```
 Main wrapper that
-1a. takes a K2 (or TESS) ID or a path to a .fits or TPF.gz file
-2a. creates a light curve using lightkurve.
-(2b. de-trends light curve using K2SC
-3a. find flare candidates
-(3b. runs fake flare injection/recovery)
-(3c. Calculates flare parameters, corrects ED and returns recovery probability)
+- 1a. takes a K2 (or TESS) ID or a path to a .fits or TPF.gz file
+- 2a. creates a light curve using lightkurve.
+- (2b. de-trends light curve using K2SC
+- 3a. find flare candidates
+- (3b. runs fake flare injection/recovery)
+- (3c. Calculates flare parameters, corrects ED and returns recovery probability)
 
