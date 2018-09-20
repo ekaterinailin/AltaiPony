@@ -5,9 +5,13 @@ An improved and lean version of Appaloosa w/o extensive I/O, but with de-trendin
 
 ```lightcurve.py```
 All of the IO stuff goes in here. A lightcurve class with its constructor.
+If raw LC is read in - run detrend.py 
+Convenience function: check if K2SC has de-trended LC already available.
 
 ```detrend.py```
-K2SC detrending is stitched in here.
+Either:
+ - do K2SC detrending is stitched in here: use ```standalone.py```  
+ function ```detrend(dataset, **kwargs)```
 
 ```findflares.py```
 Split LC into continuous observation chunks.
@@ -26,10 +30,10 @@ Includes:
 
 ```altai.py```
 Main wrapper that
-1. takes a K2 (or TESS) ID or a path to a .fits or TPF.gz file
-2. creates a light curve using lightkurve
-3. de-trends light curve using K2SC
-4. find flare candidates
-(4b. runs fake flare injection/recovery)
-(4c. Calculates flare parameters, corrects ED and returns recovery probability)
+1a. takes a K2 (or TESS) ID or a path to a .fits or TPF.gz file
+2a. creates a light curve using lightkurve.
+(2b. de-trends light curve using K2SC
+3a. find flare candidates
+(3b. runs fake flare injection/recovery)
+(3c. Calculates flare parameters, corrects ED and returns recovery probability)
 
