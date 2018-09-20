@@ -1,5 +1,5 @@
 # AltaiPony
-An improved and lean version of Appaloosa w/o extensive I/O, but with de-trending but using K2SC and lightkurve.
+An improved and lean version of [Appaloosa](https://github.com/jradavenport/appaloosa/) w/o extensive I/O, but with de-trending but using K2SC and lightkurve.
 
 ## Structure 
 
