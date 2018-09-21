@@ -1,0 +1,4 @@
+lightkurve==1.0b15
+numpy==1.15.1
+pandas==0.23.4
+
