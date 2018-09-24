@@ -1,6 +1,13 @@
 # AltaiPony
 An improved and lean version of [Appaloosa](https://github.com/jradavenport/appaloosa/) w/o extensive I/O, but with de-trending but using K2SC and lightkurve.
 
+## Minimum How-To
+
+1. Download or clone this repository.
+2. Run ```python altai.py``` in the altaipony folder.
+3. Optional: ```Change file inside altai.py``` 
+
+
 ## Structure 
 
 ```lc_io.py```
