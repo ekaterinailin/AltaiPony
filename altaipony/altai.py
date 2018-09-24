@@ -129,14 +129,10 @@ def find_flares(flux, error, N1=3, N2=1, N3=3):
     # use the value of ConM to determine how many points away stop is
     istop_i = istart_i + (ConM[istart_i])
 
-    istart_i = np.array(istart_i, dtype='int')
-    istop_i = np.array(istop_i, dtype='int')
-
-
-    bin_out = np.zeros_like(flux, dtype='int')
+    isflare = np.zeros_like(flux, dtype='int')
     for k in range(len(istart_i)):
-        bin_out[istart_i[k]:istop_i[k]+1] = 1
-    return bin_out
+        isflare[istart_i[k]:istop_i[k]+1] = 1
+    return isflare
 
 def wrapper(lc, gapwindow=0.1, minsep=3):
     '''
@@ -201,3 +197,4 @@ lc = get_k2sc_lc('examples/hlsp_k2sc_k2_llc_211117077-c04_kepler_v2_lc.fits')
 #lc = get_k2sc_lc('examples/hlsp_k2sc_k2_llc_211119999-c04_kepler_v2_lc.fits')
 
 start, stop = wrapper(lc)
+print(start,s)
