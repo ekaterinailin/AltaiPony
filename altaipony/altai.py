@@ -6,13 +6,16 @@ from lightkurve import KeplerLightCurve
 #Ingest a K2SC light curve from file
 def get_k2sc_lc(file):
     '''
-    Parameters
+    Parameters:
     ----------
     file : str
-        light curve file location for a Vanderburg de-trended .txt file
-    Returns
+        light curve file location of a K2SC fits file
+
+    Returns:
     -------
-    lc: light curve DataFrame with columns [time, flux]
+    lc : numpy recarray ()
+        light curve with field names ['cadence','quality','x','y','flux',
+                                      'error', 'mflags', 'trtime','trposi']
 
     # copy from k2sc/standalone.py
     tpf = KeplerTargetPixelFile.from_archive(212300977) # WASP-55
@@ -28,17 +31,11 @@ def get_k2sc_lc(file):
     '''
 
     hdu = fits.open(file)
-    lc = hdu[1].data #'time',
- # 'cadence',
- # 'quality',
- # 'x',
- # 'y',
- # 'flux',
- # 'error',
- # 'mflags',
- # 'trtime',
- # 'trposi'
+    lc = hdu[2].data #'time',
 
+    #remove nans
+    lc = lc[np.where(np.isfinite(lc.time))]
+    lc = lc[np.where(np.isfinite(lc.flux))]
     hdu.close()
     return lc
 
@@ -57,8 +54,9 @@ def find_gaps(time, maxgap=0.125, minspan=10):
 
     Returns
     -------
-    outer edges of gap, left edges, right edges
-    (all are indicies)
+    list of tuples with left and right edges of sufficiently long periods
+    of continuous observation
+
     '''
     dt = time[1:] - time[:-1]
     dt = np.append(0, dt)
@@ -76,21 +74,15 @@ def find_gaps(time, maxgap=0.125, minspan=10):
 
     return list(zip(left, right))
 
-def find_flares(flux, error, N1=3, N2=1, N3=3,
-              avg_std=False, std_window=7,
-              returnbinary=False):
+def find_flares(flux, error, N1=3, N2=1, N3=3):
     '''
     The algorithm for local changes due to flares defined by
     S. W. Chang et al. (2015), Eqn. 3a-d
     http://arxiv.org/abs/1510.01005
 
-    Note: these equations originally in magnitude units, i.e. smaller
+    Note: these equations were originally in magnitude units, i.e. smaller
     values are increases in brightness. The signs have been changed, but
     coefficients have not been adjusted to change from log(flux) to flux.
-
-    Note: this algorithm originally ran over sections without "changes" as
-    defined by Change Point Analysis. May have serious problems for data
-    with dramatic starspot activity. If possible, remove starspot first!
 
     Parameters
     ----------
@@ -107,36 +99,20 @@ def find_flares(flux, error, N1=3, N2=1, N3=3,
     N3 : int, optional
         Coefficient from original paper (Default is 3)
         The number of consecutive points required to flag as a flare
-    avg_std : bool, optional
-        Should the "sigma" in this data be computed by the median of
-        the rolling().std()? (Default is False)
-        (Not part of original algorithm)
-    std_window : float, optional
-        If avg_std=True, how big of a window should it use?
-        (Default is 25 data points)
-        (Not part of original algorithm)
-    returnbinary : bool, optional
-        Should code return the start and stop indicies of flares (default,
-        set to False) or a binary array where 1=flares (set to True)
-        (Not part of original algorithm)
+
 
     Return:
     ------------
     '''
 
-    med_i = np.nanmedian(flux)
-    if avg_std is False:
-        sig_i = np.nanstd(flux) # just the stddev of the window
-    else:
-        # take the average of the rolling stddev in the window.
-        # better for windows w/ significant starspots being removed
-        sig_i = np.nanmedian(pd.Series(flux).rolling(std_window, center=True).std())
-    ca = flux - med_i
-    cb = np.abs(flux - med_i) / sig_i
-    cc = np.abs(flux - med_i - error) / sig_i
-    # pass cuts from Eqns 3a,b,c
+    median = np.nanmedian(flux)
+    sigma = np.nanstd(flux) # just the stddev of the window
+    ca = flux - median # excursion should be positive #"N0"
+    cb = np.abs(flux - median) / sigma #N1
+    cc = np.abs(flux - median - error) / sigma #N2
+    # apply thresholds N0-N2:
     ctmp = np.where((ca > 0) & (cb > N1) & (cc > N2))
-
+    #array of indices where thresholds are exceeded:
     cindx = np.zeros_like(flux)
     cindx[ctmp] = 1
 
@@ -146,43 +122,36 @@ def find_flares(flux, error, N1=3, N2=1, N3=3,
     # this requires a full pass thru the data -> bottleneck
     for k in range(2, len(flux)):
         ConM[-k] = cindx[-k] * (ConM[-(k-1)] + cindx[-k])
-
     # these only defined between dl[i] and dr[i]
     # find flare start where values in ConM switch from 0 to >=N3
     istart_i = np.where((ConM[1:] >= N3) &
-                        (ConM[0:-1] - ConM[1:] < 0))[0] + 1
-
+                        (ConM[:-1] - ConM[1:] < 0))[0] + 1
     # use the value of ConM to determine how many points away stop is
-    istop_i = istart_i + (ConM[istart_i] - 1)
+    istop_i = istart_i + (ConM[istart_i])
 
     istart_i = np.array(istart_i, dtype='int')
     istop_i = np.array(istop_i, dtype='int')
 
-    if returnbinary is False:
-        return istart_i, istop_i
-    else:
-        bin_out = np.zeros_like(flux, dtype='int')
-        for k in range(len(istart_i)):
-            bin_out[istart_i[k]:istop_i[k]+1] = 1
-        return bin_out
 
-def wrapper(lc, objectid='', lctype='',
-          display=False, readfile=False, debug=False, dofake=True,
-          dbmode='fits', gapwindow=0.1,minsep=3,
-          fakefreq=.25, mode='davenport', iterations=10):
+    bin_out = np.zeros_like(flux, dtype='int')
+    for k in range(len(istart_i)):
+        bin_out[istart_i[k]:istop_i[k]+1] = 1
+    return bin_out
+
+def wrapper(lc, gapwindow=0.1, minsep=3):
     '''
     Main wrapper to obtain and process a light curve.
 
     Parameters:
     -------------
+    lc : light curve
 
-
-    minsep : 3 or int
-        minimum distance between two candidates in datapoints
+    minsep : 1 or int
+        minimum distance between two candidate start times in datapoints
     '''
 
     #find continuous observing periods
-    dlr = find_gaps(lc.time, maxgap=0.03)
+    dlr = find_gaps(lc.time)
 
     istart = np.array([], dtype='int')
     istop = np.array([], dtype='int')
@@ -196,24 +165,27 @@ def wrapper(lc, objectid='', lctype='',
         flux_model_i = np.nanmedian(lct.flux) * np.ones_like(lct.flux)
         flux_diff = lct.flux - flux_model_i
         # run final flare-find on DATA - MODEL
-        isflare = find_flares(flux_diff, lct.error, N1=3, N2=4, N3=3,
-                              returnbinary=True, avg_std=True)
+        isflare = find_flares(flux_diff, lct.error, N1=3, N2=4, N3=3)
 
         # now pick out final flare candidate points from above
-        cand1 = np.where( isflare > 0)[0]
+        candidates = np.where( isflare > 0)[0]
         #delete candidates too close to edges of time array:
-        x1 = np.where( (np.abs(time[cand1] - time[-1]) < gapwindow) )
-        x2 = np.where( (np.abs(time[cand1] - time[0]) < gapwindow) )
-        cand1 = np.delete(cand1, x1)
-        cand1 = np.delete(cand1, x2)
-        if (len(cand1) < 1):#no candidates = no indices
+        x1 = np.where( (np.abs(time[candidates] - time[-1]) < gapwindow) )
+        x2 = np.where( (np.abs(time[candidates] - time[0]) < gapwindow) )
+        cand1 = np.delete(candidates, x1)
+        cand1 = np.delete(candidates, x2)
+        if (len(candidates) < 1):#no candidates = no indices
             istart_i = np.array([])
             istop_i = np.array([])
         else:
-            # find start and stop index, combine neighboring candidates in to same events
-            separated_cand = np.where( (cand1[1:] - cand1[:-1] > minsep) )[0]
-            istart_i = cand1[ np.append([0], separated_cand + 1) ]
-            istop_i = cand1[ np.append(separated_cand, [len(cand1) - 1]) ]
+            # find start and stop index, combine neighboring candidates
+            # in to same events
+            separated_candidates = np.where( ((candidates[1:] - candidates[:-1]) >= minsep) )[0]
+            istart_i = cand1[ np.append([0],
+                                        separated_candidates + 1) ]
+            istop_i = cand1[ np.append(separated_candidates,
+                                       [len(candidates) - 1]) ]
+
         # if start & stop times are the same, add 1 more datum on the end
         to1 = np.where((istart_i-istop_i == 0))
         if len(to1[0])>0:
@@ -222,12 +194,10 @@ def wrapper(lc, objectid='', lctype='',
         istart = np.array(np.append(istart, istart_i + le), dtype='int')
         istop = np.array(np.append(istop, istop_i + le), dtype='int')
         flux_model[le:ri] = flux_model_i
-
     return istart, istop
 
-#lc = get_k2sc_lc('examples/hlsp_k2sc_k2_llc_211117077-c04_kepler_v2_lc.fits')
+lc = get_k2sc_lc('examples/hlsp_k2sc_k2_llc_211117077-c04_kepler_v2_lc.fits')
 #lc = get_k2sc_lc('examples/hlsp_k2sc_k2_llc_210951703-c04_kepler_v2_lc.fits')
-lc = get_k2sc_lc('examples/hlsp_k2sc_k2_llc_211119999-c04_kepler_v2_lc.fits')
+#lc = get_k2sc_lc('examples/hlsp_k2sc_k2_llc_211119999-c04_kepler_v2_lc.fits')
 
 start, stop = wrapper(lc)
-print(start, stop)
