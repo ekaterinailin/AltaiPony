@@ -103,35 +103,38 @@ def find_flares(flux, error, N1=3, N2=1, N3=3):
 
     Return:
     ------------
+    isflare : numpy array of booleans
+        datapoints are flagged with 1 if they belong to a flare candidate
     '''
 
     median = np.nanmedian(flux)
-    sigma = np.nanstd(flux) # just the stddev of the window
-    ca = flux - median # excursion should be positive #"N0"
-    cb = np.abs(flux - median) / sigma #N1
-    cc = np.abs(flux - median - error) / sigma #N2
+    sigma = np.nanstd(flux)
+    T0 = flux - median # excursion should be positive #"N0"
+    T1 = np.abs(flux - median) / sigma #N1
+    T2 = np.abs(flux - median - error) / sigma #N2
     # apply thresholds N0-N2:
-    ctmp = np.where((ca > 0) & (cb > N1) & (cc > N2))
+    pass_thresholds = np.where((T0 > 0) & (T1 > N1) & (T2 > N2))
     #array of indices where thresholds are exceeded:
-    cindx = np.zeros_like(flux)
-    cindx[ctmp] = 1
+    is_pass_thresholds = np.zeros_like(flux)
+    is_pass_thresholds[pass_thresholds] = 1
 
-    # Need to find cumulative number of points that pass "ctmp"
-    # Count in reverse!
-    ConM = np.zeros_like(flux)
-    # this requires a full pass thru the data -> bottleneck
+    # Need to find cumulative number of points that pass_thresholds
+    # Counted in reverse!
+    # Examples reverse_counts = [0 0 0 3 2 1 0 0 1 0 4 3 2 1 0 0 0 1 0 2 1 0]
+    #                 isflare = [0 0 0 1 1 1 0 0 0 0 1 1 1 1 0 0 0 0 0 0 0 0]
+
+    reverse_counts = np.zeros_like(flux, dtype='int')
     for k in range(2, len(flux)):
-        ConM[-k] = cindx[-k] * (ConM[-(k-1)] + cindx[-k])
-    # these only defined between dl[i] and dr[i]
-    # find flare start where values in ConM switch from 0 to >=N3
-    istart_i = np.where((ConM[1:] >= N3) &
-                        (ConM[:-1] - ConM[1:] < 0))[0] + 1
-    # use the value of ConM to determine how many points away stop is
-    istop_i = istart_i + (ConM[istart_i])
+        reverse_counts[-k] = is_pass_thresholds[-k] * (reverse_counts[-(k-1)] + is_pass_thresholds[-k])
 
+    # find flare start where values in reverse_counts switch from 0 to >=N3
+    istart_i = np.where((reverse_counts[1:] >= N3) &
+                        (reverse_counts[:-1] - reverse_counts[1:] < 0))[0] + 1
+    # use the value of reverse_counts to determine how many points away stop is
+    istop_i = istart_i + (reverse_counts[istart_i])
     isflare = np.zeros_like(flux, dtype='int')
-    for k in range(len(istart_i)):
-        isflare[istart_i[k]:istop_i[k]+1] = 1
+    for (l,r) in list(zip(istart_i,istop_i)):
+        isflare[l:r+1] = 1
     return isflare
 
 def wrapper(lc, gapwindow=0.1, minsep=3):
@@ -144,6 +147,7 @@ def wrapper(lc, gapwindow=0.1, minsep=3):
 
     minsep : 1 or int
         minimum distance between two candidate start times in datapoints
+
     '''
 
     #find continuous observing periods
@@ -151,50 +155,37 @@ def wrapper(lc, gapwindow=0.1, minsep=3):
 
     istart = np.array([], dtype='int')
     istop = np.array([], dtype='int')
-    flux_model = np.zeros_like(lc.flux)
-
+    #Now work on periods of continuous observation with no gaps
     for (le,ri) in dlr:
         lct = lc[le:ri]
-        time, flux  = lct.time, lct.flux,
-        error, flags = lct.quality, lct.quality
-
         flux_model_i = np.nanmedian(lct.flux) * np.ones_like(lct.flux)
         flux_diff = lct.flux - flux_model_i
         # run final flare-find on DATA - MODEL
         isflare = find_flares(flux_diff, lct.error, N1=3, N2=4, N3=3)
 
-        # now pick out final flare candidate points from above
+        # now pick out final flare candidate indices
         candidates = np.where( isflare > 0)[0]
-        #delete candidates too close to edges of time array:
-        x1 = np.where( (np.abs(time[candidates] - time[-1]) < gapwindow) )
-        x2 = np.where( (np.abs(time[candidates] - time[0]) < gapwindow) )
-        cand1 = np.delete(candidates, x1)
-        cand1 = np.delete(candidates, x2)
+
         if (len(candidates) < 1):#no candidates = no indices
             istart_i = np.array([])
             istop_i = np.array([])
         else:
             # find start and stop index, combine neighboring candidates
             # in to same events
-            separated_candidates = np.where( ((candidates[1:] - candidates[:-1]) >= minsep) )[0]
-            istart_i = cand1[ np.append([0],
-                                        separated_candidates + 1) ]
-            istop_i = cand1[ np.append(separated_candidates,
-                                       [len(candidates) - 1]) ]
+            separated_candidates = np.where( (np.diff(candidates)) > minsep )[0]
+            istart_i = candidates[ np.append([0], separated_candidates + 1) ]
+            istop_i = candidates[ np.append(separated_candidates,
+                                  [len(candidates) - 1]) ]
 
-        # if start & stop times are the same, add 1 more datum on the end
-        to1 = np.where((istart_i-istop_i == 0))
-        if len(to1[0])>0:
-            istop_i[to1] += 1
-
+        #stitch indices back into the original light curve
         istart = np.array(np.append(istart, istart_i + le), dtype='int')
         istop = np.array(np.append(istop, istop_i + le), dtype='int')
-        flux_model[le:ri] = flux_model_i
+
     return istart, istop
 
-lc = get_k2sc_lc('examples/hlsp_k2sc_k2_llc_211117077-c04_kepler_v2_lc.fits')
+#lc = get_k2sc_lc('examples/hlsp_k2sc_k2_llc_211117077-c04_kepler_v2_lc.fits')
 #lc = get_k2sc_lc('examples/hlsp_k2sc_k2_llc_210951703-c04_kepler_v2_lc.fits')
-#lc = get_k2sc_lc('examples/hlsp_k2sc_k2_llc_211119999-c04_kepler_v2_lc.fits')
+lc = get_k2sc_lc('examples/hlsp_k2sc_k2_llc_211119999-c04_kepler_v2_lc.fits')
 
 start, stop = wrapper(lc)
-print(start,s)
+print(start,stop)
