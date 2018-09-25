@@ -10,8 +10,8 @@ An improved and lean version of [Appaloosa](https://github.com/jradavenport/appa
 
 ## Structure 
 
-```lc_io.py```
-All of the IO stuff goes in here. A lightcurve class with its constructor.
+```flarelc.py```
+All of the IO stuff goes in here. A lightcurve class with its constructor that inherits from ```k2sc``` and/or ```lightkurve```.
 If raw LC is read in - run detrend.py 
 Convenience function: check if K2SC has de-trended LC already available.
 
