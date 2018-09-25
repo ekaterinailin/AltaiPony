@@ -182,7 +182,3 @@ def wrapper(lc, gapwindow=0.1, minsep=3):
 
 #lc = get_k2sc_lc('examples/hlsp_k2sc_k2_llc_211117077-c04_kepler_v2_lc.fits')
 #lc = get_k2sc_lc('examples/hlsp_k2sc_k2_llc_210951703-c04_kepler_v2_lc.fits')
-lc = get_k2sc_lc('examples/hlsp_k2sc_k2_llc_211119999-c04_kepler_v2_lc.fits')
-
-start, stop = wrapper(lc)
-print(start,stop)

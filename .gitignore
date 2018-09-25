@@ -1,2 +1,10 @@
+#Folders
 myenv/
 .git/
+.ipynb_checkpoints/
+__pycache__/
+mastDownload/
+
+#File types
+
+*.pyc/
