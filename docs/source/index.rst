@@ -14,7 +14,7 @@ AltaiPony - Find and analyse flares in K2 light curves
    :maxdepth: 1
 
    install
-   api/index
+   api/flarelc
 
 .. toctree::
     :caption: Tutorials
