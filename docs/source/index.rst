@@ -3,18 +3,28 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-Welcome to AltaiPony's documentation!
-=====================================
+======================================================
+AltaiPony - Find and analyse flares in K2 light curves
+======================================================
+
+.. _user-docs:
 
 .. toctree::
-   :maxdepth: 2
-   :caption: Contents:
+   :caption: Getting started
+   :maxdepth: 1
+
+   install
+   api/index
+
+.. toctree::
+    :caption: Tutorials
+    :maxdepth: 2
 
 
+.. toctree::
+    :caption: About AltaiPony
+    :maxdepth: 1
 
-Indices and tables
-==================
+    contributing
+    citing
 
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`
