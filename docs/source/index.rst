@@ -7,6 +7,7 @@
 AltaiPony - Find and analyse flares in K2 light curves
 ======================================================
 
+
 .. _user-docs:
 
 .. toctree::
