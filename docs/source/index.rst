@@ -25,6 +25,4 @@ AltaiPony - Find and analyse flares in K2 light curves
     :caption: About AltaiPony
     :maxdepth: 1
 
-    contributing
-    citing
 
