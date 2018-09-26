@@ -1,4 +1,7 @@
-from lightkurve import KeplerLightCurve, KeplerLightCurveFile, KeplerTargetPixelFile
+from lightkurve import KeplerLightCurve
+from mast import download_kepler_products
+from astropy.io import fits
+import os
 
 class FlareLightCurve(KeplerLightCurve):
     """
@@ -19,26 +22,4 @@ class FlareLightCurve(KeplerLightCurve):
         self.flares = flares #pd.DataFrame(columns=['istart','istop','cstart','cstop', 'ed'])
 
     def __repr__(self):
-        return('FlaresLightCurve(ID: {})'.format(self.targetid))
-
-    def from_TPF(path, **kwargs):
-        tpf = KeplerTargetPixelFile(path, **kwargs)
-        lc = tpf.to_lightcurve()
-        return from_KeplerLightCurve(lc)
-
-    def from_KeplerLightCurveFile(path_or_ID):
-
-        return KeplerLightCurveFile.from_archive(path_or_ID)
-
-    @staticmethod
-    def from_KeplerLightCurve(lc):
-
-
-        return FlareLightCurve(time=lc.time, flux=lc.flux, )
-
-
-
-
-    #IO
-    # tpf from MAST or path
-    # k2sc file from MAST or path
+        return('FlareLightCurve(ID: {})'.format(self.targetid))
