@@ -2,6 +2,7 @@ AltaiPony
 =========
 
 An improved and lean version of Appaloosa_ w/o extensive I/O, but with de-trending but using K2SC and lightkurve.
+The documenation (work in progress) are at altaipony.readthedocs.io_
 
 Minimum How-To
 ^^^^^^^^^^^^^
@@ -56,3 +57,4 @@ Main wrapper that
 - (3c. Calculates flare parameters, corrects ED and returns recovery probability)
 
 .. _Appaloosa: https://github.com/jradavenport/appaloosa/
+.. _altaipony.readthedocs.io: https://altaipony.readthedocs.io/en/latest/
