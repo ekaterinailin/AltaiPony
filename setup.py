@@ -1,0 +1,20 @@
+import setuptools
+
+with open("README.rst", "r") as fh:
+    long_description = fh.read()
+
+setuptools.setup(
+    name="altaipony",
+    version="0.0.1",
+    author="Ekaterina Ilin",
+    author_email="eilin@aip.de",
+    description="A flare finding and analysis package for K2",
+    long_description=long_description,
+    long_description_content_type="text/restructuredtext",
+    url="https://github.com/ekaterinailin/AltaiPony",
+    packages=setuptools.find_packages(),
+    classifiers=[
+        "Programming Language :: Python :: 3",
+        "License :: OSI Approved :: MIT License",
+    ],
+)
