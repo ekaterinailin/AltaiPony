@@ -1,9 +1,10 @@
 from lightkurve import KeplerLightCurveFile, KeplerTargetPixelFile
-from mast import download_kepler_products
+from .flarelc import FlareLightCurve
+from .mast import download_kepler_products
 from astropy.io import fits
 import os
 
-from flarelc import FlareLightCurve
+
 
 # Naming convention:
 # from_* : IO method for some data type (TPF, KLC, K2SC)
@@ -49,12 +50,11 @@ def from_KeplerLightCurve(lc):
 def from_K2SC_file(path):
 
     hdu = fits.open(path)
-    data_rec = hdu[1].data
-    print(data_rec.names)
-    flc = FlareLightCurve(time=data_rec.time, flux=data_rec.flux)
+    dr = hdu[1].data
+    print(dr.names)
+    flc = FlareLightCurve(time=dr.time, flux=dr.flux, cadenceno=dr.cadence)
     hdu.close()
-    del data_rec
-    del hdu
+    del dr
     return flc
 
 

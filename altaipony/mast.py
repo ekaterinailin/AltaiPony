@@ -8,7 +8,7 @@ from astroquery.exceptions import ResolverError
 from astropy.coordinates import SkyCoord
 from astropy.io import ascii
 
-from __init__ import PACKAGEDIR #change to original lightkurve
+from .__init__ import PACKAGEDIR #change to original lightkurve
 log = logging.getLogger(__name__)
 
 """This is a copy from lightkurve.mast with some tweaks to make it run with k2sc files"""

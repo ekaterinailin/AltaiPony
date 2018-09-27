@@ -3,70 +3,7 @@ import pandas as pd
 import numpy as np
 from lightkurve import KeplerLightCurve
 
-def get_k2sc_lc(file):
-
-    '''
-
-    Read in light curve as a numpy recarray from a .fits K2SC light curve.
-
-    Parameters:
-    ----------
-    file : str
-        light curve file location of a K2SC fits file
-
-    Return:
-    -------
-    lc : numpy recarray ()
-        light curve with field names ['cadence','quality','x','y','flux',
-                                      'error', 'mflags', 'trtime','trposi']
-    '''
-
-    hdu = fits.open(file)
-    lc = hdu[2].data #'time',
-
-    #critical: remove nans from time and flux
-    lc = lc[np.where(np.isfinite(lc.time))]
-    lc = lc[np.where(np.isfinite(lc.flux))]
-    hdu.close()
-
-    return lc
-
-def find_gaps(time, maxgap=0.09, minspan=10):
-    '''
-
-    Parameters:
-    ----------
-    time : numpy array with floats
-        sorted array, in units of days
-    maxgap : 0.09 or float
-        maximum time gap between two datapoints in days,
-        default equals approximately 2h
-    minspan : 10 or int
-        minimum number of datapoints in continuous observation,
-        i.e., w/o gaps as defined by maxgap
-
-    Return:
-    -------
-    list of tuples with left and right edges of sufficiently long periods
-    of continuous observation
-
-    '''
-
-    dt = np.diff(time)
-    gap = np.where(np.append(0, dt) >= maxgap)[0]
-    # add start/end of LC to loop over easily
-    gap_out = np.append(0, np.append(gap, len(time)))
-
-    # left start, right end of data
-    left, right = gap_out[:-1], gap_out[1:]
-
-    #drop too short observation periods
-    too_short = np.where(np.diff(gap_out) < 10)
-    left, right = np.delete(left,too_short), np.delete(right,(too_short))
-
-    return list(zip(left, right))
-
-def find_flares(flux, error, N1=3, N2=1, N3=3):
+def find_flares(flux, error, N1=4, N2=4, N3=3):
     '''
     The algorithm for local changes due to flares defined by
     S. W. Chang et al. (2015), Eqn. 3a-d
@@ -83,10 +20,10 @@ def find_flares(flux, error, N1=3, N2=1, N3=3):
     error : numpy array
         errors corresponding to data.
     N1 : int, optional
-        Coefficient from original paper (Default is 3)
+        Coefficient from original paper (Default is 3 in paper, 4 here)
         How many times above the stddev is required.
     N2 : int, optional
-        Coefficient from original paper (Default is 1)
+        Coefficient from original paper (Default is 1 in paper, 4 here)
         How many times above the stddev and uncertainty is required
     N3 : int, optional
         Coefficient from original paper (Default is 3)
@@ -131,14 +68,14 @@ def find_flares(flux, error, N1=3, N2=1, N3=3):
         isflare[l:r+1] = 1
     return isflare
 
-def wrapper(lc, gapwindow=0.1, minsep=3):
+def wrapper(lc, minsep=3):
     '''
     Main wrapper to obtain and process a light curve.
 
     Parameters:
     -------------
     lc : light curve
-
+        FlareLightCurve object
     minsep : 1 or int
         minimum distance between two candidate start times in datapoints
 
@@ -148,17 +85,18 @@ def wrapper(lc, gapwindow=0.1, minsep=3):
     '''
 
     #find continuous observing periods
-    dlr = find_gaps(lc.time)
+    lc.find_gaps()
 
     istart = np.array([], dtype='int')
     istop = np.array([], dtype='int')
     #Now work on periods of continuous observation with no gaps
-    for (le,ri) in dlr:
-        lct = lc[le:ri]
-        flux_model_i = np.nanmedian(lct.flux) * np.ones_like(lct.flux)
-        flux_diff = lct.flux - flux_model_i
+    for (le,ri) in lc.gaps:
+        error = lc.flux_error[le:ri]
+        flux = lc.flux[le:ri]
+        flux_model_i = np.nanmedian(flux) * np.ones_like(flux)
+        flux_diff = flux - flux_model_i
         # run final flare-find on DATA - MODEL
-        isflare = find_flares(flux_diff, lct.error, N1=3, N2=4, N3=3)
+        isflare = find_flares(flux_diff, error)
 
         # now pick out final flare candidate indices
         candidates = np.where( isflare > 0)[0]
@@ -177,8 +115,10 @@ def wrapper(lc, gapwindow=0.1, minsep=3):
         #stitch indices back into the original light curve
         istart = np.array(np.append(istart, istart_gap + le), dtype='int')
         istop = np.array(np.append(istop, istop_gap + le), dtype='int')
+        lc.flares.append((lc.cadenceno[istart_gap + le],
+                          lc.cadenceno[istart_gap + le]))
 
-    return lc.cadence[istart], lc.cadence[istop]
+    return lc.cadenceno[istart], lc.cadenceno[istop]
 
 #lc = get_k2sc_lc('examples/hlsp_k2sc_k2_llc_211117077-c04_kepler_v2_lc.fits')
 #lc = get_k2sc_lc('examples/hlsp_k2sc_k2_llc_210951703-c04_kepler_v2_lc.fits')
