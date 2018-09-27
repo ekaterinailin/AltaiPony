@@ -1,5 +1,7 @@
-.. module:: altaipony.flarelc
+FlareLightCurve - the main class
+=================================
 
-.. automodapi:: altaipony.flarelc
-        :no-heading:
-        :inherited-members:
+
+
+.. automodule:: altaipony.flarelc
+   :members: FlareLightCurve

@@ -7,6 +7,8 @@
 AltaiPony - Find and analyse flares in K2 light curves
 ======================================================
 
+This package replaces the original Appaloosa_.
+
 .. _user-docs:
 
 .. toctree::
@@ -25,4 +27,4 @@ AltaiPony - Find and analyse flares in K2 light curves
     :caption: About AltaiPony
     :maxdepth: 1
 
-
+.. _Appaloosa: https://github.com/jradavenport/appaloosa

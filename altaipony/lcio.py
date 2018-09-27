@@ -13,6 +13,21 @@ from flarelc import FlareLightCurve
 
 
 def from_TargetPixel_source(target, **kwargs):
+    """
+    Accepts paths and EPIC IDs as targets. Either fetches a ``KeplerTargetPixelFile``
+    from MAST via ID or directly from a path, then creates a lightcurve with
+    default Kepler/K2 pixel mask.
+
+    Parameters:
+    ------------
+    target : str or int
+        EPIC ID (e.g., 211119999) or path to zipped ``KeplerTargetPixelFile``
+    **kwargs : dict
+        Keyword arguments to pass to ``KeplerTargetPixelFile.from_archive``
+        <https://lightkurve.keplerscience.org/api/lightkurve.targetpixelfile.
+        KeplerTargetPixelFile.html#lightkurve.targetpixelfile.
+        KeplerTargetPixelFile.from_archive>
+    """
     tpf = KeplerTargetPixelFile.from_archive(target, **kwargs)
     lc = tpf.to_lightcurve()
     return from_KeplerLightCurve(lc)
