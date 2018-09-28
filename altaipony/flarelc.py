@@ -1,10 +1,16 @@
 import numpy as np
 import os
 import copy
+import logging
 
 from k2sc.standalone import k2sc_lc
 from lightkurve import KeplerLightCurve, KeplerTargetPixelFile
 from astropy.io import fits
+
+from .altai import wrapper
+
+LOG = logging.getLogger(__name__)
+LOG.setLevel(logging.INFO)
 
 
 class FlareLightCurve(KeplerLightCurve):
@@ -93,3 +99,7 @@ class FlareLightCurve(KeplerLightCurve):
         self.detrended_flux = (new_lc.corr_flux - new_lc.tr_time
                               + np.nanmedian(new_lc.tr_time))
         return
+
+    def find_flares(self):
+
+        return wrapper(self)

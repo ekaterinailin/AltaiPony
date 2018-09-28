@@ -1,12 +1,14 @@
 import os
+import inspect
+import logging
 
 from lightkurve import KeplerLightCurveFile, KeplerTargetPixelFile, KeplerLightCurve
 from .flarelc import FlareLightCurve
 from .mast import download_kepler_products
 from astropy.io import fits
 
+LOG = logging.getLogger(__name__)
 
-import inspect
 
 # Naming convention:
 # from_* : IO method for some data type (TPF, KLC, K2SC)
@@ -60,8 +62,9 @@ def from_K2SC_file(path):
     dr = hdu[1].data
     print(dr.names)
     targetid = path.split('-')[0][-9:]
-    flc = FlareLightCurve(time=dr.time, flux=dr.flux, cadenceno=dr.cadence,
-                          flux_trends = dr.trtime, targetid=targetid)
+    flc = FlareLightCurve(time=dr.time, flux=dr.flux, flux_err=dr.error,
+                          cadenceno=dr.cadence, flux_trends = dr.trtime,
+                          targetid=targetid)
     hdu.close()
     del dr
     return flc
@@ -72,7 +75,7 @@ def from_K2SC_source(target, filetype='Lightcurve', cadence='long', quarter=None
 
 
     if os.path.exists(str(target)) or str(target).startswith('http'):
-        log.warning('Warning: from_archive() is not intended to accept a '
+        LOG.warning('Warning: from_archive() is not intended to accept a '
                     'direct path, use from_K2SC_File(path) instead.')
         path = [target]
     else:

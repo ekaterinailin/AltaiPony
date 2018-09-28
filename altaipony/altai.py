@@ -1,7 +1,11 @@
 from astropy.io import fits
 import pandas as pd
 import numpy as np
+import logging
 from lightkurve import KeplerLightCurve
+
+LOG = logging.getLogger(__name__)
+
 
 def find_flares(flux, error, N1=4, N2=4, N3=3):
     '''
@@ -86,12 +90,12 @@ def wrapper(lc, minsep=3):
 
     #find continuous observing periods
     lc.find_gaps()
-
+    lc.flares = []
     istart = np.array([], dtype='int')
     istop = np.array([], dtype='int')
     #Now work on periods of continuous observation with no gaps
     for (le,ri) in lc.gaps:
-        error = lc.flux_error[le:ri]
+        error = lc.flux_err[le:ri]
         flux = lc.flux[le:ri]
         flux_model_i = np.nanmedian(flux) * np.ones_like(flux)
         flux_diff = flux - flux_model_i
@@ -102,6 +106,7 @@ def wrapper(lc, minsep=3):
         candidates = np.where( isflare > 0)[0]
 
         if (len(candidates) < 1):#no candidates = no indices
+            LOG.info('INFO: No candidates were found in the ({},{}) gap.'.format(le,ri))
             istart_gap = np.array([])
             istop_gap = np.array([])
         else:
@@ -115,10 +120,9 @@ def wrapper(lc, minsep=3):
         #stitch indices back into the original light curve
         istart = np.array(np.append(istart, istart_gap + le), dtype='int')
         istop = np.array(np.append(istop, istop_gap + le), dtype='int')
-        lc.flares.append((lc.cadenceno[istart_gap + le],
-                          lc.cadenceno[istart_gap + le]))
+    lc.flares += list(zip(lc.cadenceno[istart], lc.cadenceno[istop]))
 
-    return lc.cadenceno[istart], lc.cadenceno[istop]
+    return lc.flares
 
 #lc = get_k2sc_lc('examples/hlsp_k2sc_k2_llc_211117077-c04_kepler_v2_lc.fits')
 #lc = get_k2sc_lc('examples/hlsp_k2sc_k2_llc_210951703-c04_kepler_v2_lc.fits')
