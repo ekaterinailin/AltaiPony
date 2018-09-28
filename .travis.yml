@@ -6,5 +6,5 @@ python:
 
 script:
   - python setup.py develop
-  - pytest --remote-data
+  - pytest
 
