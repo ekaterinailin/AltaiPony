@@ -1,16 +1,16 @@
 AltaiPony
 =========
 
-An improved and lean version of Appaloosa_ w/o extensive I/O, but with de-trending but using K2SC and lightkurve.
+An improved and lean version of Appaloosa_ w/o extensive I/O, but with de-trending but using ``K2SC`` and ``lightkurve``.
 The documenation (work in progress) are at altaipony.readthedocs.io_
 
 Minimum How-To
 ^^^^^^^^^^^^^
-
-.. code-block:: python
-  git clone https://github.com/ekaterinailin/AltaiPony.git
-  cd AltaiPony
-  python setup.py install
+::
+    
+    git clone https://github.com/ekaterinailin/AltaiPony.git
+    cd AltaiPony
+    python setup.py install
 
 
 Structure 
