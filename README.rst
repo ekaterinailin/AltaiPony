@@ -7,9 +7,10 @@ The documenation (work in progress) are at altaipony.readthedocs.io_
 Minimum How-To
 ^^^^^^^^^^^^^
 
-1. Download or clone this repository.
-2. Run ``python altai.py`` in the altaipony folder.
-3. Optional: ``Change file inside altai.py`` 
+.. code-block:: python
+  git clone https://github.com/ekaterinailin/AltaiPony.git
+  cd AltaiPony
+  python setup.py install
 
 
 Structure 
