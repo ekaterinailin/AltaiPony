@@ -1,10 +1,12 @@
+import os
 import numpy as np
 import pytest
 from inspect import currentframe, getframeinfo
-from pathlib import Path
 
 from ..flarelc import FlareLightCurve
 from ..lcio import from_K2SC_file
+
+from .. import PACKAGEDIR
 
 
 #example paths:
@@ -25,9 +27,7 @@ def test_invalid_lightcurve():
     assert err_string == err.value.args[0]
 
 def test_find_gaps():
-
-    filename = getframeinfo(currentframe()).filename
-    p = Path(filename).resolve().parents[1]
-    lc = from_K2SC_file(p / 'examples/hlsp_k2sc_k2_llc_210951703-c04_kepler_v2_lc.fits')
+    filename = os.path.join(PACKAGEDIR, 'examples', 'hlsp_k2sc_k2_llc_210951703-c04_kepler_v2_lc.fits')
+    lc = from_K2SC_file(filename)
     lc.find_gaps()
     assert lc.gaps == [(0, 2582), (2582, 3424)]
