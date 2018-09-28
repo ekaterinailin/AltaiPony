@@ -1,10 +1,12 @@
-from lightkurve import KeplerLightCurveFile, KeplerTargetPixelFile
+import os
+
+from lightkurve import KeplerLightCurveFile, KeplerTargetPixelFile, KeplerLightCurve
 from .flarelc import FlareLightCurve
 from .mast import download_kepler_products
 from astropy.io import fits
-import os
 
 
+import inspect
 
 # Naming convention:
 # from_* : IO method for some data type (TPF, KLC, K2SC)
@@ -38,13 +40,18 @@ def from_KeplerLightCurve_source(target):
 
     lcf = KeplerLightCurveFile.from_archive(target)
     lc = lcf.get_lightcurve('SAP_FLUX')
+
     return from_KeplerLightCurve(lc)
 
 
 def from_KeplerLightCurve(lc):
     #populate to reconcile KLC with FLC
     print(dir(lc))
-    return FlareLightCurve(time=lc.time, flux=lc.flux, flux_err=lc.flux_err)
+    #get all KeplerLightCurve attributes and pass them to the FLC
+    kwnames = inspect.getargspec(KeplerLightCurve)[0][1:]
+    data = [getattr(lc, names) for names in kwnames]
+    kwargs = dict(zip(kwnames, data))
+    return FlareLightCurve(**kwargs)
 
 
 def from_K2SC_file(path):
@@ -52,15 +59,16 @@ def from_K2SC_file(path):
     hdu = fits.open(path)
     dr = hdu[1].data
     print(dr.names)
-    flc = FlareLightCurve(time=dr.time, flux=dr.flux, cadenceno=dr.cadence)
+    targetid = path.split('-')[0][-9:]
+    flc = FlareLightCurve(time=dr.time, flux=dr.flux, cadenceno=dr.cadence,
+                          flux_trends = dr.trtime, targetid=targetid)
     hdu.close()
     del dr
     return flc
 
 
 def from_K2SC_source(target, filetype='Lightcurve', cadence='long', quarter=None,
-              campaign=None, month=None, radius=None,
-              targetlimit=1):
+                     campaign=None, month=None, radius=None, targetlimit=1):
 
 
     if os.path.exists(str(target)) or str(target).startswith('http'):
@@ -73,6 +81,5 @@ def from_K2SC_source(target, filetype='Lightcurve', cadence='long', quarter=None
                                         month=month, radius=radius,
                                         targetlimit=targetlimit)
     if len(path) == 1:
-
         return from_K2SC_file(path[0])
     return [from_K2SC_file(p) for p in path]

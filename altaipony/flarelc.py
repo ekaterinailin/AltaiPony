@@ -1,7 +1,11 @@
-from lightkurve import KeplerLightCurve
-from astropy.io import fits
 import numpy as np
 import os
+import copy
+
+from k2sc.standalone import k2sc_lc
+from lightkurve import KeplerLightCurve, KeplerTargetPixelFile
+from astropy.io import fits
+
 
 class FlareLightCurve(KeplerLightCurve):
     """
@@ -22,8 +26,8 @@ class FlareLightCurve(KeplerLightCurve):
     def __init__(self, time=None, flux=None, flux_err=None, time_format=None, time_scale=None,
                  centroid_col=None, centroid_row=None, quality=None, quality_bitmask=None,
                  channel=None, campaign=None, quarter=None, mission=None, cadenceno=None,
-                 targetid=None, ra=None, dec=None, label=None, meta={},
-                 gaps=None, flares=None):
+                 targetid=None, ra=None, dec=None, label=None, meta={}, detrended_flux=None,
+                 flux_trends = None, gaps=None, flares=None):
 
         super(FlareLightCurve, self).__init__(time=time, flux=flux, flux_err=flux_err, time_format=time_format, time_scale=time_scale,
                                               centroid_col=centroid_col, centroid_row=centroid_row, quality=quality,
@@ -32,6 +36,8 @@ class FlareLightCurve(KeplerLightCurve):
                                               meta=meta)
         self.gaps = gaps
         self.flares = flares #pd.DataFrame(columns=['istart','istop','cstart','cstop', 'ed'])
+        self.detrended_flux = detrended_flux
+        self.flux_trends = flux_trends
 
     def __repr__(self):
         return('FlareLightCurve(ID: {})'.format(self.targetid))
@@ -66,4 +72,24 @@ class FlareLightCurve(KeplerLightCurve):
         left, right = np.delete(left,too_short), np.delete(right,(too_short))
         self.gaps = list(zip(left, right))
 
+        return
+
+    def detrend(self):
+        #make sure there is no detrended_flux already
+        # = make sure you only pass KeplerLightCurve derived FLCs
+        tpf = KeplerTargetPixelFile.from_archive(self.targetid)
+        new_lc = copy.copy(self)
+        new_lc.keplerid = self.targetid
+        new_lc.primary_header = tpf.hdu[0].header
+        new_lc.data_header = tpf.hdu[1].header
+        new_lc.pos_corr1 = tpf.hdu[1].data['POS_CORR1'][tpf.quality_mask]
+        new_lc.pos_corr2 = tpf.hdu[1].data['POS_CORR2'][tpf.quality_mask]
+        del tpf
+
+        #K2SC MAGIC
+        new_lc.__class__ = k2sc_lc
+        new_lc.k2sc(de_niter=3) #de_niter set low for testing purpose
+        # something like assert new_lc.time == self.time is needed here
+        self.detrended_flux = (new_lc.corr_flux - new_lc.tr_time
+                              + np.nanmedian(new_lc.tr_time))
         return
