@@ -6,7 +6,6 @@ from lightkurve import KeplerLightCurve
 
 LOG = logging.getLogger(__name__)
 
-
 def find_flares(flux, error, N1=4, N2=4, N3=3):
     '''
     The algorithm for local changes due to flares defined by

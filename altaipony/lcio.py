@@ -9,7 +9,6 @@ from astropy.io import fits
 
 LOG = logging.getLogger(__name__)
 
-
 # Naming convention:
 # from_* : IO method for some data type (TPF, KLC, K2SC)
 # *_source : accept both EPIC IDs and paths
@@ -62,7 +61,7 @@ def from_K2SC_file(path):
     dr = hdu[1].data
     print(dr.names)
     targetid = path.split('-')[0][-9:]
-    flc = FlareLightCurve(time=dr.time, flux=dr.flux, flux_err=dr.error,
+    flc = FlareLightCurve(time=dr.time, detrended_flux=dr.flux, flux_err=dr.error,
                           cadenceno=dr.cadence, flux_trends = dr.trtime,
                           targetid=targetid)
     hdu.close()

@@ -10,8 +10,6 @@ from astropy.io import fits
 from .altai import wrapper
 
 LOG = logging.getLogger(__name__)
-LOG.setLevel(logging.INFO)
-
 
 class FlareLightCurve(KeplerLightCurve):
     """
