@@ -1,3 +1,8 @@
+|ci-badge|
+
+.. |ci-badge| image:: https://travis-ci.org/ekaterinailin/AltaiPony.svg?branch=master
+              :target: https://travis-ci.org/ekaterinailin/AltaiPony
+
 AltaiPony
 =========
 
