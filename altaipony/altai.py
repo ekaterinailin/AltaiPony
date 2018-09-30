@@ -45,6 +45,9 @@ def find_flares(flux, error, N1=4, N2=4, N3=3):
     T1 = np.abs(flux - median) / sigma #N1
     T2 = np.abs(flux - median - error) / sigma #N2
     # apply thresholds N0-N2:
+    LOG.INFO('Factor above standard deviation: N1 = {},\n'
+             'Factor above standard deviation + uncertainty N2 = {},\n'
+             'Minimum number of consecutive data points for candidate N3 = {}')
     pass_thresholds = np.where((T0 > 0) & (T1 > N1) & (T2 > N2))
     #array of indices where thresholds are exceeded:
     is_pass_thresholds = np.zeros_like(flux)
