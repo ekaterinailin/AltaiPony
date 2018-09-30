@@ -37,10 +37,32 @@ def from_TargetPixel_source(target, **kwargs):
     return from_KeplerLightCurve(lc)
 
 
-def from_KeplerLightCurve_source(target):
+def from_KeplerLightCurve_source(target, lctype='SAP_FLUX',**kwargs):
+    """
+    Accepts paths and EPIC IDs as targets. Either fetches a ``KeplerLightCurveFile``
+    from MAST via ID or directly from a path, then creates a ``FlareLightCurve``
+    preserving all data from ``KeplerLightCurve``.
 
-    lcf = KeplerLightCurveFile.from_archive(target)
-    lc = lcf.get_lightcurve('SAP_FLUX')
+    Parameters:
+    ------------
+    target : str or int
+        EPIC ID (e.g., 211119999) or path to zipped ``KeplerLightCurveFile``
+    lctype: 'SAP_FLUX' or 'PDCSAP_FLUX'
+        takes in either raw or PDC flux, default is 'SAP_FLUX' because it works
+        best with the K2SC detrending pipeline
+    **kwargs : dict
+        Keyword arguments to pass to ``KeplerLightCurveFile.from_archive``_
+        .. _``KeplerLightCurveFile.from_archive``: https://lightkurve.keplerscience.org/
+        api/lightkurve.lightcurvefile.KeplerLightCurveFile.html#lightkurve.
+        lightcurvefile.KeplerLightCurveFile.from_archive
+
+    Return:
+    --------
+    ``FlareLightCurve``
+    """
+
+    lcf = KeplerLightCurveFile.from_archive(target, **kwargs)
+    lc = lcf.get_lightcurve(lctype)
 
     return from_KeplerLightCurve(lc)
 
