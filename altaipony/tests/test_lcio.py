@@ -22,8 +22,8 @@ def FlareLightCurve_testhelper(flc):
     assert flc.time.shape[0] == size
     assert flc.remove_nans().flux.shape[0] == size
     assert flc.quality_bitmask == None
-    assert lc.centroid_col.shape[0] == size
-    assert lc.centroid_row.shape[0] == size
+    assert flc.centroid_col.shape[0] == size
+    assert flc.centroid_row.shape[0] == size
     assert flc.time_format == 'bkjd'
     assert flc.time_scale == 'tbd'
     assert flc.quarter == None
