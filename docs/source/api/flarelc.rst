@@ -7,6 +7,5 @@ This is the core class in AltaiPony.
 
 .. automodapi:: altaipony.flarelc
    :no-heading:
-   :no-inherited-members:
-   :no-inheritance-diagram:
-
+   :inherited-members:
+   
