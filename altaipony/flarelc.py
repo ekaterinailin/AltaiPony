@@ -80,6 +80,9 @@ class FlareLightCurve(KeplerLightCurve):
         return
 
     def detrend(self):
+        """
+        De-trends a FlareLightCurve using ``K2SC``.
+        """
         #make sure there is no detrended_flux already
         # = make sure you only pass KeplerLightCurve derived FLCs
         tpf = KeplerTargetPixelFile.from_archive(self.targetid)
