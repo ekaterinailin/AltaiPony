@@ -1,4 +1,2 @@
 numpydoc
 sphinx-automodapi
-git+https://github.com/OxES/k2sc.git
-pylab
