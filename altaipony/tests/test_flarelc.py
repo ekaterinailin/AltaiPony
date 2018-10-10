@@ -31,3 +31,5 @@ def test_find_gaps():
     lc = from_K2SC_file(filename)
     lc.find_gaps()
     assert lc.gaps == [(0, 2582), (2582, 3424)]
+
+    
