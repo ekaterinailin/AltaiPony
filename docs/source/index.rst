@@ -17,6 +17,7 @@ This package replaces the original Appaloosa_.
 
    install
    api/flarelc
+   api/lcio
 
 .. toctree::
     :caption: Tutorials
