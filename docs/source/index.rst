@@ -13,7 +13,7 @@ This package replaces the original Appaloosa_.
 
 .. toctree::
    :caption: Getting started
-   :maxdepth: 3
+   :maxdepth: 1
 
    install
    api/flarelc

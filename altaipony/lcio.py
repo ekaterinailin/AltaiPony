@@ -22,7 +22,7 @@ def from_TargetPixel_source(target, **kwargs):
     from MAST via ID or directly from a path, then creates a lightcurve with
     default Kepler/K2 pixel mask.
 
-    Parameters:
+    Parameters
     ------------
     target : str or int
         EPIC ID (e.g., 211119999) or path to zipped ``KeplerTargetPixelFile``
@@ -43,7 +43,7 @@ def from_KeplerLightCurve_source(target, lctype='SAP_FLUX',**kwargs):
     from MAST via ID or directly from a path, then creates a ``FlareLightCurve``
     preserving all data from ``KeplerLightCurve``.
 
-    Parameters:
+    Parameters
     ------------
     target : str or int
         EPIC ID (e.g., 211119999) or path to zipped ``KeplerLightCurveFile``
@@ -56,7 +56,7 @@ def from_KeplerLightCurve_source(target, lctype='SAP_FLUX',**kwargs):
         api/lightkurve.lightcurvefile.KeplerLightCurveFile.html#lightkurve.
         lightcurvefile.KeplerLightCurveFile.from_archive
 
-    Return:
+    Returns
     --------
     ``FlareLightCurve``
     """
@@ -68,18 +68,18 @@ def from_KeplerLightCurve_source(target, lctype='SAP_FLUX',**kwargs):
 
 
 def from_KeplerLightCurve(lc):
-    '''
+    """
     Convert a ``KeplerLightCurve`` to a ``FlareLightCurve``.
 
-    Parameters:
+    Parameters
     -------------
-    lc : KeplerLightCurve
+    lc: KeplerLightCurve
         light curve as used in lightkurve
 
-    Return:
+    Returns
     -----------
-    ``FlareLightCurve``
-    '''
+    :class:`FlareLightCurve`
+    """
     #populate to reconcile KLC with FLC
     print(dir(lc))
     #get all KeplerLightCurve attributes and pass them to the FLC
@@ -90,19 +90,19 @@ def from_KeplerLightCurve(lc):
 
 
 def from_K2SC_file(path):
-    '''
+    """
     Read in a K2SC de-trended light curve and convert it to a ``FlareLightCurve``.
 
-    Parameters:
+    Parameters
     ------------
-    path : str
+    path: str
         path to light curve
 
-    Return:
+    Returns
     --------
     ``FlareLightCurve``
 
-    '''
+    """
 
     hdu = fits.open(path)
     dr = hdu[1].data
@@ -118,19 +118,19 @@ def from_K2SC_file(path):
 
 def from_K2SC_source(target, filetype='Lightcurve', cadence='long', quarter=None,
                      campaign=None, month=None, radius=None, targetlimit=1):
-    '''
+    """
     Read in a K2SC de-trended light curve and convert it to a ``FlareLightCurve``.
 
-    Parameters:
+    Parameters
     ------------
     path : str
         path to light curve
 
-    Return:
+    Returns
     --------
     ``FlareLightCurve``
 
-    '''
+    """
 
 
     if os.path.exists(str(target)) or str(target).startswith('http'):

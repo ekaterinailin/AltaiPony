@@ -7,7 +7,8 @@ There are several ways to get a light curve in to AltaiPony.
 
 .. automodapi:: altaipony.lcio
 	:no-heading:
-	:inherited-members:
+	:no-inherited-members:
+	:no-inheritance-diagram:
 
  
    

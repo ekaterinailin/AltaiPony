@@ -6,4 +6,5 @@ FlareLightCurve - the main class
 
 .. automodapi:: altaipony.flarelc
 	:no-heading:
-	:inherited-members:
+	:no-inheritance-diagram:
+	:no-inherited-members:

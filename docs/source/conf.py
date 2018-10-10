@@ -47,6 +47,7 @@ extensions = [
     'sphinx.ext.mathjax',
     'sphinx.ext.viewcode',
     'sphinx_automodapi.automodapi',
+    'numpydoc'
 ]
 numpydoc_show_class_members = False
 
