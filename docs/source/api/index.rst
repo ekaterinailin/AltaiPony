@@ -1,7 +1,10 @@
-.. toctree::
-    :caption: API Documentation
-    :maxdepth: 1
+API Documentation
+==================
 
-    flarelc
-    lcio
+.. toctree::
+	:caption: API Documentation
+	:maxdepth: 1
+
+	flarelc
+	lcio
 

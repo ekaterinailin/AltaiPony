@@ -12,10 +12,10 @@ This package replaces the original Appaloosa_.
 .. _user-docs:
 
 .. toctree::
-   :caption: Getting started
-   :maxdepth: 1
+	:caption: Core Documentation
+	:maxdepth: 1
 
-   install
-   api/index
+	install
+   	api/index
 
 .. _Appaloosa: https://github.com/jradavenport/appaloosa
