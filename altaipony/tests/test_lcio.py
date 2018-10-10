@@ -1,6 +1,5 @@
 from ..lcio import (from_TargetPixel_source, from_KeplerLightCurve_source,
                    from_K2SC_source, from_K2SC_file, from_KeplerLightCurve)
-from test_flarelc import test_FlareLightCurve
 
 ID1 = '211119999'
 campaign = 4
