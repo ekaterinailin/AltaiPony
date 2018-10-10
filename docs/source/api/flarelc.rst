@@ -1,6 +1,7 @@
 FlareLightCurve
 ==================
 
+This is the core class in AltaiPony.
 
 .. module:: altaipony.flarelc
 
