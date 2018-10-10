@@ -27,10 +27,8 @@ def from_TargetPixel_source(target, **kwargs):
     target : str or int
         EPIC ID (e.g., 211119999) or path to zipped ``KeplerTargetPixelFile``
     kwargs : dict
-        Keyword arguments to pass to ``KeplerTargetPixelFile.from_archive``
-        <https://lightkurve.keplerscience.org/api/lightkurve.targetpixelfile.
-        KeplerTargetPixelFile.html#lightkurve.targetpixelfile.
-        KeplerTargetPixelFile.from_archive>
+        Keyword arguments to pass to `KeplerTargetPixelFile.from_archive()
+        <https://lightkurve.keplerscience.org/api/lightkurve.targetpixelfile.KeplerTargetPixelFile.html#lightkurve.targetpixelfile.KeplerTargetPixelFile.from_archive>`_
     """
     tpf = KeplerTargetPixelFile.from_archive(target, **kwargs)
     lc = tpf.to_lightcurve()
@@ -51,14 +49,12 @@ def from_KeplerLightCurve_source(target, lctype='SAP_FLUX',**kwargs):
         takes in either raw or PDC flux, default is 'SAP_FLUX' because it seems
         to work best with the K2SC detrending pipeline
     kwargs : dict
-        Keyword arguments to pass to ``KeplerLightCurveFile.from_archive``_
-        .. _``KeplerLightCurveFile.from_archive``: https://lightkurve.keplerscience.org/
-        api/lightkurve.lightcurvefile.KeplerLightCurveFile.html#lightkurve.
-        lightcurvefile.KeplerLightCurveFile.from_archive
+        Keyword arguments to pass to `KeplerLightCurveFile.from_archive
+        <https://lightkurve.keplerscience.org/api/lightkurve.lightcurvefile.KeplerLightCurveFile.html#lightkurve.lightcurvefile.KeplerLightCurveFile.from_archive>`_
 
     Returns
     --------
-    ``FlareLightCurve``
+    FlareLightCurve
     """
 
     lcf = KeplerLightCurveFile.from_archive(target, **kwargs)
@@ -78,7 +74,7 @@ def from_KeplerLightCurve(lc):
 
     Returns
     -----------
-    :class:`FlareLightCurve`
+    FlareLightCurve
     """
     #populate to reconcile KLC with FLC
     print(dir(lc))
@@ -100,7 +96,7 @@ def from_K2SC_file(path):
 
     Returns
     --------
-    ``FlareLightCurve``
+    FlareLightCurve
 
     """
 
@@ -128,7 +124,7 @@ def from_K2SC_source(target, filetype='Lightcurve', cadence='long', quarter=None
 
     Returns
     --------
-    ``FlareLightCurve``
+    FlareLightCurve
 
     """
 

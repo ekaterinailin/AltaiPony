@@ -12,7 +12,8 @@ from .altai import wrapper
 LOG = logging.getLogger(__name__)
 
 class FlareLightCurve(KeplerLightCurve):
-    """Flare light curve class that unifies properties of ``K2SC``-de-trended and
+    """
+    Flare light curve class that unifies properties of ``K2SC``-de-trended and
     Kepler's ``lightkurve.KeplerLightCurve``.
 
     Parameters
@@ -24,7 +25,9 @@ class FlareLightCurve(KeplerLightCurve):
     flux_err : array-like
         Uncertainty on each flux data point
     targetid : int
-        Kepler ID number"""
+        Kepler ID number
+
+    """
     def __init__(self, time=None, flux=None, flux_err=None, time_format=None, time_scale=None,
                  centroid_col=None, centroid_row=None, quality=None, quality_bitmask=None,
                  channel=None, campaign=None, quarter=None, mission=None, cadenceno=None,

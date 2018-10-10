@@ -1,5 +1,5 @@
-FlareLightCurve - the main class
-====================================
+FlareLightCurve
+==================
 
 
 .. module:: altaipony.flarelc
