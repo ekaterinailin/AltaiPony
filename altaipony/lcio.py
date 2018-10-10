@@ -26,7 +26,7 @@ def from_TargetPixel_source(target, **kwargs):
     ------------
     target : str or int
         EPIC ID (e.g., 211119999) or path to zipped ``KeplerTargetPixelFile``
-    **kwargs : dict
+    kwargs : dict
         Keyword arguments to pass to ``KeplerTargetPixelFile.from_archive``
         <https://lightkurve.keplerscience.org/api/lightkurve.targetpixelfile.
         KeplerTargetPixelFile.html#lightkurve.targetpixelfile.
@@ -50,7 +50,7 @@ def from_KeplerLightCurve_source(target, lctype='SAP_FLUX',**kwargs):
     lctype: 'SAP_FLUX' or 'PDCSAP_FLUX'
         takes in either raw or PDC flux, default is 'SAP_FLUX' because it seems
         to work best with the K2SC detrending pipeline
-    **kwargs : dict
+    kwargs : dict
         Keyword arguments to pass to ``KeplerLightCurveFile.from_archive``_
         .. _``KeplerLightCurveFile.from_archive``: https://lightkurve.keplerscience.org/
         api/lightkurve.lightcurvefile.KeplerLightCurveFile.html#lightkurve.

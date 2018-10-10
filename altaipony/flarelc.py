@@ -51,7 +51,7 @@ class FlareLightCurve(KeplerLightCurve):
         Find gaps in light curve and stores them in the gaps attribute.
 
         Parameters:
-        ----------
+        ------------
         time : numpy array with floats
             sorted array, in units of days
         maxgap : 0.09 or float
