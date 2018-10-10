@@ -16,16 +16,6 @@ This package replaces the original Appaloosa_.
    :maxdepth: 1
 
    install
-   api/flarelc
-   api/lcio
-
-.. toctree::
-    :caption: Tutorials
-    :maxdepth: 2
-
-
-.. toctree::
-    :caption: About AltaiPony
-    :maxdepth: 1
+   api
 
 .. _Appaloosa: https://github.com/jradavenport/appaloosa
