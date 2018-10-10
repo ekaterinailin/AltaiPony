@@ -68,6 +68,18 @@ def from_KeplerLightCurve_source(target, lctype='SAP_FLUX',**kwargs):
 
 
 def from_KeplerLightCurve(lc):
+    '''
+    Convert a ``KeplerLightCurve`` to a ``FlareLightCurve``.
+
+    Parameters:
+    -------------
+    lc : KeplerLightCurve
+        light curve as used in lightkurve
+
+    Return:
+    -----------
+    ``FlareLightCurve``
+    '''
     #populate to reconcile KLC with FLC
     print(dir(lc))
     #get all KeplerLightCurve attributes and pass them to the FLC
@@ -78,6 +90,19 @@ def from_KeplerLightCurve(lc):
 
 
 def from_K2SC_file(path):
+    '''
+    Read in a K2SC de-trended light curve and convert it to a ``FlareLightCurve``.
+
+    Parameters:
+    ------------
+    path : str
+        path to light curve
+
+    Return:
+    --------
+    ``FlareLightCurve``
+
+    '''
 
     hdu = fits.open(path)
     dr = hdu[1].data
@@ -93,6 +118,19 @@ def from_K2SC_file(path):
 
 def from_K2SC_source(target, filetype='Lightcurve', cadence='long', quarter=None,
                      campaign=None, month=None, radius=None, targetlimit=1):
+    '''
+    Read in a K2SC de-trended light curve and convert it to a ``FlareLightCurve``.
+
+    Parameters:
+    ------------
+    path : str
+        path to light curve
+
+    Return:
+    --------
+    ``FlareLightCurve``
+
+    '''
 
 
     if os.path.exists(str(target)) or str(target).startswith('http'):
