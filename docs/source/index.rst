@@ -16,6 +16,6 @@ This package replaces the original Appaloosa_.
    :maxdepth: 1
 
    install
-   api
+   api/index
 
 .. _Appaloosa: https://github.com/jradavenport/appaloosa
