@@ -1,5 +1,4 @@
 .. toctree::
-    :maxdepth: 1
-
-    flarelc
-    lcio
+   :maxdepth: 1
+      flarelc
+      lcio
