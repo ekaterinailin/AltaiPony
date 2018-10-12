@@ -30,6 +30,4 @@ def test_find_gaps():
     filename = os.path.join(PACKAGEDIR, 'examples', 'hlsp_k2sc_k2_llc_210951703-c04_kepler_v2_lc.fits')
     lc = from_K2SC_file(filename)
     lc.find_gaps()
-    assert lc.gaps == [(0, 2582), (2582, 3424)]
-
-    
+    assert lc.gaps == [(0, 2581), (2581, 3422)]

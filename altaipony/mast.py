@@ -314,4 +314,4 @@ def download_kepler_products(target, filetype='Target Pixel', cadence='long',
     # Otherwise download all the files
     log.debug('Found {} File(s)'.format(np.shape(products)[0]))
     path = download_products(products)
-    return list(path)
+    return list(path), products['qoc']

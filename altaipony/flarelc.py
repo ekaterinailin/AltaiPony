@@ -32,7 +32,7 @@ class FlareLightCurve(KeplerLightCurve):
                  centroid_col=None, centroid_row=None, quality=None, quality_bitmask=None,
                  channel=None, campaign=None, quarter=None, mission=None, cadenceno=None,
                  targetid=None, ra=None, dec=None, label=None, meta={}, detrended_flux=None,
-                 flux_trends = None, gaps=None, flares=None):
+                 detrended_flux_err=None, flux_trends=None, gaps=None, flares=None):
 
         super(FlareLightCurve, self).__init__(time=time, flux=flux, flux_err=flux_err, time_format=time_format, time_scale=time_scale,
                                               centroid_col=centroid_col, centroid_row=centroid_row, quality=quality,
@@ -42,6 +42,7 @@ class FlareLightCurve(KeplerLightCurve):
         self.gaps = gaps
         self.flares = flares #pd.DataFrame(columns=['istart','istop','cstart','cstop', 'ed'])
         self.detrended_flux = detrended_flux
+        self.detrended_flux_err = detrended_flux_err
         self.flux_trends = flux_trends
 
     def __repr__(self):
