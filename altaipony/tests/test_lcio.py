@@ -1,3 +1,5 @@
+import pytest
+from testfixtures import LogCapture
 from ..lcio import (from_TargetPixel_source, from_KeplerLightCurve_source,
                    from_K2SC_source, from_K2SC_file, from_KeplerLightCurve)
 
@@ -54,6 +56,11 @@ def test_from_KeplerLightCurve_source():
     FlareLightCurve_testhelper(flc)
     pass
 
+@pytest.fixture(autouse=True)
+def capture():
+    with LogCapture() as capture:
+        yield capture
+
 def test_from_K2SC_source(size=size):
     flc = from_K2SC_source(ID1)
     FlareLightCurve_testhelper(flc)
@@ -63,13 +70,6 @@ def test_from_K2SC_source(size=size):
     assert flc.flares == None
     assert flc.gaps == None
     #also test if a local path throws warning
-
-    # log = 'altaipony.lcio'
-    # with XXX.assertLogs(log, level='INFO') as cm:
-    #     message = ('Warning: from_archive() is not intended to accept a '
-    #                'direct path, use from_K2SC_File(path) instead.')
-    #     logging.getLogger('foo').info(message)
-    #     self.assertEqual(cm.output, ['INFO:{}:{}'.format(log,message)])
     #test if a list of IDs is correctly resolved - must return a list of FlareLightCurves
     #also test if a list of paths is correctly resolved - must return a list of FlareLightCurves
     pass

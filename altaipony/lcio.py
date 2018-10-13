@@ -74,7 +74,8 @@ def from_KeplerLightCurve_source(target, lctype='SAP_FLUX',**kwargs):
 
 def from_KeplerLightCurve(lc):
     """
-    Convert a ``KeplerLightCurve`` to a ``FlareLightCurve``.
+    Convert a ``KeplerLightCurve`` to a ``FlareLightCurve``. Just get all
+    ``KeplerLightCurve`` attributes and pass them to the ``FlareLightCurve``.
 
     Parameters
     -------------
@@ -87,11 +88,8 @@ def from_KeplerLightCurve(lc):
     """
     #populate to reconcile KLC with FLC
     print(dir(lc))
-    #get all KeplerLightCurve attributes and pass them to the FLC
-    kwnames = inspect.getargspec(KeplerLightCurve)[0][1:]
-    data = [getattr(lc, names) for names in kwnames]
-    kwargs = dict(zip(kwnames, data))
-    return FlareLightCurve(**kwargs)
+
+    return FlareLightCurve(**vars(lc))
 
 
 def from_K2SC_file(path, campaign=None, lctype='SAP_FLUX', **kwargs):
