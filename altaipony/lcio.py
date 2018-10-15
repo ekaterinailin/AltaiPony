@@ -6,6 +6,8 @@ import numpy as np
 import k2sc.core as k2sc_flag_values
 
 from astropy.io import fits
+from astropy.io.fits.hdu.hdulist import fitsopen
+
 from lightkurve import KeplerLightCurveFile, KeplerTargetPixelFile, KeplerLightCurve
 
 from .flarelc import FlareLightCurve
@@ -112,7 +114,7 @@ def from_K2SC_file(path, campaign=None, lctype='SAP_FLUX', **kwargs):
 
     """
 
-    hdu = fits.open(path)
+    hdu = fitsopen(path)#), mode='denywrite',lazy_load_hdus=False)
     dr = hdu[1].data
 
     targetid = int(path.split('-')[0][-9:])
@@ -157,6 +159,7 @@ def from_K2SC_source(target, filetype='Lightcurve', cadence='long', quarter=None
     """
 
     if os.path.exists(str(target)) or str(target).startswith('http'):
+
         LOG.warning('Warning: from_archive() is not intended to accept a '
                     'direct path, use from_K2SC_File(path) instead.'
                     'Now using from_K2SC_File({})'.format(target))
