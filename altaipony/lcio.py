@@ -87,7 +87,7 @@ def from_KeplerLightCurve(lc):
     FlareLightCurve
     """
     #populate to reconcile KLC with FLC
-    print(dir(lc))
+    #print(dir(lc))
 
     return FlareLightCurve(**vars(lc))
 
@@ -114,7 +114,6 @@ def from_K2SC_file(path, campaign=None, lctype='SAP_FLUX', **kwargs):
 
     hdu = fits.open(path)
     dr = hdu[1].data
-
 
     targetid = int(path.split('-')[0][-9:])
     klcf = KeplerLightCurveFile.from_archive(targetid, quality_bitmask='none',
@@ -157,12 +156,13 @@ def from_K2SC_source(target, filetype='Lightcurve', cadence='long', quarter=None
 
     """
 
-
     if os.path.exists(str(target)) or str(target).startswith('http'):
         LOG.warning('Warning: from_archive() is not intended to accept a '
-                    'direct path, use from_K2SC_File(path) instead.')
+                    'direct path, use from_K2SC_File(path) instead.'
+                    'Now using from_K2SC_File({})'.format(target))
         path = [target]
         campaign = [campaign]
+
     else:
         path, campaign = download_kepler_products(target=target, filetype=filetype,
                                         cadence=cadence, campaign=campaign,

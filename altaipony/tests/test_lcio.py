@@ -1,6 +1,5 @@
 import os
 import pytest
-from testfixtures import LogCapture
 from ..lcio import (from_TargetPixel_source, from_KeplerLightCurve_source,
                    from_K2SC_source, from_K2SC_file, from_KeplerLightCurve)
 from ..__init__ import PACKAGEDIR
@@ -12,12 +11,8 @@ campaign = 4
 sizes = [3423, 3423, 3423]
 iterator = zip(ids, paths, sizes)
 
-@pytest.fixture(autouse=True)
-def capture():
-    with LogCapture() as capture:
-        yield capture
 
-def FlareLightCurve_testhelper(flc, iterator=iterator, campaign=campaign, from_tpf = False):
+def FlareLightCurve_testhelper(flc, from_tpf = False):
     """
     Test that reading in a FlareLightCurve does not kill or change any
     KeplerLightCurve attributes.
@@ -67,7 +62,7 @@ def test_from_KeplerLightCurve_source():
         flc = from_KeplerLightCurve_source(ID)
         FlareLightCurve_testhelper(flc)
 
-def test_from_K2SC_source(iterator=iterator):
+def test_from_K2SC_source():
 
     for (ID, path, size) in iterator:
         for target in [ID, path]:
