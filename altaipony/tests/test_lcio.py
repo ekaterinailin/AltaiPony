@@ -93,7 +93,7 @@ def test_from_K2SC_source():
 
 def test_from_K2SC_file():
 
-    for (ID, size, path, ra, dec, channel) in iterator:
+    for (ID, path, size, ra, dec, channel) in iterator:
         flc = from_K2SC_file(path)
         FlareLightCurve_testhelper(flc, ID, size, ra, dec, channel)
 
