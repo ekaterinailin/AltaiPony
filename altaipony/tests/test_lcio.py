@@ -25,15 +25,15 @@ def FlareLightCurve_testhelper(flc, ID, s, ra, dec, channel, from_tpf = False):
     flc : FlareLightCurve
         lightcurve of target with given ID
     ID :
-
-    size :
-
-    ra :
-
-    dec :
-
-    channel :
-
+        EPIC ID
+    size : int
+        number of observation points
+    ra : float
+        RA
+    dec : float
+        declination
+    channel : int
+        channel on the CCD detector
     from_tpf : False or bool
         if light curve is created from a processed ``K2SC`` file one cadence is
         thrown out from the resulting ``FlareLightCurve``.
@@ -66,18 +66,31 @@ def FlareLightCurve_testhelper(flc, ID, s, ra, dec, channel, from_tpf = False):
 
 
 def test_from_TargetPixel_source():
+    '''
+    Test if a ``FlareLightCurve`` is created from a ``TargetPixelFile`` properly
+    when calling an EPIC ID.
+    '''
+    #Can we load a path, too? ->later
     for (ID, path, size, ra, dec, channel) in iterator:
         flc = from_TargetPixel_source(ID)
         FlareLightCurve_testhelper(flc, ID, size, ra, dec, channel, from_tpf=True)
 
 
 def test_from_KeplerLightCurve_source():
+    '''
+    Test if a ``FlareLightCurve`` is created from a ``KeplerLightCurve`` properly
+    when calling an EPIC ID.
+    '''
+    #Can we load a path, too? -> later
     for (ID, path, size, ra, dec, channel) in iterator:
         flc = from_KeplerLightCurve_source(ID)
         FlareLightCurve_testhelper(flc, ID, size, ra, dec, channel)
 
 def test_from_K2SC_source():
-
+    '''
+    Test if a ``FlareLightCurve`` is created from a ``K2SC`` file properly
+    when calling an EPIC ID or local path.
+    '''
     for (ID, path, size, ra, dec, channel) in iterator:
         for target in [path, ID]:
             flc = from_K2SC_source(target)
@@ -92,7 +105,10 @@ def test_from_K2SC_source():
         #also test if a list of paths is correctly resolved - must return a list of FlareLightCurves
 
 def test_from_K2SC_file():
-
+    '''
+    Test if a ``FlareLightCurve`` is created from a ``K2SC`` file properly
+    when calling a local path.
+    '''
     for (ID, path, size, ra, dec, channel) in iterator:
         flc = from_K2SC_file(path)
         FlareLightCurve_testhelper(flc, ID, size, ra, dec, channel)

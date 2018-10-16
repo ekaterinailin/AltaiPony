@@ -55,7 +55,7 @@ def from_KeplerLightCurve_source(target, lctype='SAP_FLUX',**kwargs):
     target : str or int
         EPIC ID (e.g., 211119999) or path to zipped ``KeplerLightCurveFile``
     lctype: 'SAP_FLUX' or 'PDCSAP_FLUX'
-        takes in either raw or PDC flux, default is 'SAP_FLUX' because it seems
+        takes in either raw or _PDC_ flux, default is 'SAP_FLUX' because it seems
         to work best with the K2SC detrending pipeline
     kwargs : dict
         Keyword arguments to pass to `KeplerLightCurveFile.from_archive
@@ -100,11 +100,14 @@ def from_K2SC_file(path, campaign=None, lctype='SAP_FLUX', **kwargs):
 
     Parameters
     ------------
-    path: str
+    path : str
         path to light curve
-    campaign: int or None
+    campaign : None or int
         K2 observing campaign
-    kwargs: dict
+    lctype : 'SAP_FLUX' or 'PDCSAP_FLUX'
+        Takes in either raw or _PDC_ flux, default is 'SAP_FLUX' because it seems
+        to work best with the K2SC detrending pipeline.
+    kwargs : dict
         Keyword arguments to pass to `KeplerLightCurveFile.from_archive
         <https://lightkurve.keplerscience.org/api/lightkurve.lightcurvefile.KeplerLightCurveFile.html#lightkurve.lightcurvefile.KeplerLightCurveFile.from_archive>`_
 
@@ -178,6 +181,15 @@ def from_K2SC_source(target, filetype='Lightcurve', cadence='long', quarter=None
 def k2sc_quality_cuts(data):
     """
     Apply all the quality checks that k2sc uses internally.
+
+    Parameters
+    ------------
+    data : KeplerLightCurve or TargetPixelFile
+
+    Return
+    --------
+    KeplerLightCurve or TargetPixelFile where ``time``, ``centroid_col``, and
+    ``centroid_row`` all have finite values.
     """
     data = data[np.isfinite(data.time)]
     data = data[np.isfinite(data.centroid_col)]
