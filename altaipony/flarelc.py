@@ -16,7 +16,7 @@ class FlareLightCurve(KeplerLightCurve):
     Flare light curve class that unifies properties of ``K2SC``-de-trended and
     Kepler's ``lightkurve.KeplerLightCurve``.
 
-    Parameters
+    Attributes
     -------------
     time : array-like
         Time measurements
@@ -24,29 +24,91 @@ class FlareLightCurve(KeplerLightCurve):
         Data flux for every time point
     flux_err : array-like
         Uncertainty on each flux data point
+    time_format :
+
+    time_scale :
+
+    time_unit : astropy.unit
+        Astropy unit object defining unit of time
+    centroid_col :
+
+    centroid_row :
+
+    quality :
+
+    quality_bitmask :
+
+    channel :
+
+    campaign :
+
+    quarter :
+
+    mission :
+
+    cadenceno :
+
     targetid : int
-        Kepler ID number
+        EPIC ID number
+    ra :
+
+    dec :
+
+    label :
+
+    meta :
+
+    detrended_flux :
+
+    detrended_flux_err :
+
+    flux_trends :
+
+    gaps : list of tuples of ints
+        Each tuple contains the start and end indices of observation gaps. See
+        ``find_gaps``
+    flares :
 
     """
-    def __init__(self, time=None, flux=None, flux_err=None, time_format=None, time_scale=None,
-                 centroid_col=None, centroid_row=None, quality=None, quality_bitmask=None,
-                 channel=None, campaign=None, quarter=None, mission=None, cadenceno=None,
-                 targetid=None, ra=None, dec=None, label=None, meta={}, detrended_flux=None,
-                 detrended_flux_err=None, flux_trends=None, gaps=None, flares=None):
+    def __init__(self, time=None, flux=None, flux_err=None, time_format=None,
+                 time_scale=None, time_unit = None, centroid_col=None,
+                 centroid_row=None, quality=None, quality_bitmask=None,
+                 channel=None, campaign=None, quarter=None, mission=None,
+                 cadenceno=None, targetid=None, ra=None, dec=None, label=None,
+                 meta={}, detrended_flux=None, detrended_flux_err=None,
+                 flux_trends=None, gaps=None, flares=None, flux_unit = None,
+                 primary_header=None, data_header=None, pos_corr1=None,
+                 pos_corr2=None, origin='FLC'):
 
         super(FlareLightCurve, self).__init__(time=time, flux=flux, flux_err=flux_err, time_format=time_format, time_scale=time_scale,
                                               centroid_col=centroid_col, centroid_row=centroid_row, quality=quality,
                                               quality_bitmask=quality_bitmask, channel=channel, campaign=campaign, quarter=quarter,
                                               mission=mission, cadenceno=cadenceno, targetid=targetid, ra=ra, dec=dec, label=label,
                                               meta=meta)
+        self.flux_unit = flux_unit
+        self.time_unit = time_unit
         self.gaps = gaps
         self.flares = flares #pd.DataFrame(columns=['istart','istop','cstart','cstop', 'ed'])
         self.detrended_flux = detrended_flux
         self.detrended_flux_err = detrended_flux_err
         self.flux_trends = flux_trends
+        self.primary_header = primary_header
+        self.data_header = data_header
+        self.pos_corr1 = pos_corr1
+        self.pos_corr2 = pos_corr2
+        self.origin = origin
 
     def __repr__(self):
         return('FlareLightCurve(ID: {})'.format(self.targetid))
+
+    def __getitem__(self, key):
+        copy_self = copy.copy(self)
+        copy_self.time = self.time[key]
+        copy_self.flux = self.flux[key]
+        copy_self.flux_err = self.flux_err[key]
+        copy_self.pos_corr1 = self.pos_corr1[key]
+        copy_self.pos_corr2 = self.pos_corr2[key]
+        return copy_self
 
     def find_gaps(self, maxgap=0.09, minspan=10):
         '''
@@ -85,23 +147,33 @@ class FlareLightCurve(KeplerLightCurve):
         De-trends a FlareLightCurve using ``K2SC``.
         """
         #make sure there is no detrended_flux already
-        # = make sure you only pass KeplerLightCurve derived FLCs
-        tpf = KeplerTargetPixelFile.from_archive(self.targetid)
-        new_lc = copy.copy(self)
-        new_lc.keplerid = self.targetid
-        new_lc.primary_header = tpf.hdu[0].header
-        new_lc.data_header = tpf.hdu[1].header
-        new_lc.pos_corr1 = tpf.hdu[1].data['POS_CORR1'][tpf.quality_mask]
-        new_lc.pos_corr2 = tpf.hdu[1].data['POS_CORR2'][tpf.quality_mask]
-        del tpf
+        if self.origin != 'TPF':
+            err_str = ('Only KeplerTargetPixelFile derived FlareLightCurves can be'
+                      ' passed to detrend().')
+            LOG.exception(err_str)
+            raise ValueError(err_str)
 
-        #K2SC MAGIC
-        new_lc.__class__ = k2sc_lc
-        new_lc.k2sc(de_niter=3) #de_niter set low for testing purpose
-        # something like assert new_lc.time == self.time is needed here
-        self.detrended_flux = (new_lc.corr_flux - new_lc.tr_time
-                              + np.nanmedian(new_lc.tr_time))
-        return
+        else:
+            new_lc = copy.copy(self)
+            new_lc.keplerid = self.targetid
+
+            #K2SC MAGIC
+            new_lc.__class__ = k2sc_lc
+            try:
+                new_lc.k2sc(de_niter=3) #de_niter set low for testing purpose
+                new_lc.detrended_flux = (new_lc.corr_flux - new_lc.tr_time
+                                      + np.nanmedian(new_lc.tr_time))
+                if new_lc.detrended_flux.shape != self.flux.shape:
+                    LOG.error('De-detrending messed up the flux arrays.')
+                else:
+                    LOG.info('De-trending successfully completed.')
+
+            except np.linalg.linalg.LinAlgError:
+                LOG.error('Detrending failed because probably Cholesky '
+                          'decomposition failed. Try again, you shall succeed.')
+            return new_lc
+
+
 
     def find_flares(self):
 

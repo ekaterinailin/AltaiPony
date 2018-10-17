@@ -5,7 +5,7 @@ import numpy as np
 
 import k2sc.core as k2sc_flag_values
 
-from astropy.io import fits
+from astropy import units as u
 from astropy.io.fits.hdu.hdulist import fitsopen
 
 from lightkurve import KeplerLightCurveFile, KeplerTargetPixelFile, KeplerLightCurve
@@ -38,10 +38,19 @@ def from_TargetPixel_source(target, **kwargs):
     """
     tpf = KeplerTargetPixelFile.from_archive(target, quality_bitmask='none',
                                              **kwargs)
-    lc = tpf.to_lightcurve()
-    lc = k2sc_quality_cuts(lc)
+    k2sc_keys = {'primary_header' : tpf.hdu[0].header,
+                 'data_header' : tpf.hdu[1].header,
+                 'pos_corr1' : tpf.pos_corr1,
+                 'pos_corr2' : tpf.pos_corr2,}
 
-    return from_KeplerLightCurve(lc)
+    print(tpf.flux.shape,tpf.pos_corr1.shape)
+    lc = tpf.to_lightcurve()
+    print(lc.flux.shape, )
+    lc = from_KeplerLightCurve(lc, origin = 'TPF', **k2sc_keys)
+    print(lc.flux.shape, lc.pos_corr1.shape)
+    lc = k2sc_quality_cuts(lc)
+    print(lc.flux.shape, lc.pos_corr1.shape)
+    return lc
 
 
 def from_KeplerLightCurve_source(target, lctype='SAP_FLUX',**kwargs):
@@ -55,7 +64,7 @@ def from_KeplerLightCurve_source(target, lctype='SAP_FLUX',**kwargs):
     target : str or int
         EPIC ID (e.g., 211119999) or path to zipped ``KeplerLightCurveFile``
     lctype: 'SAP_FLUX' or 'PDCSAP_FLUX'
-        takes in either raw or _PDC_ flux, default is 'SAP_FLUX' because it seems
+        takes in either raw or *PDC* flux, default is 'SAP_FLUX' because it seems
         to work best with the K2SC detrending pipeline
     kwargs : dict
         Keyword arguments to pass to `KeplerLightCurveFile.from_archive
@@ -66,15 +75,14 @@ def from_KeplerLightCurve_source(target, lctype='SAP_FLUX',**kwargs):
     FlareLightCurve
     """
 
-    lcf = KeplerLightCurveFile.from_archive(target, quality_bitmask='none',
-                                            **kwargs)
+    lcf = KeplerLightCurveFile.from_archive(target, quality_bitmask=None, **kwargs)
     lc = lcf.get_lightcurve(lctype)
-    lc = k2sc_quality_cuts(lc)
+    lc = lc[np.isfinite(lc.time)]
 
-    return from_KeplerLightCurve(lc)
+    return from_KeplerLightCurve(lc, origin='KLC')
 
 
-def from_KeplerLightCurve(lc):
+def from_KeplerLightCurve(lc, origin='KLC', **kwargs):
     """
     Convert a ``KeplerLightCurve`` to a ``FlareLightCurve``. Just get all
     ``KeplerLightCurve`` attributes and pass them to the ``FlareLightCurve``.
@@ -82,16 +90,20 @@ def from_KeplerLightCurve(lc):
     Parameters
     -------------
     lc: KeplerLightCurve
-        light curve as used in lightkurve
+
+    origin : 'KLC' or str
+        Indicates the origin of the FlareLightCurve, can take 'FLC, 'KLC', 'TPF'
+        and 'K2SC'.
+    kwargs: dict
+        Keyword arguments to pass to FlareLightCurve.
 
     Returns
     -----------
     FlareLightCurve
     """
-    #populate to reconcile KLC with FLC
-    #print(dir(lc))
 
-    return FlareLightCurve(**vars(lc))
+    return FlareLightCurve(**vars(lc), time_unit=u.day, origin=origin,
+                           flux_unit = u.electron/u.s, **kwargs)
 
 
 def from_K2SC_file(path, campaign=None, lctype='SAP_FLUX', **kwargs):
@@ -117,19 +129,16 @@ def from_K2SC_file(path, campaign=None, lctype='SAP_FLUX', **kwargs):
 
     """
 
-    hdu = fitsopen(path)#), mode='denywrite',lazy_load_hdus=False)
+    hdu = fitsopen(path)
     dr = hdu[1].data
-
     targetid = int(path.split('-')[0][-9:])
     klcf = KeplerLightCurveFile.from_archive(targetid, quality_bitmask='none',
                                              campaign=campaign, **kwargs)
     klc = klcf.get_lightcurve(lctype)
-
-    klc = k2sc_quality_cuts(klc)
-
     #Only use those cadences that are present in both files:
     values, counts = np.unique(np.append(klc.cadenceno, dr.cadence), return_counts=True)
     cadences = values[ np.where( counts == 2 ) ] #you could check if counts can be 3 or more and throw an exception in that case
+    #note that order of cadences is irrelevant for the following to be right
     dr = dr[ np.isin( dr.cadence, cadences) ]
     klc = klc[ np.isin( klc.cadenceno, cadences) ]
 
@@ -139,7 +148,8 @@ def from_K2SC_file(path, campaign=None, lctype='SAP_FLUX', **kwargs):
                           campaign=klc.campaign, centroid_col=klc.centroid_col,
                           centroid_row=klc.centroid_row,time_format=klc.time_format,
                           time_scale=klc.time_scale, ra=klc.ra, dec=klc.dec,
-                          channel=klc.channel)
+                          channel=klc.channel, time_unit=u.day,
+                          flux_unit = u.electron/u.s, origin='K2SC')
     hdu.close()
     del dr
     return flc
@@ -177,22 +187,3 @@ def from_K2SC_source(target, filetype='Lightcurve', cadence='long', quarter=None
     if len(path) == 1:
         return from_K2SC_file(path[0], campaign=campaign[0])
     return [from_K2SC_file(p, campaign=c) for p,c in zip(path, campaign)]
-
-def k2sc_quality_cuts(data):
-    """
-    Apply all the quality checks that k2sc uses internally.
-
-    Parameters
-    ------------
-    data : KeplerLightCurve or TargetPixelFile
-
-    Return
-    --------
-    KeplerLightCurve or TargetPixelFile where ``time``, ``centroid_col``, and
-    ``centroid_row`` all have finite values.
-    """
-    data = data[np.isfinite(data.time)]
-    data = data[np.isfinite(data.centroid_col)]
-    data = data[np.isfinite(data.centroid_row)]
-
-    return data
