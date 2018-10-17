@@ -6,7 +6,7 @@ from lightkurve import KeplerLightCurve
 
 LOG = logging.getLogger(__name__)
 
-def find_flares(flux, error, N1=4, N2=4, N3=3):
+def find_flares_in_cont_obs_period(flux, error, N1=4, N2=4, N3=3):
     '''
     The algorithm for local changes due to flares defined by
     S. W. Chang et al. (2015), Eqn. 3a-d
@@ -74,7 +74,7 @@ def find_flares(flux, error, N1=4, N2=4, N3=3):
         isflare[l:r+1] = 1
     return isflare
 
-def wrapper(lc, minsep=3):
+def find_flares(lc, minsep=3):
     '''
     Main wrapper to obtain and process a light curve.
 
@@ -90,8 +90,6 @@ def wrapper(lc, minsep=3):
     numpy arrays of start and stop cadence numbers of flare candidates
     '''
 
-    #find continuous observing periods
-    lc.find_gaps()
     lc.flares = []
     istart = np.array([], dtype='int')
     istop = np.array([], dtype='int')
@@ -102,7 +100,7 @@ def wrapper(lc, minsep=3):
         flux_model_i = np.nanmedian(flux) * np.ones_like(flux)
         flux_diff = flux - flux_model_i
         # run final flare-find on DATA - MODEL
-        isflare = find_flares(flux_diff, error)
+        isflare = find_flares_in_cont_obs_period(flux_diff, error)
 
         # now pick out final flare candidate indices
         candidates = np.where( isflare > 0)[0]
@@ -125,6 +123,3 @@ def wrapper(lc, minsep=3):
     lc.flares += list(zip(lc.cadenceno[istart], lc.cadenceno[istop]))
 
     return lc.flares
-
-#lc = get_k2sc_lc('examples/hlsp_k2sc_k2_llc_211117077-c04_kepler_v2_lc.fits')
-#lc = get_k2sc_lc('examples/hlsp_k2sc_k2_llc_210951703-c04_kepler_v2_lc.fits')

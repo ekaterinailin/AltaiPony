@@ -11,6 +11,18 @@ from . import test_ids, test_paths
 
 #From lightkurve
 def mock_flc(origin='TPF'):
+    """
+    Mocks a FlareLightCurve with a sinusoid variation and a single positive outlier.
+
+    Parameter
+    -----------
+    origin : 'TPF' or str
+        Mocks a specific origin, such as 'KLC', 'FLC' etc.
+
+    Return
+    -------
+    FlareLightCurve
+    """
     n = 1000
     time = np.arange(0, n/48, 1./48.)
     flux_err = np.random.rand(n)/100.
@@ -34,7 +46,7 @@ def test_invalid_lightcurve():
 
 def test_find_gaps():
     lc = from_K2SC_file(test_paths[0])
-    lc.find_gaps()
+    lc = lc.find_gaps()
     assert lc.gaps == [(0, 2582), (2582, 3424)]
 
 def test_detrend():
@@ -62,3 +74,6 @@ def test_detrend_fails():
     with pytest.raises(ValueError) as err:
         flc.detrend()
     assert err_string == err.value.args[0]
+
+def test_find_flares():
+    pass

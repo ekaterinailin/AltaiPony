@@ -7,7 +7,7 @@ from k2sc.standalone import k2sc_lc
 from lightkurve import KeplerLightCurve, KeplerTargetPixelFile
 from astropy.io import fits
 
-from .altai import wrapper
+from .altai import find_flares
 
 LOG = logging.getLogger(__name__)
 
@@ -24,50 +24,50 @@ class FlareLightCurve(KeplerLightCurve):
         Data flux for every time point
     flux_err : array-like
         Uncertainty on each flux data point
-    time_format :
+    time_format : str
 
-    time_scale :
+    time_scale : str
 
     time_unit : astropy.unit
         Astropy unit object defining unit of time
-    centroid_col :
+    centroid_col : array-like
 
-    centroid_row :
+    centroid_row : array-like
 
-    quality :
+    quality : array-like
 
-    quality_bitmask :
+    quality_bitmask : str
+        Can be 'none', 'default', 'hard' or 'hardest'
+    channel : int
 
-    channel :
-
-    campaign :
-
-    quarter :
-
+    campaign : int
+        K2 campaign number
+    quarter : int
+        Kepler Quarter number
     mission :
 
     cadenceno :
 
     targetid : int
         EPIC ID number
-    ra :
+    ra : float
 
-    dec :
+    dec : float
 
     label :
 
-    meta :
+    meta : dict
 
-    detrended_flux :
+    detrended_flux : array-like
 
-    detrended_flux_err :
+    detrended_flux_err : array-like
 
-    flux_trends :
+    flux_trends : array-like
 
     gaps : list of tuples of ints
         Each tuple contains the start and end indices of observation gaps. See
         ``find_gaps``
-    flares :
+    flares : array-like
 
     """
     def __init__(self, time=None, flux=None, flux_err=None, time_format=None,
@@ -126,11 +126,11 @@ class FlareLightCurve(KeplerLightCurve):
             i.e., w/o gaps as defined by maxgap
 
         '''
-
-        dt = np.diff(self.time)
+        lc = copy.copy(self)
+        dt = np.diff(lc.time)
         gap = np.where(np.append(0, dt) >= maxgap)[0]
         # add start/end of LC to loop over easily
-        gap_out = np.append(0, np.append(gap, len(self.time)))
+        gap_out = np.append(0, np.append(gap, len(lc.time)))
 
         # left start, right end of data
         left, right = gap_out[:-1], gap_out[1:]
@@ -138,9 +138,9 @@ class FlareLightCurve(KeplerLightCurve):
         #drop too short observation periods
         too_short = np.where(np.diff(gap_out) < 10)
         left, right = np.delete(left,too_short), np.delete(right,(too_short))
-        self.gaps = list(zip(left, right))
+        lc.gaps = list(zip(left, right))
 
-        return
+        return lc
 
     def detrend(self):
         """
@@ -171,10 +171,30 @@ class FlareLightCurve(KeplerLightCurve):
             except np.linalg.linalg.LinAlgError:
                 LOG.error('Detrending failed because probably Cholesky '
                           'decomposition failed. Try again, you shall succeed.')
+            new_lc.__class__ = FlareLightCurve
             return new_lc
 
 
 
-    def find_flares(self):
+    def find_flares(self, minsep=3):
 
-        return wrapper(self)
+        '''
+        Main wrapper to obtain and process a light curve.
+
+        Parameters:
+        -------------
+        minsep : 3 or int
+            minimum distance between two candidate start times in datapoints
+
+        Return:
+        ----------
+        numpy arrays of start and stop cadence numbers of flare candidates
+        '''
+
+        #find continuous observing periods
+        lc = copy.copy(self)
+        lc = lc.find_gaps()
+
+        lc.flares = find_flares(lc)
+
+        return lc

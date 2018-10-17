@@ -12,6 +12,7 @@ from lightkurve import KeplerLightCurveFile, KeplerTargetPixelFile, KeplerLightC
 
 from .flarelc import FlareLightCurve
 from .mast import download_kepler_products
+from .utils import k2sc_quality_cuts
 
 LOG = logging.getLogger(__name__)
 
@@ -43,13 +44,10 @@ def from_TargetPixel_source(target, **kwargs):
                  'pos_corr1' : tpf.pos_corr1,
                  'pos_corr2' : tpf.pos_corr2,}
 
-    print(tpf.flux.shape,tpf.pos_corr1.shape)
     lc = tpf.to_lightcurve()
-    print(lc.flux.shape, )
     lc = from_KeplerLightCurve(lc, origin = 'TPF', **k2sc_keys)
-    print(lc.flux.shape, lc.pos_corr1.shape)
     lc = k2sc_quality_cuts(lc)
-    print(lc.flux.shape, lc.pos_corr1.shape)
+
     return lc
 
 
@@ -155,16 +153,16 @@ def from_K2SC_file(path, campaign=None, lctype='SAP_FLUX', **kwargs):
     return flc
 
 
-def from_K2SC_source(target, filetype='Lightcurve', cadence='long', quarter=None,
-                     campaign=None, month=None, radius=None, targetlimit=1):
+def from_K2SC_source(target, campaign=None):
     """
     Read in a K2SC de-trended light curve and convert it to a ``FlareLightCurve``.
 
     Parameters
     ------------
-    path : str
-        path to light curve
-
+    target : str
+        ID or path to K2SC light curve
+    campaign : None or int
+        K2 Campaign number
     Returns
     --------
     FlareLightCurve
@@ -180,10 +178,13 @@ def from_K2SC_source(target, filetype='Lightcurve', cadence='long', quarter=None
         campaign = [campaign]
 
     else:
-        path, campaign = download_kepler_products(target=target, filetype=filetype,
-                                        cadence=cadence, campaign=campaign,
-                                        month=month, radius=radius,
-                                        targetlimit=targetlimit)
+        keys = {'filetype' : 'Lightcurve',
+                'cadence' : 'long',
+                'campaign' : None,
+                'month' : None,
+                'radius' : None,
+                'targetlimit' : 1}
+        path, campaign = download_kepler_products(target=target, **keys)
     if len(path) == 1:
         return from_K2SC_file(path[0], campaign=campaign[0])
     return [from_K2SC_file(p, campaign=c) for p,c in zip(path, campaign)]
