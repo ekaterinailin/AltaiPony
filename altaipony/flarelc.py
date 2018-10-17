@@ -174,12 +174,10 @@ class FlareLightCurve(KeplerLightCurve):
             new_lc.__class__ = FlareLightCurve
             return new_lc
 
-
-
     def find_flares(self, minsep=3):
 
         '''
-        Main wrapper to obtain and process a light curve.
+        Find flares in a FlareLightCurve.
 
         Parameters:
         -------------
@@ -190,11 +188,13 @@ class FlareLightCurve(KeplerLightCurve):
         ----------
         numpy arrays of start and stop cadence numbers of flare candidates
         '''
-
-        #find continuous observing periods
         lc = copy.copy(self)
+        #find continuous observing periods
         lc = lc.find_gaps()
-
+        #find flares
         lc.flares = find_flares(lc)
 
         return lc
+
+    def characterize_flare_recovery(self):
+        return

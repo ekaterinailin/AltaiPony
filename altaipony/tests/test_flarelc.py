@@ -77,3 +77,6 @@ def test_detrend_fails():
 
 def test_find_flares():
     pass
+
+def test_characterize_flare_recovery():
+    pass    

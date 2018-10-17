@@ -1,7 +1,12 @@
-|ci-badge|
+|ci-badge| |docs-badge|
+
 
 .. |ci-badge| image:: https://travis-ci.org/ekaterinailin/AltaiPony.svg?branch=master
               :target: https://travis-ci.org/ekaterinailin/AltaiPony
+
+.. |docs-badge| image:: https://readthedocs.org/projects/altaipony/badge/?version=latest
+	      :target: https://altaipony.readthedocs.io/en/latest/?badge=latest
+	      :alt: Documentation Status
 
 AltaiPony
 =========
