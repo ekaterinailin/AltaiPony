@@ -1,5 +1,6 @@
 import os
 import pytest
+import pandas as pd
 from ..lcio import (from_TargetPixel_source, from_KeplerLightCurve_source,
                    from_K2SC_source, from_K2SC_file, from_KeplerLightCurve)
 from .__init__ import test_ids, test_paths
@@ -78,7 +79,7 @@ def test_from_K2SC_source():
             flc = from_K2SC_source(target)
             FlareLightCurve_testhelper(flc, ID, ra, dec, channel)
             assert flc.detrended_flux_err.shape[0] == flc.detrended_flux.shape[0]
-            assert flc.flares == None
+            assert flc.flares.empty
             assert flc.gaps == None
         #also test if a local path throws warning
         #test if a list of IDs is correctly resolved - must return a list of FlareLightCurves

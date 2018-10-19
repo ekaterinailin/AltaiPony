@@ -46,7 +46,6 @@ def from_TargetPixel_source(target, **kwargs):
 
     lc = tpf.to_lightcurve()
     lc = from_KeplerLightCurve(lc, origin = 'TPF', **k2sc_keys)
-    lc = k2sc_quality_cuts(lc)
 
     return lc
 
@@ -75,9 +74,8 @@ def from_KeplerLightCurve_source(target, lctype='SAP_FLUX',**kwargs):
 
     lcf = KeplerLightCurveFile.from_archive(target, quality_bitmask=None, **kwargs)
     lc = lcf.get_lightcurve(lctype)
-    lc = lc[np.isfinite(lc.time)]
-
-    return from_KeplerLightCurve(lc, origin='KLC')
+    flc = from_KeplerLightCurve(lc, origin='KLC')
+    return flc
 
 
 def from_KeplerLightCurve(lc, origin='KLC', **kwargs):
@@ -99,9 +97,11 @@ def from_KeplerLightCurve(lc, origin='KLC', **kwargs):
     -----------
     FlareLightCurve
     """
-
-    return FlareLightCurve(**vars(lc), time_unit=u.day, origin=origin,
+    flc = FlareLightCurve(**vars(lc), time_unit=u.day, origin=origin,
                            flux_unit = u.electron/u.s, **kwargs)
+    flc[np.isfinite(flc.time)]
+
+    return flc
 
 
 def from_K2SC_file(path, campaign=None, lctype='SAP_FLUX', **kwargs):
@@ -147,9 +147,13 @@ def from_K2SC_file(path, campaign=None, lctype='SAP_FLUX', **kwargs):
                           centroid_row=klc.centroid_row,time_format=klc.time_format,
                           time_scale=klc.time_scale, ra=klc.ra, dec=klc.dec,
                           channel=klc.channel, time_unit=u.day,
-                          flux_unit = u.electron/u.s, origin='K2SC')
+                          flux_unit = u.electron/u.s, origin='K2SC',
+                          pos_corr1=dr.x, pos_corr2=dr.y)
     hdu.close()
     del dr
+
+    flc = flc[(np.isfinite(flc.detrended_flux)) &
+              (np.isfinite(flc.detrended_flux_err))]
     return flc
 
 

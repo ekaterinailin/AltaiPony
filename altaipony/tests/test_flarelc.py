@@ -10,7 +10,7 @@ from . import test_ids, test_paths
 
 
 #From lightkurve
-def mock_flc(origin='TPF'):
+def mock_flc(origin='TPF', detrended=False):
     """
     Mocks a FlareLightCurve with a sinusoid variation and a single positive outlier.
 
@@ -26,13 +26,25 @@ def mock_flc(origin='TPF'):
     n = 1000
     time = np.arange(0, n/48, 1./48.)
     flux_err = np.random.rand(n)/100.
-    flux = np.sin(time/2)*7. + 500. +flux_err
-    flux[15] = 1e3
-    pos_corr1 = np.zeros(n)
-    pos_corr2 = np.zeros(n)
-    targetid = 80000000
-    return FlareLightCurve(time=time, flux=flux, flux_err=flux_err, targetid=targetid,
-                          pos_corr1=pos_corr1, pos_corr2=pos_corr2, origin=origin)
+    if detrended==False:
+        flux = np.sin(time/2)*7. + 500. +flux_err
+    else:
+        flux = 500. +flux_err
+    flux[15] = 1.e3
+    flux[16] = 750.
+    flux[17] = 630.
+    flux[18] = 580.
+    keys = {'flux' : flux, 'time' : time, 'pos_corr1' : np.zeros(n),
+            'pos_corr2' : np.zeros(n), 'cadenceno' : np.arange(n),
+            'targetid' : 80000000, 'origin' : origin}
+
+    if detrended == False:
+        flc = FlareLightCurve(**keys)
+    else:
+        flc = FlareLightCurve(detrended_flux=flux,
+                              detrended_flux_err=flux_err,
+                              **keys)
+    return flc
 
 def test_invalid_lightcurve():
     """Invalid FlareLightCurves should not be allowed."""
@@ -47,7 +59,7 @@ def test_invalid_lightcurve():
 def test_find_gaps():
     lc = from_K2SC_file(test_paths[0])
     lc = lc.find_gaps()
-    assert lc.gaps == [(0, 2582), (2582, 3424)]
+    assert lc.gaps == [(0, 2505), (2505, 3293)] #[(0, 2582), (2582, 3424)]
 
 def test_detrend():
     flc = mock_flc()
@@ -76,7 +88,17 @@ def test_detrend_fails():
     assert err_string == err.value.args[0]
 
 def test_find_flares():
-    pass
+    flc = mock_flc(detrended=True)
+    flc = flc.find_flares()
+    assert flc.flares['ed_rec'][0] == pytest.approx(4.877947e+06, rel=1e-4)
+    assert flc.flares['ed_rec_err'][0] < flc.flares['ed_rec'][0]
+    assert flc.flares['istart'][0] == 15
+    assert flc.flares['istop'][0] == 19
+    assert flc.flares['cstop'][0] == 19
+    assert flc.flares['cstart'][0] == 15
+    assert flc.flares['tstart'][0] == pytest.approx(0.3125, rel=1e-4)
+    assert flc.flares['tstop'][0] == pytest.approx(0.395833, rel=1e-4)
+
 
 def test_characterize_flare_recovery():
-    pass    
+    pass

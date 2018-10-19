@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 import os
 import copy
 import logging
@@ -67,7 +68,7 @@ class FlareLightCurve(KeplerLightCurve):
     gaps : list of tuples of ints
         Each tuple contains the start and end indices of observation gaps. See
         ``find_gaps``
-    flares : array-like
+    flares : DataFrame
 
     """
     def __init__(self, time=None, flux=None, flux_err=None, time_format=None,
@@ -78,7 +79,7 @@ class FlareLightCurve(KeplerLightCurve):
                  meta={}, detrended_flux=None, detrended_flux_err=None,
                  flux_trends=None, gaps=None, flares=None, flux_unit = None,
                  primary_header=None, data_header=None, pos_corr1=None,
-                 pos_corr2=None, origin='FLC'):
+                 pos_corr2=None, origin='FLC', fake_flares=None):
 
         super(FlareLightCurve, self).__init__(time=time, flux=flux, flux_err=flux_err, time_format=time_format, time_scale=time_scale,
                                               centroid_col=centroid_col, centroid_row=centroid_row, quality=quality,
@@ -88,15 +89,29 @@ class FlareLightCurve(KeplerLightCurve):
         self.flux_unit = flux_unit
         self.time_unit = time_unit
         self.gaps = gaps
-        self.flares = flares #pd.DataFrame(columns=['istart','istop','cstart','cstop', 'ed'])
-        self.detrended_flux = detrended_flux
-        self.detrended_flux_err = detrended_flux_err
         self.flux_trends = flux_trends
         self.primary_header = primary_header
         self.data_header = data_header
         self.pos_corr1 = pos_corr1
         self.pos_corr2 = pos_corr2
         self.origin = origin
+        self.detrended_flux = detrended_flux
+        self.detrended_flux_err = detrended_flux_err
+
+        columns = ['istart', 'istop', 'cstart', 'cstop', 'tstart',
+                   'tstop', 'ed_rec', 'ed_rec_err']
+        if flares is None:
+            self.flares = pd.DataFrame(columns=columns)
+        else:
+            self.flares = flares
+
+        if fake_flares is None:
+            extra_columns = ['ed_inj', 'tstart_inj', 'tstop_inj',
+                             'recovered']
+            self.fake_flares = pd.DataFrame(columns=columns +
+                                                    extra_columns)
+        else:
+            self.fake_flares = fake_flares
 
     def __repr__(self):
         return('FlareLightCurve(ID: {})'.format(self.targetid))
@@ -106,8 +121,12 @@ class FlareLightCurve(KeplerLightCurve):
         copy_self.time = self.time[key]
         copy_self.flux = self.flux[key]
         copy_self.flux_err = self.flux_err[key]
-        copy_self.pos_corr1 = self.pos_corr1[key]
-        copy_self.pos_corr2 = self.pos_corr2[key]
+        if copy_self.pos_corr1 is not None:
+            copy_self.pos_corr1 = self.pos_corr1[key]
+            copy_self.pos_corr2 = self.pos_corr2[key]
+        if copy_self.detrended_flux is not None:
+            copy_self.detrended_flux = self.detrended_flux[key]
+            copy_self.detrended_flux_err = self.detrended_flux_err[key]
         return copy_self
 
     def find_gaps(self, maxgap=0.09, minspan=10):
@@ -163,6 +182,7 @@ class FlareLightCurve(KeplerLightCurve):
                 new_lc.k2sc(de_niter=3) #de_niter set low for testing purpose
                 new_lc.detrended_flux = (new_lc.corr_flux - new_lc.tr_time
                                       + np.nanmedian(new_lc.tr_time))
+                new_lc.detrended_flux_err = copy.copy(new_lc.flux_err) # does k2sc share their uncertainties somewhere?
                 if new_lc.detrended_flux.shape != self.flux.shape:
                     LOG.error('De-detrending messed up the flux arrays.')
                 else:
