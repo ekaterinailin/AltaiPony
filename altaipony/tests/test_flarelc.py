@@ -25,7 +25,9 @@ def mock_flc(origin='TPF', detrended=False):
     """
     n = 1000
     time = np.arange(0, n/48, 1./48.)
+    np.random.seed(33)
     flux_err = np.random.rand(n)/100.
+    print(flux_err)
     if detrended==False:
         flux = np.sin(time/2)*7. + 500. +flux_err
     else:
@@ -79,8 +81,8 @@ def test_detrend():
     pass
 
 def test_detrend_fails():
+    """If detrend fails, an error is raised with given string."""
     flc =  mock_flc(origin='KLC')
-    """LightCurves with no data should not be allowed."""
     err_string = ('Only KeplerTargetPixelFile derived FlareLightCurves can be'
               ' passed to detrend().')
     with pytest.raises(ValueError) as err:
@@ -88,6 +90,7 @@ def test_detrend_fails():
     assert err_string == err.value.args[0]
 
 def test_find_flares():
+    """Test that an obvious flare is recovered sufficiently well."""
     flc = mock_flc(detrended=True)
     flc = flc.find_flares()
     assert flc.flares['ed_rec'][0] == pytest.approx(4.877947e+06, rel=1e-4)
