@@ -1,4 +1,4 @@
-|ci-badge| |docs-badge|
+|ci-badge| |docs-badge| |license-badge|
 
 
 .. |ci-badge| image:: https://travis-ci.org/ekaterinailin/AltaiPony.svg?branch=master
@@ -7,6 +7,11 @@
 .. |docs-badge| image:: https://readthedocs.org/projects/altaipony/badge/?version=latest
 	      :target: https://altaipony.readthedocs.io/en/latest/?badge=latest
 	      :alt: Documentation Status
+	      
+	      
+.. |license-badge|  image:: https://img.shields.io/github/license/mashape/apistatus.svg   
+		    :target: https://github.com/ekaterinailin/AltaiPony/blob/master/LICENSE 
+		    :alt: GitHub	      
 
 AltaiPony
 =========
