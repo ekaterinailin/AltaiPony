@@ -106,10 +106,8 @@ class FlareLightCurve(KeplerLightCurve):
             self.flares = flares
 
         if fake_flares is None:
-            extra_columns = ['ed_inj', 'tstart_inj', 'tstop_inj',
-                             'recovered']
-            self.fake_flares = pd.DataFrame(columns=columns +
-                                                    extra_columns)
+            other_columns = ['duration_d', 'amplitude', 'ed_inj', 'peak_time']
+            self.fake_flares = pd.DataFrame(columns=other_columns)
         else:
             self.fake_flares = fake_flares
 
@@ -217,4 +215,5 @@ class FlareLightCurve(KeplerLightCurve):
         return lc
 
     def characterize_flare_recovery(self):
+        
         return

@@ -8,8 +8,6 @@ from ..lcio import from_K2SC_file
 from .. import PACKAGEDIR
 from . import test_ids, test_paths
 
-
-#From lightkurve
 def mock_flc(origin='TPF', detrended=False):
     """
     Mocks a FlareLightCurve with a sinusoid variation and a single positive outlier.
@@ -18,6 +16,8 @@ def mock_flc(origin='TPF', detrended=False):
     -----------
     origin : 'TPF' or str
         Mocks a specific origin, such as 'KLC', 'FLC' etc.
+    detrended : False or bool
+        If False, a sinusoid signal is added to the mock light curve.
 
     Return
     -------
@@ -27,7 +27,6 @@ def mock_flc(origin='TPF', detrended=False):
     time = np.arange(0, n/48, 1./48.)
     np.random.seed(33)
     flux_err = np.random.rand(n)/100.
-    print(flux_err)
     if detrended==False:
         flux = np.sin(time/2)*7. + 500. +flux_err
     else:

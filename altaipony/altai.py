@@ -7,7 +7,7 @@ from lightkurve import KeplerLightCurve
 
 LOG = logging.getLogger(__name__)
 
-def find_flares_in_cont_obs_period(flux, error, N1=4, N2=4, N3=3):
+def find_flares_in_cont_obs_period(flux, error, N1=3, N2=3, N3=3):
     '''
     The algorithm for local changes due to flares defined by
     S. W. Chang et al. (2015), Eqn. 3a-d
@@ -24,10 +24,10 @@ def find_flares_in_cont_obs_period(flux, error, N1=4, N2=4, N3=3):
     error : numpy array
         errors corresponding to data.
     N1 : int, optional
-        Coefficient from original paper (Default is 3 in paper, 4 here)
+        Coefficient from original paper (Default is 3 in paper, 3 here)
         How many times above the stddev is required.
     N2 : int, optional
-        Coefficient from original paper (Default is 1 in paper, 4 here)
+        Coefficient from original paper (Default is 1 in paper, 3 here)
         How many times above the stddev and uncertainty is required
     N3 : int, optional
         Coefficient from original paper (Default is 3)
@@ -123,7 +123,7 @@ def find_flares(flc, minsep=3):
         istart = np.array(np.append(istart, istart_gap + le), dtype='int')
         istop = np.array(np.append(istop, istop_gap + le), dtype='int')
         LOG.info('INFO: Found {} candidate(s) in the ({},{}) gap.'
-                 .format(len(istart), le, ri))
+                 .format(len(istart_gap), le, ri))
 
     l = [equivalent_duration(lc, i, j, err=True) for (i,j) in zip(istart, istop)]
     ed_rec, ed_rec_err = zip(*l)
