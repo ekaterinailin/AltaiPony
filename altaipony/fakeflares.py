@@ -9,7 +9,8 @@ from scipy.stats import binned_statistic
 LOG = logging.getLogger(__name__)
 
 
-def inject_fake_flares(lc, mode='hawley2014', gapwindow=0.1, fakefreq=.25,):
+def inject_fake_flares(lc, mode='hawley2014', gapwindow=0.1, fakefreq=.25,
+                        inject_before_detrending=False):
 
     '''
     Create a number of events, inject them in to data
@@ -29,7 +30,8 @@ def inject_fake_flares(lc, mode='hawley2014', gapwindow=0.1, fakefreq=.25,):
 
     fakefreq : .25 or float
         flares per day
-
+    inject_before_detrending : True or bool
+        By default, flares are injected before the light curve is detrended.
     Returns:
     ------------
     FlareLightCurve with fake flare signatures
@@ -58,11 +60,17 @@ def inject_fake_flares(lc, mode='hawley2014', gapwindow=0.1, fakefreq=.25,):
 
 
     LOG.debug(str() + '{} FakeFlares started'.format(datetime.datetime.now()))
+    if inject_before_detrending == True:
+        typ, typerr = 'flux', 'flux_err'
+        LOG.info('Injecting before detrending.')
+    elif inject_before_detrending == False:
+        typ, typerr = 'detrended_flux', 'detrended_flux_err'
+        LOG.info('Injecting after detrending.')
     fakeres = pd.DataFrame()
     fake_lc = copy.deepcopy(lc)
-    medflux = np.nanmedian(fake_lc.detrended_flux)
-    fake_lc.detrended_flux = fake_lc.detrended_flux/medflux -1.
-    fake_lc.detrended_flux_err = fake_lc.detrended_flux_err/medflux
+    medflux = np.nanmedian(fake_lc.__dict__[typ])
+    fake_lc.__dict__[typ] = fake_lc.__dict__[typ]/medflux -1.
+    fake_lc.__dict__[typerr] = fake_lc.__dict__[typerr]/medflux
     nfakesum = int(np.rint(fakefreq * (lc.time.max() - lc.time.min())))
     t0_fake = np.zeros(nfakesum, dtype='float')
     ed_fake = np.zeros(nfakesum, dtype='float')
@@ -76,8 +84,8 @@ def inject_fake_flares(lc, mode='hawley2014', gapwindow=0.1, fakefreq=.25,):
         LOG.debug('Inject {} fake flares into a {} datapoint long array.'.format(nfake,ri-le))
 
         real_flares_in_gap = lc.flares[(lc.flares.istart >= le) & (lc.flares.istop <= ri)]
-        error = gap_fake_lc.detrended_flux_err
-        flux = gap_fake_lc.detrended_flux
+        error = gap_fake_lc.__dict__[typerr]
+        flux = gap_fake_lc.__dict__[typ]
         time = gap_fake_lc.time
         distribution  = generate_fake_flare_distribution(np.nanmedian(error),
                                                          nfake,
@@ -105,13 +113,13 @@ def inject_fake_flares(lc, mode='hawley2014', gapwindow=0.1, fakefreq=.25,):
     	        fl_flux = aflare(time, t0, dur_fake[k], ampl_fake[k])
     	        ed_fake[k] = _equivalent_duration(time, fl_flux)
                     	    # inject flare in to light curve
-    	    fake_lc.detrended_flux[le:ri] = fake_lc.detrended_flux[le:ri] + fl_flux
+    	    fake_lc.__dict__[typ][le:ri] = fake_lc.__dict__[typ][le:ri] + fl_flux
         ckm += nfake
 
     #error minimum is a safety net for the spline function if mode=3
-    fake_lc.detrended_flux_err = max( 1e-10, np.nanmedian( pd.Series(fake_lc.detrended_flux).
+    fake_lc.__dict__[typerr] = max( 1e-10, np.nanmedian( pd.Series(fake_lc.__dict__[typ]).
                                               rolling(3, center=True).
-                                              std() ) )*np.ones_like(fake_lc.detrended_flux)
+                                              std() ) )*np.ones_like(fake_lc.__dict__[typ])
 
     injected_events = {'duration_d' : dur_fake, 'amplitude' : ampl_fake,
                        'ed_inj' : ed_fake, 'peak_time' : t0_fake}
@@ -242,6 +250,7 @@ def aflare(t, tpeak, dur, ampl, upsample=False, uptime=10):
                                      bins=downbins)
 
     else:
+        print(t,tpeak,fwhm)
         flare = np.piecewise(t, [(t<= tpeak) * (t-tpeak)/fwhm > -1.,
                                  (t > tpeak)],
                                 [lambda x: (_fr[0]+                       # 0th order
@@ -282,8 +291,8 @@ def merge_fake_and_recovered_events(injs, recs):
 
     #
     # # Create a test lightcurve with flares here:
-    # # out_lc = pd.DataFrame({'flux_raw':fake_lc.detrended_flux*medflux,'time':lc.time,
-    # #                        'error':max(1e-10,np.nanmedian(pd.Series(fake_lc.detrended_flux*medflux).rolling(3, center=True).std())),
+    # # out_lc = pd.DataFrame({'flux_raw':fake_lc.__dict__[typ]*medflux,'time':lc.time,
+    # #                        'error':max(1e-10,np.nanmedian(pd.Series(fake_lc.__dict__[typ]*medflux).rolling(3, center=True).std())),
     # #                        'flags':lc.flags})
     # # out_lc.to_csv('test_suite/test/testlc.csv')
     # istart, istop, new_lc['flux_model'] = MultiFind(new_lc, dlr, mode=mode,

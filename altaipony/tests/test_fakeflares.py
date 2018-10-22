@@ -21,8 +21,6 @@ def test_inject_fake_flares():
     flc = flc.find_gaps()
     fake_flc = inject_fake_flares(flc)
 
-    assert str(signature(inject_fake_flares)) == ('(lc, mode=\'hawley2014\','
-                                                  ' gapwindow=0.1, fakefreq=0.25)')
     assert fake_flc.fake_flares.size == 20
     assert fake_flc.fake_flares.columns.values.tolist() == ['amplitude', 'duration_d',
                                                    'ed_inj', 'peak_time']
@@ -34,4 +32,3 @@ def test_inject_fake_flares():
     x = fake_flc.time * 60.0 * 60.0 * 24.0
     integral = np.sum(np.diff(x) * fl_flux[:-1])
     assert integral == pytest.approx(1.8e-5,rel=1e-2)
-    return fake_flc
