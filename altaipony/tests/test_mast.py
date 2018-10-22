@@ -26,7 +26,8 @@ def test_query_kepler_products():
     pass
 
 def test_search_kepler_products():
-    tab = search_kepler_products(211119999)
-    assert tab['qoc'] == 4
-    assert len(tab) == 1
-    assert tab['project'] == 'hlsp_k2sc'
+    for ID in test_ids:
+        tab = search_kepler_products(ID)
+        assert tab['qoc'] == 4
+        assert len(tab) == 1
+        assert tab['project'] == 'hlsp_k2sc'
