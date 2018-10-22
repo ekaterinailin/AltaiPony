@@ -244,8 +244,12 @@ class FlareLightCurve(KeplerLightCurve):
                     'peak_time']
         combined_irr = pd.DataFrame(columns=columns)
         for i in range(iterations):
-            fake_lc = inject_fake_flares(lc)
+            fake_lc = inject_fake_flares(lc,
+                                         inject_before_detrending=inject_before_detrending,
+                                         **kwargs)
             injs = fake_lc.fake_flares
+            if inject_before_detrending == True:
+                fake_lc = fake_lc.detrend()
             fake_lc = fake_lc.find_flares()
             recs = fake_lc.flares
             injection_recovery_results = merge_fake_and_recovered_events(injs, recs)
