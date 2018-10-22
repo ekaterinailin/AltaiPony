@@ -1,6 +1,6 @@
 import numpy as np
 
-def k2sc_quality_cuts(data, return_index=False):
+def k2sc_quality_cuts(data):
     """
     Apply all the quality checks that k2sc uses internally.
 
@@ -14,8 +14,8 @@ def k2sc_quality_cuts(data, return_index=False):
     ``centroid_row`` all have finite values.
     """
 
-    data = data[np.isfinite(data.time) &
+    data2 = data[np.isfinite(data.time) &
                 np.isfinite(data.pos_corr1) &
                 np.isfinite(data.pos_corr2)]
 
-    return data
+    return data2
