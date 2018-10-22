@@ -177,7 +177,6 @@ def generate_fake_flare_distribution(nfake, ampl=[1.e-4, 1.e3], dur=[5.e-1, 2.e3
 
     return dur_fake, ampl_fake
 
-
 def aflare(t, tpeak, dur, ampl, upsample=False, uptime=10):
     '''
     The Analytic Flare Model evaluated for a single-peak (classical).

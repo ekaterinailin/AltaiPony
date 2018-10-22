@@ -13,3 +13,9 @@ def test_find_flares_in_cont_obs_period():
      Add unit tests!
      """
      pass
+
+def test_chi_square():
+    pass
+
+def test_equivalent_duration():
+    pass

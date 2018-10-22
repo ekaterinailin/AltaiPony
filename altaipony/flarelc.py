@@ -9,6 +9,7 @@ from lightkurve import KeplerLightCurve, KeplerTargetPixelFile
 from astropy.io import fits
 
 from .altai import find_flares
+from .fakeflares import inject_fake_flares, merge_fake_and_recovered_events
 
 LOG = logging.getLogger(__name__)
 
@@ -214,6 +215,45 @@ class FlareLightCurve(KeplerLightCurve):
 
         return lc
 
-    def characterize_flare_recovery(self):
+    def sample_flare_recovery(self, iterations=20,
+                                    inject_before_detrending=False, **kwargs):
+        """
+        Runs a number of injection recovery cycles and characterizes the light
+        curve by recovery probability and equivalent duration underestimation.
 
+        Parameters
+        -----------
+        iterations : 20 or int
+            Number of injection/recovery cycles
+        inject_before_detrending : False or bool
+            If True, fake flare are injected directly into raw data.
+        kwargs : dict
+            Keyword arguments to pass to inject_fake_flares
+
+        Return
+        -------
+        ed_correction_factor : numpy 2D array
+            Contains [recovered equivalent duration, systematic correction factor].
+        recovery_probability : numpy 2D array
+            Contains [corrected equivalent duration, recovery probability].
+        """
+        lc = copy.copy(self)
+        lc = lc.find_gaps()
+        columns =  ['istart', 'istop', 'cstart', 'cstop', 'tstart', 'tstop',
+                    'ed_rec', 'ed_rec_err', 'duration_d', 'amplitude', 'ed_inj',
+                    'peak_time']
+        combined_irr = pd.DataFrame(columns=columns)
+        for i in range(iterations):
+            fake_lc = inject_fake_flares(lc)
+            injs = fake_lc.fake_flares
+            fake_lc = fake_lc.find_flares()
+            recs = fake_lc.flares
+            injection_recovery_results = merge_fake_and_recovered_events(injs, recs)
+            combined_irr = combined_irr.append(injection_recovery_results,
+                                                      ignore_index=True,
+                                                      sort=True)
+        return combined_irr
+
+    def test_characterize_flare_recovery():
+        #analysis function
         return

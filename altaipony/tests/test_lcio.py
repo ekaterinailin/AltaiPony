@@ -58,7 +58,6 @@ def test_from_TargetPixel_source():
         flc = from_TargetPixel_source(ID)
         FlareLightCurve_testhelper(flc, ID, ra, dec, channel, from_tpf=True)
 
-
 def test_from_KeplerLightCurve_source():
     '''
     Test if a ``FlareLightCurve`` is created from a ``KeplerLightCurve`` properly

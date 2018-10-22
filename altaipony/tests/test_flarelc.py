@@ -102,6 +102,14 @@ def test_find_flares():
     assert flc.flares['tstart'][0] == pytest.approx(0.3125, rel=1e-4)
     assert flc.flares['tstop'][0] == pytest.approx(0.395833, rel=1e-4)
 
+def test_sample_flare_recovery():
+    pass
 
 def test_characterize_flare_recovery():
+    pass
+
+def test_repr():
+    pass
+
+def test_getitem():
     pass
