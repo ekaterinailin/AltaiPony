@@ -87,9 +87,7 @@ def inject_fake_flares(lc, mode='hawley2014', gapwindow=0.1, fakefreq=.25,
         error = gap_fake_lc.__dict__[typerr]
         flux = gap_fake_lc.__dict__[typ]
         time = gap_fake_lc.time
-        distribution  = generate_fake_flare_distribution(np.nanmedian(error),
-                                                         nfake,
-                                                         mode=mode)
+        distribution  = generate_fake_flare_distribution(nfake, mode=mode)
         dur_fake[ckm:ckm+nfake], ampl_fake[ckm:ckm+nfake] = distribution
         #loop over the numer of fake flares you want to generate
         for k in range(ckm, ckm+nfake):
@@ -129,58 +127,51 @@ def inject_fake_flares(lc, mode='hawley2014', gapwindow=0.1, fakefreq=.25,
 
     return fake_lc
 
-def generate_fake_flare_distribution(std, nfake, ampl=(5e-1,5e2), dur=(5e-1,2e2),
-                                     mode='hawley2014', scatter=False):
+def generate_fake_flare_distribution(nfake, ampl=[1.e-4, 1.e3], dur=[5.e-1, 2.e3],
+                                     mode='hawley2014'):
 
     '''
     Creates different distributions of fake flares to be injected into light curves.
 
-    rand: Flares are distibuted evenly in dur and ampl
-    hawley2014: Flares are distributed in a strip around to a power law with
-    exponent alpha, see fig. 10 in Hawley et al. 2014
+    "uniform": Flares are distibuted evenly in duration and amplitude space.
+    "hawley2014": Flares are distributed in a strip around a power law with
+    exponent alpha, see Fig. 10 in Hawley et al. (2014).
 
-    Parameters:
+    Parameters
     -----------
-    std: standard deviation of quiescent light curve
-    nfake: number of fake flares to be created
-    ampl: amplitude range in relative (only for 'rand' mode) flux units,
-          default=(5e-1,5e3) for consistency with 'hawley2014'
-    dur: duration range (only for 'rand' mode) in minutes,
-         default=(5e-1,2e2) for consistency with 'hawley2014'
-    mode: distribution of fake flares in (duration,amplitude) space,
-          default='hawley2014'
-    scatter: saves a scatter plot of the distribution for the injected sample,
-             default='False'
+    nfake: int
+        Number of fake flares to be created.
+    ampl: [1e-4, 1e3] or list of floats
+        Amplitude range in relative flux units.
+    dur: [5e-1, 2e3] or list of floats
+        Duration range in minutes.
+    mode: 'hawley2014' or 'uniform'
+        Distribution of fake flares in (duration, amplitude) space.
 
-    Returns:
+    Return
     -------
     dur_fake: durations of generated fake flares in days
     ampl_fake: amplitudes of generated fake flares in relative flux units
     '''
 
-    if mode=='rand':
+    if mode=='uniform':
 
         dur_fake =  (np.random.random(nfake) * (dur[1] - dur[0]) + dur[0])
-        ampl_fake = (np.random.random(nfake) * (ampl[1] - ampl[0]) + ampl[0])*std
-        lndur_fake = np.log10(dur_fake)
-        lnampl_fake = np.log10(ampl_fake)
+        ampl_fake = (np.random.random(nfake) * (ampl[1] - ampl[0]) + ampl[0])
         dur_fake = dur_fake / 60. / 24.
 
     elif mode=='hawley2014':
 
-        c_range=np.array([np.log10(5)-6.,np.log10(5)-4.]) #estimated from fig. 10 in Hawley et al. 2014
-        alpha=2.                                        #estimated from fig. 10 in Hawley et al. 2014
-        ampl=(np.log10(2.*std),np.log10(10000.*std))
-
-        lnampl_fake = (np.random.random(nfake) * (ampl[1] - ampl[0]) + ampl[0])
-        lndur_fake=np.zeros(nfake, dtype='float')
+        c_range = np.array([np.log10(5) - 6., np.log10(5) - 4.])                #estimated from Fig. 10 in Hawley et al. (2014)
+        alpha = 2.                                                              #estimated from Fig. 10 in Hawley et al. (2014)
+        ampl_H14 = [np.log10(i) for i in ampl]
+        lnampl_fake = (np.random.random(nfake) * (ampl_H14[1] - ampl_H14[0]) + ampl_H14[0])
         rand=np.random.random(nfake)
-        dur_max = (1./alpha) * (lnampl_fake-c_range[0]) #log(tmax)
-        dur_min = (1./alpha) * (lnampl_fake-c_range[1]) # log(tmin)
-
-        for a in range(0,nfake):
-            lndur_fake[a]= (rand[a] * (dur_max[a] - dur_min[a]) + dur_min[a])
-
+        dur_max = (1./alpha) * (lnampl_fake - c_range[0])
+        dur_min = (1./alpha) * (lnampl_fake - c_range[1])
+        lndur_fake = np.array([rand[a] * (dur_max[a] - dur_min[a]) +
+                              dur_min[a]
+                              for a in range(nfake)])
         ampl_fake = np.power(np.full(nfake,10), lnampl_fake)
         dur_fake=np.power(np.full(nfake,10), lndur_fake) / 60. / 24.
 
@@ -250,7 +241,6 @@ def aflare(t, tpeak, dur, ampl, upsample=False, uptime=10):
                                      bins=downbins)
 
     else:
-        print(t,tpeak,fwhm)
         flare = np.piecewise(t, [(t<= tpeak) * (t-tpeak)/fwhm > -1.,
                                  (t > tpeak)],
                                 [lambda x: (_fr[0]+                       # 0th order

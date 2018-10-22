@@ -197,12 +197,12 @@ class FlareLightCurve(KeplerLightCurve):
         '''
         Find flares in a FlareLightCurve.
 
-        Parameters:
+        Parameters
         -------------
         minsep : 3 or int
             minimum distance between two candidate start times in datapoints
 
-        Return:
+        Return
         ----------
         numpy arrays of start and stop cadence numbers of flare candidates
         '''
@@ -215,5 +215,5 @@ class FlareLightCurve(KeplerLightCurve):
         return lc
 
     def characterize_flare_recovery(self):
-        
+
         return

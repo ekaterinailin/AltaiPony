@@ -30,14 +30,15 @@ def mock_flc(origin='TPF', detrended=False):
     if detrended==False:
         flux = np.sin(time/2)*7. + 500. +flux_err
     else:
-        flux = 500. +flux_err
+        flux = 500. + flux_err
     flux[15] = 1.e3
     flux[16] = 750.
     flux[17] = 630.
     flux[18] = 580.
-    keys = {'flux' : flux, 'time' : time, 'pos_corr1' : np.zeros(n),
-            'pos_corr2' : np.zeros(n), 'cadenceno' : np.arange(n),
-            'targetid' : 80000000, 'origin' : origin}
+    keys = {'flux' : flux, 'flux_err' : flux_err, 'time' : time,
+            'pos_corr1' : np.zeros(n), 'pos_corr2' : np.zeros(n),
+            'cadenceno' : np.arange(n), 'targetid' : 80000000,
+            'origin' : origin}
 
     if detrended == False:
         flc = FlareLightCurve(**keys)
