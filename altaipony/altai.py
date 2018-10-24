@@ -149,7 +149,8 @@ def equivalent_duration(lc, start, stop, err=False):
     '''
     Returns the equivalend duratio of a flare event,
     found within indices [start, stop],
-    calculated as the area under the residual (flux-flux_model)
+    calculated as the area under the residual (flux-flux_median).
+    Use only on de-trended light curves!
     Returns also the uncertainty on ED following Davenport (2016)
 
     Parameters:
@@ -158,8 +159,8 @@ def equivalent_duration(lc, start, stop, err=False):
         start time index of a flare event
     stop : int
         end time index of a flare event
-    lc : pandas DataFrame
-        light curve with columns ['time','flux_model','flux','error']
+    lc : FlareLightCurve
+
     err: False or bool
         If True will compute uncertainty on ED
 
@@ -173,20 +174,20 @@ def equivalent_duration(lc, start, stop, err=False):
 
     start, stop = int(start),int(stop)+1
     lct = lc[start:stop]
-    residual = lct.detrended_flux - np.median(lct.detrended_flux_err)
-    ed = np.trapz(residual, lct.time * 60. * 60. * 24.)
+    residual = lct.detrended_flux/np.median(lc.detrended_flux)-1.
+    x = lct.time * 60.0 * 60.0 * 24.0
+    ed = np.sum(np.diff(x) * residual[:-1])
 
     if err == True:
-        flare_chisq = chi_square(lct.flux, lct.detrended_flux_err,
-                                 np.median(lct.flux))
-        ederr = np.sqrt(ed**2 / (stop-start) / flare_chisq)
+        flare_chisq = chi_square(residual[:-1], lct.detrended_flux_err[:-1])
+        ederr = np.sqrt(ed**2 / (stop-1-start) / flare_chisq)
         return ed, ederr
     else:
         return ed
 
-def chi_square(data, error, model):
+def chi_square(residual, error):
     '''
     Compute the normalized chi square statistic:
     chisq =  1 / N * SUM(i) ( (data(i) - model(i))/error(i) )^2
     '''
-    return np.sum( ((data - model) / error)**2.0 ) / np.size(data)
+    return np.sum( (residual / error)**2.0 ) / np.size(error)

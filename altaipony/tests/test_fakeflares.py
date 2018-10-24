@@ -1,13 +1,41 @@
 import pytest
 import numpy as np
+import pandas as pd
 from inspect import signature
 
-from ..fakeflares import inject_fake_flares, aflare, generate_fake_flare_distribution
+from ..fakeflares import (inject_fake_flares,
+                          aflare,
+                          generate_fake_flare_distribution,
+                          merge_fake_and_recovered_events)
+
 
 from .test_flarelc import mock_flc
 
 def test_merge_fake_and_recovered_events():
-    pass
+
+    flares = {'istart' : [5, 30],
+              'istop' : [15, 36],
+              'cstart' : [8, 33],
+              'cstop': [18, 39],
+              'tstart' : [2335.5846, 2335.5846 + 12.5/24.],
+              'tstop' : [2335.5846 + 5./24., 2335.5846 + 15.5/24.],
+              'ed_rec' : [650, 250],
+              'ed_rec_err' : [46, 15]}
+    fakes = {'duration_d' : np.linspace(0.01,1,20),
+             'amplitude' : np.linspace(0.01,1,20),
+             'ed_inj' : np.linspace(100,50000,20),
+             'peak_time' : np.linspace(2320,2340,20),}
+    flares = pd.DataFrame(flares)
+    fakes = pd.DataFrame(fakes)
+    tab = merge_fake_and_recovered_events(fakes, flares)
+    assert tab.size == 240
+    assert tab.shape[0] == 20
+    match = tab.dropna(how='any')
+    assert match.shape[0] == 1
+    row = match.iloc[0]
+    assert row.peak_time >= row.tstart
+    assert row.peak_time <= row.tstop
+    assert row.ed_inj > row.ed_rec
 
 def test_generate_fake_flare_distribution():
 
@@ -55,7 +83,7 @@ def test_inject_fake_flares():
     assert fake_flc.flux.shape == flc.flux.shape
 
 def test_aflare_and_equivalent_duration():
-    
+
     n = 1000
     time = np.arange(0, n/48, 1./48.)
     fl_flux = aflare(time, 11.400134, 1.415039, 110.981950)

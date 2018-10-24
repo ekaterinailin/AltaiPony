@@ -93,7 +93,7 @@ def test_find_flares():
     """Test that an obvious flare is recovered sufficiently well."""
     flc = mock_flc(detrended=True)
     flc = flc.find_flares()
-    assert flc.flares['ed_rec'][0] == pytest.approx(4.877947e+06, rel=1e-4)
+    assert flc.flares['ed_rec'][0] == pytest.approx(3455.8875941, rel=1e-4)
     assert flc.flares['ed_rec_err'][0] < flc.flares['ed_rec'][0]
     assert flc.flares['istart'][0] == 15
     assert flc.flares['istop'][0] == 19
