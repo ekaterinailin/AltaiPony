@@ -10,7 +10,10 @@ from lightkurve import KeplerLightCurve, KeplerTargetPixelFile
 from astropy.io import fits
 
 from .altai import find_flares
-from .fakeflares import inject_fake_flares, merge_fake_and_recovered_events
+from .fakeflares import (inject_fake_flares,
+                         merge_fake_and_recovered_events,
+                         merge_complex_flares)
+
 
 LOG = logging.getLogger(__name__)
 
@@ -258,7 +261,8 @@ class FlareLightCurve(KeplerLightCurve):
             fake_lc = fake_lc.find_flares()
             recs = fake_lc.flares
             injection_recovery_results = merge_fake_and_recovered_events(injs, recs)
-            combined_irr = combined_irr.append(injection_recovery_results,
+            irr_w_merged_complex_flares = merge_complex_flares(injection_recovery_results)
+            combined_irr = combined_irr.append(irr_w_merged_complex_flares,
                                                       ignore_index=True,
                                                       sort=True)
             bar.update(i + 1)

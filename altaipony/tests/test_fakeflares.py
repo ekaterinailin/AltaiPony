@@ -6,7 +6,8 @@ from inspect import signature
 from ..fakeflares import (inject_fake_flares,
                           aflare,
                           generate_fake_flare_distribution,
-                          merge_fake_and_recovered_events)
+                          merge_fake_and_recovered_events,
+                          merge_complex_flares)
 
 
 from .test_flarelc import mock_flc
@@ -95,3 +96,13 @@ def test_aflare_and_equivalent_duration():
     x = time * 60.0 * 60.0 * 24.0
     integral = np.sum(np.diff(x) * fl_flux[:-1])
     assert integral == pytest.approx(1.22e7,rel=1e-2)
+
+def test_merge_complex_flares():
+    gen = np.random.rand(12,12)
+    gen[-1] = gen[3]
+    cols = ['amplitude', 'cstart', 'cstop', 'duration_d', 'ed_inj', 'ed_rec',
+       'ed_rec_err', 'istart', 'istop', 'peak_time', 'tstart', 'tstop']
+    data = pd.DataFrame(data=gen, columns=cols)
+    resolved_data = merge_complex_flares(data)
+    assert resolved_data.shape[0] == 11
+    assert len(resolved_data.columns.values) == 12

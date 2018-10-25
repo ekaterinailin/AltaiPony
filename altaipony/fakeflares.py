@@ -277,3 +277,42 @@ def merge_fake_and_recovered_events(injs, recs):
     rest = injs[~injs.amplitude.isin(merged_recovered.amplitude.values)]
     merged_all = merged_recovered.append(rest,sort=True).drop('temp',axis=1)
     return merged_all
+
+def merge_complex_flares(data):
+    """
+    The injection procedure sometimes introduces complex flares. These are
+    recovered multiple times, according to the number of simple flare signatures
+    they consist of. Merge these by adopting common times, the maximum recovered
+    equivalent duration and respective error. Add injected equivalent durations.
+
+    Parameters
+    -----------
+    data : DataFrame
+        Columns: ['amplitude', 'cstart', 'cstop', 'duration_d', 'ed_inj', 'ed_rec',
+       'ed_rec_err', 'istart', 'istop', 'peak_time', 'tstart', 'tstop']
+
+    Return
+    -------
+    DataFrame with the same columns as the input but with complex flares merged
+    together.
+    """
+    g = data.groupby(['cstart','cstop'])
+    data_wo_overlaps = pd.DataFrame(columns=data.columns.values)
+    for (start, stop), d in g:
+        if d.shape[0] > 1:
+            row = {
+            'peak_time' : d.peak_time[d.amplitude.idxmax()],
+            'amplitude' : d.amplitude.max(),
+            'cstart' : d.cstart.min(),
+            'cstop' : d.cstop.max(),
+            'duration_d' : d.duration_d.max(),
+            'ed_inj' : d.ed_inj.sum(),
+            'ed_rec' : d.ed_rec.max(),
+            'ed_rec_err' : d.ed_rec_err.max(),
+            'istart' : d.istart.min(),
+            'istop' : d.istop.max(),
+            'tstart' : d.tstart.min(),
+            'tstop' : d.tstop.max(),}
+            d = pd.DataFrame(row, index=[0])
+        data_wo_overlaps = data_wo_overlaps.append(d, ignore_index=True,sort=True)
+    return data_wo_overlaps
