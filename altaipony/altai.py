@@ -46,7 +46,7 @@ def find_flares_in_cont_obs_period(flux, error, N1=3, N2=3, N3=3):
     T1 = np.abs(flux - median) / sigma #N1
     T2 = np.abs(flux - median - error) / sigma #N2
     # apply thresholds N0-N2:
-    LOG.info('Factor above standard deviation: N1 = {},\n'
+    LOG.debug('Factor above standard deviation: N1 = {},\n'
              'Factor above standard deviation + uncertainty N2 = {},\n'
              'Minimum number of consecutive data points for candidate N3 = {}'
              .format(N1,N2,N3))
@@ -107,7 +107,7 @@ def find_flares(flc, minsep=3):
         candidates = np.where( isflare > 0)[0]
 
         if (len(candidates) < 1):#no candidates = no indices
-            LOG.info('INFO: No candidates were found in the ({},{}) gap.'
+            LOG.debug('INFO: No candidates were found in the ({},{}) gap.'
                      .format(le,ri))
             istart_gap = np.array([])
             istop_gap = np.array([])
@@ -122,7 +122,7 @@ def find_flares(flc, minsep=3):
         #stitch indices back into the original light curve
         istart = np.array(np.append(istart, istart_gap + le), dtype='int')
         istop = np.array(np.append(istop, istop_gap + le), dtype='int')
-        LOG.info('INFO: Found {} candidate(s) in the ({},{}) gap.'
+        LOG.debug('INFO: Found {} candidate(s) in the ({},{}) gap.'
                  .format(len(istart_gap), le, ri))
 
     l = [equivalent_duration(lc, i, j, err=True) for (i,j) in zip(istart, istop)]
@@ -183,6 +183,9 @@ def equivalent_duration(lc, start, stop, err=False):
         ederr = np.sqrt(ed**2 / (stop-1-start) / flare_chisq)
         return ed, ederr
     else:
+        if ed < 0:
+            print(ed)
+            print(x, start, stop, residual)
         return ed
 
 def chi_square(residual, error):

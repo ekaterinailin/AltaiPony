@@ -3,6 +3,11 @@ from . import test_ids, test_paths
 import pytest
 
 #use tests from lightkurve
+def test_download_kepler_products():
+    pass
+
+def test_query_kepler_products():
+    pass
 
 @pytest.mark.remote_data
 def test_search_kepler_lightcurve_products():
@@ -19,11 +24,6 @@ def test_download_products():
                        '_llc_{0}-c04_kepler_v2_lc.fits'.format(ID))
     pass
 
-def test_download_kepler_products():
-    pass
-
-def test_query_kepler_products():
-    pass
 
 def test_search_kepler_products():
     for ID in test_ids:

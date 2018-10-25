@@ -10,7 +10,7 @@ LOG = logging.getLogger(__name__)
 
 
 def inject_fake_flares(lc, mode='hawley2014', gapwindow=0.1, fakefreq=.25,
-                        inject_before_detrending=False):
+                       inject_before_detrending=False):
 
     '''
     Create a number of events, inject them in to data
@@ -62,10 +62,10 @@ def inject_fake_flares(lc, mode='hawley2014', gapwindow=0.1, fakefreq=.25,
     LOG.debug(str() + '{} FakeFlares started'.format(datetime.datetime.now()))
     if inject_before_detrending == True:
         typ, typerr = 'flux', 'flux_err'
-        LOG.info('Injecting before detrending.')
+        LOG.debug('Injecting before detrending.')
     elif inject_before_detrending == False:
         typ, typerr = 'detrended_flux', 'detrended_flux_err'
-        LOG.info('Injecting after detrending.')
+        LOG.debug('Injecting after detrending.')
     fakeres = pd.DataFrame()
     fake_lc = copy.deepcopy(lc)
     medflux = np.nanmedian(fake_lc.__dict__[typ])
@@ -80,7 +80,6 @@ def inject_fake_flares(lc, mode='hawley2014', gapwindow=0.1, fakefreq=.25,
     for (le,ri) in fake_lc.gaps:
         gap_fake_lc = fake_lc[le:ri]
         nfake = int(np.rint(fakefreq * (gap_fake_lc.time.max() - gap_fake_lc.time.min())))
-
         LOG.debug('Inject {} fake flares into a {} datapoint long array.'.format(nfake,ri-le))
 
         real_flares_in_gap = lc.flares[(lc.flares.istart >= le) & (lc.flares.istop <= ri)]
@@ -110,7 +109,7 @@ def inject_fake_flares(lc, mode='hawley2014', gapwindow=0.1, fakefreq=.25,
     	        t0_fake[k] = t0
     	        fl_flux = aflare(time, t0, dur_fake[k], ampl_fake[k])
     	        ed_fake[k] = _equivalent_duration(time, fl_flux)
-                    	    # inject flare in to light curve
+            # inject flare in to light curve
     	    fake_lc.__dict__[typ][le:ri] = fake_lc.__dict__[typ][le:ri] + fl_flux
         ckm += nfake
 
@@ -124,10 +123,11 @@ def inject_fake_flares(lc, mode='hawley2014', gapwindow=0.1, fakefreq=.25,
     fake_lc.fake_flares = fake_lc.fake_flares.append(pd.DataFrame(injected_events),
                                                      ignore_index=True,
                                                      sort=True)
-
+    #workaround
+    fake_lc.fake_flares = fake_lc.fake_flares[fake_lc.fake_flares.peak_time != 0.]
     return fake_lc
 
-def generate_fake_flare_distribution(nfake, ampl=[1.e-4, 1.e3], dur=[5.e-1, 2.e3],
+def generate_fake_flare_distribution(nfake, ampl=[1e-2, 1e3], dur=[10, 2e3],
                                      mode='hawley2014'):
 
     '''
@@ -166,14 +166,14 @@ def generate_fake_flare_distribution(nfake, ampl=[1.e-4, 1.e3], dur=[5.e-1, 2.e3
         alpha = 2.                                                              #estimated from Fig. 10 in Hawley et al. (2014)
         ampl_H14 = [np.log10(i) for i in ampl]
         lnampl_fake = (np.random.random(nfake) * (ampl_H14[1] - ampl_H14[0]) + ampl_H14[0])
-        rand=np.random.random(nfake)
+        rand = np.random.random(nfake)
         dur_max = (1./alpha) * (lnampl_fake - c_range[0])
         dur_min = (1./alpha) * (lnampl_fake - c_range[1])
         lndur_fake = np.array([rand[a] * (dur_max[a] - dur_min[a]) +
                               dur_min[a]
                               for a in range(nfake)])
         ampl_fake = np.power(np.full(nfake,10), lnampl_fake)
-        dur_fake=np.power(np.full(nfake,10), lndur_fake) / 60. / 24.
+        dur_fake = np.power(np.full(nfake,10), lndur_fake) / 60. / 24.
 
     return dur_fake, ampl_fake
 
@@ -277,70 +277,3 @@ def merge_fake_and_recovered_events(injs, recs):
     rest = injs[~injs.amplitude.isin(merged_recovered.amplitude.values)]
     merged_all = merged_recovered.append(rest,sort=True).drop('temp',axis=1)
     return merged_all
-
-    #
-    # # Create a test lightcurve with flares here:
-    # # out_lc = pd.DataFrame({'flux_raw':fake_lc.__dict__[typ]*medflux,'time':lc.time,
-    # #                        'error':max(1e-10,np.nanmedian(pd.Series(fake_lc.__dict__[typ]*medflux).rolling(3, center=True).std())),
-    # #                        'flags':lc.flags})
-    # # out_lc.to_csv('test_suite/test/testlc.csv')
-    # istart, istop, new_lc['flux_model'] = MultiFind(new_lc, dlr, mode=mode,
-    #                                       gapwindow=gapwindow)
-    #
-    # h = {'ed_fake':ed_fake,
-    #           'rec_fake': np.zeros(nfakesum) ,'ed_rec':np.zeros(nfakesum),
-    #           'ed_rec_err':np.zeros(nfakesum),'istart_rec':np.zeros(nfakesum),
-    #           'istop_rec':np.zeros(nfakesum)}
-    #
-    # if len(istart)>0: # in case no flares are recovered, even after injection
-    #
-    #     dfh = pd.DataFrame({'tr':lc.time[istart].values,'ir':lc.time[istart].index.values,
-    #                         'tp':lc.time[istop].values,'ip':lc.time[istop].index.values})
-    #     for k in range(nfake): # go thru all recovered flares
-    #         # do any injected flares overlap recovered flares?
-    #         rb = dfh[(t0_fake[k] >= dfh.tr) & (t0_fake[k] <= dfh.tp)]
-    #         if rb.empty==False:
-    #             rb = rb.iloc[0]
-    #             h['rec_fake'][k] = 1
-    #             h['ed_rec'][k], h['ed_rec_err'][k] = help.ED(rb.ir, rb.ip,
-    #                                                          new_lc, err=True)
-    #             h['istart_rec'][k], h['istop_rec'][k] = rb.ir, rb.ip
-    #             istart = np.delete(istart,rb.ir)
-    #             istop = np.delete(istop,rb.ip)
-    #
-    # df = pd.DataFrame(h)
-    # del h
-    # fakeres = fakeres.append(df, ignore_index=True)
-    #
-    # if display == True:
-    #     print('Display fake flare injection')
-    #     fig, ax = plt.subplots(figsize=(10,4))
-    #     ax = help.Plot(new_lc, ax, istart=istart, istop=istop, onlybit=20.)
-    #     plt.show()
-    #     #plt.savefig('{}_fakes_injected.png'.format(outfile), dpi=300)
-    #     plt.close()
-    #
-    # if savefile is True:
-    #     header = ['min_time','max_time','std_dev','nfake','min_amplitude',
-    #               'max_amplitude','min_duration','max_duration','tstamp',]
-    #     if glob.glob(outfile)==[]:
-    #         dfout = pd.DataFrame()
-    #     else:
-    #         dfout = pd.read_json(outfile)
-    #
-    #     tstamp = clock.asctime(clock.localtime(clock.time()))
-    #     outrow = [[item] for item in [min(time), max(time), std, nfake, min(ampl_fake),
-    #                                   max(ampl_fake),min(dur_fake),max(dur_fake),tstamp]]
-    #     dfout = dfout.append(pd.DataFrame(dict(zip(header,outrow))),
-    #                              ignore_index=True)
-    #     dfout.to_json(outfile)
-    #
-    #     fakeres : pandas DataFrame
-    #
-    #
-    #         # Injection/recovery results with columns 'ed_fake' (float, injected EDs),
-    #         # 'rec_fake' (bool, recovered or not), 'ed_rec' (float, recovered ED),
-    #         # 'ed_rec_err' (float, uncertainty of recovered ED),
-    #         # 'istart_rec', 'istop_rec' (int, locations of recovered fake flares)
-    #
-    # return fakeres

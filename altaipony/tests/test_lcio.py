@@ -94,5 +94,5 @@ def test_from_K2SC_file():
         FlareLightCurve_testhelper(flc, ID, ra, dec, channel)
 
 def test_from_KeplerLightCurve():
-    #is currently implicitly tested by test_from_K2SC_source and test_from_TargetPixel_source
+    #is implicitly tested by test_from_K2SC_source and test_from_TargetPixel_source
     pass

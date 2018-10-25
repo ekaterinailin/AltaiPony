@@ -3,6 +3,7 @@ import pandas as pd
 import os
 import copy
 import logging
+import progressbar
 
 from k2sc.standalone import k2sc_lc
 from lightkurve import KeplerLightCurve, KeplerTargetPixelFile
@@ -53,19 +54,19 @@ class FlareLightCurve(KeplerLightCurve):
     targetid : int
         EPIC ID number
     ra : float
-
+        RA
     dec : float
-
+        declination
     label :
 
     meta : dict
 
     detrended_flux : array-like
-
+        K2SC detrend flux, same units as flux
     detrended_flux_err : array-like
-
+        K2SC detrend flux error, same units as flux
     flux_trends : array-like
-
+        Astrophysical variability as derived by K2SC
     gaps : list of tuples of ints
         Each tuple contains the start and end indices of observation gaps. See
         ``find_gaps``
@@ -182,6 +183,7 @@ class FlareLightCurve(KeplerLightCurve):
                 new_lc.detrended_flux = (new_lc.corr_flux - new_lc.tr_time
                                       + np.nanmedian(new_lc.tr_time))
                 new_lc.detrended_flux_err = copy.copy(new_lc.flux_err) # does k2sc share their uncertainties somewhere?
+                new_lc.flux_trends = new_lc.tr_time
                 if new_lc.detrended_flux.shape != self.flux.shape:
                     LOG.error('De-detrending messed up the flux arrays.')
                 else:
@@ -243,6 +245,9 @@ class FlareLightCurve(KeplerLightCurve):
                     'ed_rec', 'ed_rec_err', 'duration_d', 'amplitude', 'ed_inj',
                     'peak_time']
         combined_irr = pd.DataFrame(columns=columns)
+
+        widgets = [progressbar.Percentage(), progressbar.Bar()]
+        bar = progressbar.ProgressBar(widgets=widgets, max_value=iterations).start()
         for i in range(iterations):
             fake_lc = inject_fake_flares(lc,
                                          inject_before_detrending=inject_before_detrending,
@@ -256,8 +261,16 @@ class FlareLightCurve(KeplerLightCurve):
             combined_irr = combined_irr.append(injection_recovery_results,
                                                       ignore_index=True,
                                                       sort=True)
+            bar.update(i + 1)
+        bar.finish()
         return combined_irr
 
-    def test_characterize_flare_recovery():
+    def characterize_flare_recovery(self, **kwargs):
+        """
+        Computes ed_corr(ed_rec) and recovery probability (ed_corr (= ed_inj)).
+        """
+        res = sample_flare_recovery(self)
+        columns = ['ed_rec','ed_inj','rec_prob']
+
         #analysis function
         return
