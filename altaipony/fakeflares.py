@@ -127,7 +127,7 @@ def inject_fake_flares(lc, mode='hawley2014', gapwindow=0.1, fakefreq=.25,
     fake_lc.fake_flares = fake_lc.fake_flares[fake_lc.fake_flares.peak_time != 0.]
     return fake_lc
 
-def generate_fake_flare_distribution(nfake, ampl=[1e-2, 1e3], dur=[10, 2e3],
+def generate_fake_flare_distribution(nfake, ampl=[1e-4, 1e2], dur=[1, 2e3],
                                      mode='hawley2014'):
 
     '''
@@ -141,9 +141,9 @@ def generate_fake_flare_distribution(nfake, ampl=[1e-2, 1e3], dur=[10, 2e3],
     -----------
     nfake: int
         Number of fake flares to be created.
-    ampl: [1e-4, 1e3] or list of floats
+    ampl: [1e-4, 1e2] or list of floats
         Amplitude range in relative flux units.
-    dur: [5e-1, 2e3] or list of floats
+    dur: [1, 2e3] or list of floats
         Duration range in minutes.
     mode: 'hawley2014' or 'uniform'
         Distribution of fake flares in (duration, amplitude) space.
@@ -296,6 +296,11 @@ def merge_complex_flares(data):
     DataFrame with the same columns as the input but with complex flares merged
     together.
     """
+    data = data.fillna(0)
+    size = len(data.cstart[data.cstart == 0])
+    maximum = data.cstop.max()
+    data.loc[data.cstart == 0.,'cstart'] = np.arange(maximum,maximum+3*size,3)
+    data.loc[data.cstop == 0.,'cstop'] = np.arange(maximum+1,maximum+3*size+1,3)
     g = data.groupby(['cstart','cstop'])
     data_wo_overlaps = pd.DataFrame(columns=data.columns.values)
     for (start, stop), d in g:
@@ -313,6 +318,11 @@ def merge_complex_flares(data):
             'istop' : d.istop.max(),
             'tstart' : d.tstart.min(),
             'tstop' : d.tstop.max(),}
-            d = pd.DataFrame(row, index=[0])
-        data_wo_overlaps = data_wo_overlaps.append(d, ignore_index=True,sort=True)
+            e = pd.DataFrame(row, index=[0])
+        else:
+            e = copy.copy(d)
+            e.cstart = 0
+            e.cstop = 0
+
+        data_wo_overlaps = data_wo_overlaps.append(e, ignore_index=True,sort=True)
     return data_wo_overlaps

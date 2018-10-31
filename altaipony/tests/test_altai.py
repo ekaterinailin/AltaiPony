@@ -23,8 +23,6 @@ def test_find_flares():
          #raises error bc find_flares only works on detrended_flux
          find_flares(flc)
 
-
-
 def test_find_flares_in_cont_obs_period():
      """
      Integration test of a mock example light curve is given in test_flarelc.
