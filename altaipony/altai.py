@@ -80,26 +80,26 @@ def find_flares(flc, minsep=3):
     '''
     Main wrapper to obtain and process a light curve.
 
-    Parameters:
+    Parameters
     -------------
     flc : light curve
         FlareLightCurve object
     minsep : 1 or int
         minimum distance between two candidate start times in datapoints
 
-    Return:
+    Return
     ----------
     numpy arrays of start and stop cadence numbers of flare candidates
     '''
     lc = copy.copy(flc)
     istart = np.array([], dtype='int')
     istop = np.array([], dtype='int')
+
     #Now work on periods of continuous observation with no gaps
     for (le,ri) in lc.gaps:
         error = lc.detrended_flux_err[le:ri]
-        flux = lc.detrended_flux[le:ri]
-        flux_model_i = np.nanmedian(flux) * np.ones_like(flux)
-        flux_diff = flux - flux_model_i
+        flux_diff = lc.detrended_flux[le:ri] - lc.it_med[le:ri]
+
         # run final flare-find on DATA - MODEL
         isflare = find_flares_in_cont_obs_period(flux_diff, error)
 
@@ -142,7 +142,46 @@ def find_flares(flc, minsep=3):
                                   'tstop' : tstop,}),
                                   ignore_index=True, sort=True)
 
-    return lc.flares
+    return lc
+
+
+def find_iterative_median(flc, n=5):
+
+    """
+    Find the iterative median value for a continuous observation period using
+    flare finding to identify outliers.
+
+    Parameters
+    -----------
+    flc : FlareLightCurve
+
+    n : 5 or int
+        number of iterations, n=1 may be enough in many cases
+
+    Return
+    -------
+    FlareLightCurve with the it_med attribute filled in.
+    """
+
+    lc = copy.copy(flc)
+    lc.it_med = np.full_like(flc.detrended_flux, np.median(flc.detrended_flux))
+
+    for (le,ri) in lc.gaps:
+        error = lc.detrended_flux_err[le:ri]
+        flux = lc.detrended_flux[le:ri]
+        it_med = np.nanmedian(flux) * np.ones_like(flux)
+        isflare = np.zeros_like(flux, dtype=bool)
+
+        #find a median that is not skewed by actual flares
+        for i in range(n):
+            flux_diff = flux - it_med
+            flux_diff[isflare] = 0
+            isflare_add = find_flares_in_cont_obs_period(flux_diff, error, N3=1)
+            isflare = np.logical_or(isflare, isflare_add)
+            it_med = np.nanmedian(flux[isflare]) * np.ones_like(flux)
+
+        lc.it_med[le:ri] = it_med
+    return lc
 
 def equivalent_duration(lc, start, stop, err=False):
 
@@ -153,7 +192,7 @@ def equivalent_duration(lc, start, stop, err=False):
     Use only on de-trended light curves!
     Returns also the uncertainty on ED following Davenport (2016)
 
-    Parameters:
+    Parameters
     --------------
     start : int
         start time index of a flare event
@@ -164,7 +203,7 @@ def equivalent_duration(lc, start, stop, err=False):
     err: False or bool
         If True will compute uncertainty on ED
 
-    Returns:
+    Return
     --------------
     ed : float
         equivalent duration in seconds
@@ -174,7 +213,7 @@ def equivalent_duration(lc, start, stop, err=False):
 
     start, stop = int(start),int(stop)+1
     lct = lc[start:stop]
-    residual = lct.detrended_flux/np.median(lc.detrended_flux)-1.
+    residual = lct.detrended_flux/lct.it_med-1.
     x = lct.time * 60.0 * 60.0 * 24.0
     ed = np.sum(np.diff(x) * residual[:-1])
 

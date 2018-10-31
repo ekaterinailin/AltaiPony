@@ -9,10 +9,11 @@ from k2sc.standalone import k2sc_lc
 from lightkurve import KeplerLightCurve, KeplerTargetPixelFile
 from astropy.io import fits
 
-from .altai import find_flares
+from .altai import (find_flares, find_iterative_median,)
 from .fakeflares import (inject_fake_flares,
                          merge_fake_and_recovered_events,
-                         merge_complex_flares)
+                         merge_complex_flares,
+                         )
 
 
 LOG = logging.getLogger(__name__)
@@ -75,6 +76,9 @@ class FlareLightCurve(KeplerLightCurve):
         ``find_gaps``
     flares : DataFrame
 
+    it_med : array-like
+
+
     """
     def __init__(self, time=None, flux=None, flux_err=None, time_format=None,
                  time_scale=None, time_unit = None, centroid_col=None,
@@ -84,7 +88,7 @@ class FlareLightCurve(KeplerLightCurve):
                  meta={}, detrended_flux=None, detrended_flux_err=None,
                  flux_trends=None, gaps=None, flares=None, flux_unit = None,
                  primary_header=None, data_header=None, pos_corr1=None,
-                 pos_corr2=None, origin='FLC', fake_flares=None):
+                 pos_corr2=None, origin='FLC', fake_flares=None, it_med=None):
 
         super(FlareLightCurve, self).__init__(time=time, flux=flux, flux_err=flux_err, time_format=time_format, time_scale=time_scale,
                                               centroid_col=centroid_col, centroid_row=centroid_row, quality=quality,
@@ -102,6 +106,7 @@ class FlareLightCurve(KeplerLightCurve):
         self.origin = origin
         self.detrended_flux = detrended_flux
         self.detrended_flux_err = detrended_flux_err
+        self.it_med = it_med
 
         columns = ['istart', 'istop', 'cstart', 'cstop', 'tstart',
                    'tstop', 'ed_rec', 'ed_rec_err']
@@ -130,6 +135,8 @@ class FlareLightCurve(KeplerLightCurve):
         if copy_self.detrended_flux is not None:
             copy_self.detrended_flux = self.detrended_flux[key]
             copy_self.detrended_flux_err = self.detrended_flux_err[key]
+        if copy_self.it_med is not None:
+            copy_self.it_med = self.it_med[key]
         return copy_self
 
     def find_gaps(self, maxgap=0.09, minspan=10):
@@ -215,8 +222,10 @@ class FlareLightCurve(KeplerLightCurve):
         lc = copy.copy(self)
         #find continuous observing periods
         lc = lc.find_gaps()
+        #find the true median value iteratively
+        lc = find_iterative_median(lc)
         #find flares
-        lc.flares = find_flares(lc)
+        lc = find_flares(lc)
 
         return lc
 
@@ -267,14 +276,14 @@ class FlareLightCurve(KeplerLightCurve):
                                                       sort=True)
             bar.update(i + 1)
         bar.finish()
-        return combined_irr
+        return combined_irr, fake_lc
 
     def characterize_flare_recovery(self, **kwargs):
         """
         Computes ed_corr(ed_rec) and recovery probability (ed_corr (= ed_inj)).
         """
-        res = sample_flare_recovery(self)
+        res = sample_flare_recovery(self, **kwargs)
         columns = ['ed_rec','ed_inj','rec_prob']
 
         #analysis function
-        return
+        return res
