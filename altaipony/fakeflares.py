@@ -68,9 +68,8 @@ def inject_fake_flares(lc, mode='hawley2014', gapwindow=0.1, fakefreq=.25,
         LOG.debug('Injecting after detrending.')
     fakeres = pd.DataFrame()
     fake_lc = copy.deepcopy(lc)
-    medflux = np.nanmedian(fake_lc.__dict__[typ])
-    fake_lc.__dict__[typ] = fake_lc.__dict__[typ]/medflux -1.
-    fake_lc.__dict__[typerr] = fake_lc.__dict__[typerr]/medflux
+    fake_lc.__dict__[typ] = fake_lc.__dict__[typ]
+    fake_lc.__dict__[typerr] = fake_lc.__dict__[typerr]
     nfakesum = int(np.rint(fakefreq * (lc.time.max() - lc.time.min())))
     t0_fake = np.zeros(nfakesum, dtype='float')
     ed_fake = np.zeros(nfakesum, dtype='float')
@@ -110,7 +109,7 @@ def inject_fake_flares(lc, mode='hawley2014', gapwindow=0.1, fakefreq=.25,
     	        fl_flux = aflare(time, t0, dur_fake[k], ampl_fake[k])
     	        ed_fake[k] = _equivalent_duration(time, fl_flux)
             # inject flare in to light curve
-    	    fake_lc.__dict__[typ][le:ri] = fake_lc.__dict__[typ][le:ri] + fl_flux
+    	    fake_lc.__dict__[typ][le:ri] = fake_lc.__dict__[typ][le:ri] + fl_flux*fake_lc.it_med[le:ri]
         ckm += nfake
 
     #error minimum is a safety net for the spline function if mode=3
@@ -326,3 +325,70 @@ def merge_complex_flares(data):
 
         data_wo_overlaps = data_wo_overlaps.append(e, ignore_index=True,sort=True)
     return data_wo_overlaps
+
+def recovery_probability(data, bins=30):
+    """
+    Calculate a look-up table that returns the recovery probability of a flare
+    with some true equivalent duration in seconds.
+
+    Parameters
+    -----------
+    data : DataFrame
+        Table with columns that contain injected equivalent duration and info
+        whether this flare was recovered or not.
+    bins : 30 or int
+        Size of look-up table.
+
+    Return
+    ------
+    DataFrame that gives bin edges in equivalent duration and the recovery
+    probability in these bins.
+    """
+    data['rec'] = data.ed_rec.astype(bool).astype(float)
+    bins = np.logspace(np.log10(max(data.ed_inj.min()*.99, 1e-4)),
+                       np.log10(data.ed_inj.max()*1.01),
+                       num=bins)
+    group = data.groupby(pd.cut(data.ed_inj,bins))
+    rec_prob = (pd.DataFrame({'min_ed_inj' : bins[:-1],
+                             'max_ed_inj' : bins[1:],
+                             'mid_ed_inj' : (bins[:-1]+bins[1:])/2.,
+                             'rec_prob' : group.rec.sum()/group.ed_inj.count()})
+                             .reset_index()
+                             .drop('ed_inj',axis=1))
+
+    return rec_prob
+
+def equivalent_duration_ratio(data, bins=30):
+    """
+    Calculate a look-up table that returns the ratio of a flare's recovered
+    equivalent duration to the injected one.
+
+    Parameters
+    -----------
+    data : DataFrame
+        Table with columns that contain injected and recovered equivalent
+        durations of synthetic flares.
+    bins : 30 or int
+        Size of look-up table.
+
+    Return
+    ------
+    DataFrame that gives bin edges in equivalent duration and the ratio of
+    equivalent durations in these bins.
+    """
+    d = data[data.ed_rec>0]
+    d = d[['ed_inj','ed_rec']]
+    d['rel']=d.ed_rec/d.ed_inj
+    bins = np.logspace(np.log10(max(data.ed_inj.min()*.99, 1e-4)),
+                       np.log10(data.ed_inj.max()*1.01),
+                       num=bins)
+    group = d.groupby(pd.cut(d.ed_inj,bins))
+    ed_rat = (pd.DataFrame({'min_ed_inj' : bins[:-1],
+                             'max_ed_inj' : bins[1:],
+                             'mid_ed_inj' : (bins[:-1]+bins[1:])/2.,
+                             'rel_rec' : group.rel.mean()})
+                             .reset_index()
+                             .drop('ed_inj',axis=1)
+                             .dropna(how='any'))
+
+    return ed_rat

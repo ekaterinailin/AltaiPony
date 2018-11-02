@@ -7,7 +7,7 @@ from lightkurve import KeplerLightCurve
 
 LOG = logging.getLogger(__name__)
 
-def find_flares_in_cont_obs_period(flux, error, N1=3, N2=3, N3=3):
+def find_flares_in_cont_obs_period(flux, error, N1=3, N2=2, N3=3):
     '''
     The algorithm for local changes due to flares defined by
     S. W. Chang et al. (2015), Eqn. 3a-d
@@ -156,7 +156,7 @@ def find_iterative_median(flc, n=5):
     flc : FlareLightCurve
 
     n : 5 or int
-        number of iterations, n=1 may be enough in many cases
+        maximum number of iterations
 
     Return
     -------
@@ -169,16 +169,17 @@ def find_iterative_median(flc, n=5):
     for (le,ri) in lc.gaps:
         error = lc.detrended_flux_err[le:ri]
         flux = lc.detrended_flux[le:ri]
+        med = np.nanmedian(flux)
         it_med = np.nanmedian(flux) * np.ones_like(flux)
         isflare = np.zeros_like(flux, dtype=bool)
-
         #find a median that is not skewed by actual flares
         for i in range(n):
             flux_diff = flux - it_med
-            flux_diff[isflare] = 0
+            flux_diff[isflare] = med
             isflare_add = find_flares_in_cont_obs_period(flux_diff, error, N3=1)
             isflare = np.logical_or(isflare, isflare_add)
-            it_med = np.nanmedian(flux[isflare]) * np.ones_like(flux)
+            med = np.nanmedian(flux[isflare])
+            it_med = np.nanmedian(flux[~isflare]) * np.ones_like(flux)
 
         lc.it_med[le:ri] = it_med
     return lc
@@ -213,7 +214,7 @@ def equivalent_duration(lc, start, stop, err=False):
 
     start, stop = int(start),int(stop)+1
     lct = lc[start:stop]
-    residual = lct.detrended_flux/lct.it_med-1.
+    residual = lct.detrended_flux/np.nanmedian(lct.it_med)-1.
     x = lct.time * 60.0 * 60.0 * 24.0
     ed = np.sum(np.diff(x) * residual[:-1])
 
@@ -222,9 +223,6 @@ def equivalent_duration(lc, start, stop, err=False):
         ederr = np.sqrt(ed**2 / (stop-1-start) / flare_chisq)
         return ed, ederr
     else:
-        if ed < 0:
-            print(ed)
-            print(x, start, stop, residual)
         return ed
 
 def chi_square(residual, error):

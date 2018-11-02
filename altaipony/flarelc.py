@@ -205,7 +205,7 @@ class FlareLightCurve(KeplerLightCurve):
             new_lc.__class__ = FlareLightCurve
             return new_lc
 
-    def find_flares(self, minsep=3):
+    def find_flares(self, minsep=3, fake=False):
 
         '''
         Find flares in a FlareLightCurve.
@@ -223,7 +223,8 @@ class FlareLightCurve(KeplerLightCurve):
         #find continuous observing periods
         lc = lc.find_gaps()
         #find the true median value iteratively
-        lc = find_iterative_median(lc)
+        if fake==False:
+            lc = find_iterative_median(lc)
         #find flares
         lc = find_flares(lc)
 
@@ -253,6 +254,7 @@ class FlareLightCurve(KeplerLightCurve):
         """
         lc = copy.copy(self)
         lc = lc.find_gaps()
+        lc = find_iterative_median(lc)
         columns =  ['istart', 'istop', 'cstart', 'cstop', 'tstart', 'tstop',
                     'ed_rec', 'ed_rec_err', 'duration_d', 'amplitude', 'ed_inj',
                     'peak_time']
@@ -267,7 +269,7 @@ class FlareLightCurve(KeplerLightCurve):
             injs = fake_lc.fake_flares
             if inject_before_detrending == True:
                 fake_lc = fake_lc.detrend()
-            fake_lc = fake_lc.find_flares()
+            fake_lc = fake_lc.find_flares(fake=True,)
             recs = fake_lc.flares
             #print('1: \n',recs)
             injection_recovery_results = merge_fake_and_recovered_events(injs, recs)

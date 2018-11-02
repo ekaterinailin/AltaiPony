@@ -7,10 +7,38 @@ from ..fakeflares import (inject_fake_flares,
                           aflare,
                           generate_fake_flare_distribution,
                           merge_fake_and_recovered_events,
-                          merge_complex_flares)
+                          merge_complex_flares,
+                          recovery_probability,
+                          equivalent_duration_ratio)
 
 
 from .test_flarelc import mock_flc
+
+def test_equivalent_duration_ratio():
+    bins = 5
+    minval= 3e-4
+    maxval = 1200.3
+    data = pd.DataFrame({'ed_rec': [1e-6,1e-5,2e-5,4e-4,6e-2,0.54,1.33,4.5,12.2,44,901.3],
+                         'ed_inj': [minval,6e-4,8e-4,4e-3,0.1,1.1,1.9,6.8,16.2,49,maxval],
+                         'cstart':1})
+    ed_rat = equivalent_duration_ratio(data, bins=bins)
+    assert ed_rat.shape[0] == bins-1
+    assert minval*.99 == ed_rat.loc[0,'min_ed_inj']
+    assert maxval*1.01 == ed_rat.loc[3,'max_ed_inj']
+    assert (901.3/1200.3+44/49)/2 == ed_rat.loc[3,'rel_rec']
+
+def test_recovery_probability():
+    bins = 5
+    minval= 3e-4
+    maxval = 1200.3
+    data = pd.DataFrame({'ed_rec': [0.,0.,0.,0.,0.,0.,1.33,4.5,12.2,44,901.3],
+                         'ed_inj': [minval,6e-4,8e-4,4e-3,0.1,1.1,1.9,6.8,16.2,49,maxval],
+                         'cstart':1})
+    rec_prob = recovery_probability(data,bins=bins)
+    assert rec_prob.rec_prob.astype(float).tolist() == [0.,0.,0.75,1.]
+    assert rec_prob.shape[0] == bins-1
+    assert minval*.99 == rec_prob.loc[0,'min_ed_inj']
+    assert maxval*1.01 == rec_prob.loc[3,'max_ed_inj']
 
 def test_merge_fake_and_recovered_events():
 

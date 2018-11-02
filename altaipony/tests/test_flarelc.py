@@ -50,7 +50,7 @@ def mock_flc(origin='TPF', detrended=False):
     keys = {'flux' : flux, 'flux_err' : flux_err, 'time' : time,
             'pos_corr1' : np.zeros(n), 'pos_corr2' : np.zeros(n),
             'cadenceno' : np.arange(n), 'targetid' : 80000000,
-            'origin' : origin}
+            'origin' : origin, 'it_med' : np.full_like(time,500.005),}
 
     if detrended == False:
         flc = FlareLightCurve(**keys)
