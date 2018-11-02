@@ -297,7 +297,7 @@ def merge_complex_flares(data):
     """
     data = data.fillna(0)
     size = len(data.cstart[data.cstart == 0])
-    maximum = data.cstop.max()
+    maximum = data.cstop.max()+1e9
     data.loc[data.cstart == 0.,'cstart'] = np.arange(maximum,maximum+3*size,3)
     data.loc[data.cstop == 0.,'cstop'] = np.arange(maximum+1,maximum+3*size+1,3)
     g = data.groupby(['cstart','cstop'])
@@ -320,10 +320,9 @@ def merge_complex_flares(data):
             e = pd.DataFrame(row, index=[0])
         else:
             e = copy.copy(d)
-            e.cstart = 0
-            e.cstop = 0
-
         data_wo_overlaps = data_wo_overlaps.append(e, ignore_index=True,sort=True)
+    data_wo_overlaps.loc[data_wo_overlaps.cstart >= maximum,'cstart'] = np.zeros(size)
+    data_wo_overlaps.loc[data_wo_overlaps.cstop >= maximum,'cstop'] = np.zeros(size)
     return data_wo_overlaps
 
 def recovery_probability(data, bins=30):

@@ -271,14 +271,13 @@ class FlareLightCurve(KeplerLightCurve):
                 fake_lc = fake_lc.detrend()
             fake_lc = fake_lc.find_flares(fake=True,)
             recs = fake_lc.flares
-            #print('1: \n',recs)
+
             injection_recovery_results = merge_fake_and_recovered_events(injs, recs)
-            #print('2: \n',injection_recovery_results)
             irr_w_merged_complex_flares = merge_complex_flares(injection_recovery_results)
-            #print('3: \n',irr_w_merged_complex_flares)
             combined_irr = combined_irr.append(irr_w_merged_complex_flares,
                                                       ignore_index=True,
                                                       sort=True)
+
             bar.update(i + 1)
         bar.finish()
         return combined_irr, fake_lc
