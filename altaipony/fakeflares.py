@@ -433,7 +433,7 @@ def characterize_one_flare(flc, f, rmax=3., rmin=.1, iterations=200):
     if ampl < 0:
         LOG.info('Amplitude is smaller than global iterative median (not '
                   'necessarily the local). Recovery very unlikely.\n')
-        f2['ed_rec_corr'] = np.nan
+        f2['ed_rec_corr'] = 0.
         f2['rec_prob'] = 0.
         return f2
 
@@ -442,10 +442,9 @@ def characterize_one_flare(flc, f, rmax=3., rmin=.1, iterations=200):
                                         ampl=[ampl*rmin, ampl*rmax],
                                         dur=[dur*rmin, dur*rmax])
 
-
     if data[data.ed_rec>0].shape[0]==0:
         LOG.info('This is just an outlier. Synthetic injection yields no recoveries.\n')
-        f2['ed_rec_corr'] = np.nan
+        f2['ed_rec_corr'] = 0.
         f2['rec_prob'] = 0.
         return f2
     else:

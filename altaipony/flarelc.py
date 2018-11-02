@@ -138,6 +138,8 @@ class FlareLightCurve(KeplerLightCurve):
             copy_self.detrended_flux_err = self.detrended_flux_err[key]
         if copy_self.it_med is not None:
             copy_self.it_med = self.it_med[key]
+        if copy_self.flux_trends is not None:
+            copy_self.flux_trends = self.flux_trends[key]
         return copy_self
 
     def find_gaps(self, maxgap=0.09, minspan=10):
@@ -220,14 +222,17 @@ class FlareLightCurve(KeplerLightCurve):
         ----------
         numpy arrays of start and stop cadence numbers of flare candidates
         '''
-        lc = copy.copy(self)
-        #find continuous observing periods
-        lc = lc.find_gaps()
-        #find the true median value iteratively
-        if fake==False:
-            lc = find_iterative_median(lc)
-        #find flares
-        lc = find_flares(lc)
+        if ((fake==False) & (self.flares.shape[0]>0)):
+            return self
+        else:
+            lc = copy.copy(self)
+            #find continuous observing periods
+            lc = lc.find_gaps()
+            #find the true median value iteratively
+            if fake==False:
+                lc = find_iterative_median(lc)
+            #find flares
+            lc = find_flares(lc)
 
         return lc
 
