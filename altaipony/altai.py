@@ -125,22 +125,23 @@ def find_flares(flc, minsep=3):
         LOG.debug('INFO: Found {} candidate(s) in the ({},{}) gap.'
                  .format(len(istart_gap), le, ri))
 
-    l = [equivalent_duration(lc, i, j, err=True) for (i,j) in zip(istart, istop)]
-    ed_rec, ed_rec_err = zip(*l)
-    cstart = lc.cadenceno[istart]
-    cstop = lc.cadenceno[istop]
-    tstart = lc.time[istart]
-    tstop = lc.time[istop]
+    if len(istart)>0:
+        l = [equivalent_duration(lc, i, j, err=True) for (i,j) in zip(istart, istop)]
+        ed_rec, ed_rec_err = zip(*l)
+        cstart = lc.cadenceno[istart]
+        cstop = lc.cadenceno[istop]
+        tstart = lc.time[istart]
+        tstop = lc.time[istop]
 
-    lc.flares = lc.flares.append(pd.DataFrame({'ed_rec' : ed_rec,
-                                  'ed_rec_err' : ed_rec_err,
-                                  'istart' : istart,
-                                  'istop' : istop,
-                                  'cstart' : cstart,
-                                  'cstop' : cstop,
-                                  'tstart' : tstart,
-                                  'tstop' : tstop,}),
-                                  ignore_index=True, sort=True)
+        lc.flares = lc.flares.append(pd.DataFrame({'ed_rec' : ed_rec,
+                                      'ed_rec_err' : ed_rec_err,
+                                      'istart' : istart,
+                                      'istop' : istop,
+                                      'cstart' : cstart,
+                                      'cstop' : cstop,
+                                      'tstart' : tstart,
+                                      'tstop' : tstop,}),
+                                      ignore_index=True, sort=True)
 
     return lc
 
@@ -219,7 +220,8 @@ def equivalent_duration(lc, start, stop, err=False):
     ed = np.sum(np.diff(x) * residual[:-1])
 
     if err == True:
-        flare_chisq = chi_square(residual[:-1], lct.detrended_flux_err[:-1])
+        flare_chisq = chi_square(residual[:-1],
+                                 lct.detrended_flux_err[:-1]/np.nanmedian(lct.it_med))
         ederr = np.sqrt(ed**2 / (stop-1-start) / flare_chisq)
         return ed, ederr
     else:

@@ -10,7 +10,7 @@ LOG = logging.getLogger(__name__)
 
 
 def inject_fake_flares(lc, mode='hawley2014', gapwindow=0.1, fakefreq=.25,
-                       inject_before_detrending=False):
+                       inject_before_detrending=False,**kwargs):
 
     '''
     Create a number of events, inject them in to data
@@ -32,6 +32,9 @@ def inject_fake_flares(lc, mode='hawley2014', gapwindow=0.1, fakefreq=.25,
         flares per day
     inject_before_detrending : True or bool
         By default, flares are injected before the light curve is detrended.
+    kwargs : dict
+        Keyword arguments to pass to generate_fake_flare_distribution
+
     Returns:
     ------------
     FlareLightCurve with fake flare signatures
@@ -85,7 +88,7 @@ def inject_fake_flares(lc, mode='hawley2014', gapwindow=0.1, fakefreq=.25,
         error = gap_fake_lc.__dict__[typerr]
         flux = gap_fake_lc.__dict__[typ]
         time = gap_fake_lc.time
-        distribution  = generate_fake_flare_distribution(nfake, mode=mode)
+        distribution  = generate_fake_flare_distribution(nfake, mode=mode, **kwargs)
         dur_fake[ckm:ckm+nfake], ampl_fake[ckm:ckm+nfake] = distribution
         #loop over the numer of fake flares you want to generate
         for k in range(ckm, ckm+nfake):
@@ -162,7 +165,7 @@ def generate_fake_flare_distribution(nfake, ampl=[1e-4, 1e2], dur=[1, 2e3],
     elif mode=='hawley2014':
 
         c_range = np.array([np.log10(5) - 6., np.log10(5) - 4.])                #estimated from Fig. 10 in Hawley et al. (2014)
-        alpha = 2.                                                              #estimated from Fig. 10 in Hawley et al. (2014)
+        alpha = 2                                                               #estimated from Fig. 10 in Hawley et al. (2014)
         ampl_H14 = [np.log10(i) for i in ampl]
         lnampl_fake = (np.random.random(nfake) * (ampl_H14[1] - ampl_H14[0]) + ampl_H14[0])
         rand = np.random.random(nfake)
@@ -377,17 +380,82 @@ def equivalent_duration_ratio(data, bins=30):
     """
     d = data[data.ed_rec>0]
     d = d[['ed_inj','ed_rec']]
-    d['rel']=d.ed_rec/d.ed_inj
-    bins = np.logspace(np.log10(max(data.ed_inj.min()*.99, 1e-4)),
-                       np.log10(data.ed_inj.max()*1.01),
+    d['rel']=d.ed_inj/d.ed_rec
+    bins = np.logspace(np.log10(max(data.ed_rec.min()*.99, 1e-4)),
+                       np.log10(data.ed_rec.max()*1.01),
                        num=bins)
-    group = d.groupby(pd.cut(d.ed_inj,bins))
-    ed_rat = (pd.DataFrame({'min_ed_inj' : bins[:-1],
-                             'max_ed_inj' : bins[1:],
-                             'mid_ed_inj' : (bins[:-1]+bins[1:])/2.,
+    group = d.groupby(pd.cut(d.ed_rec,bins))
+    ed_rat = (pd.DataFrame({'min_ed_rec' : bins[:-1],
+                             'max_ed_rec' : bins[1:],
+                             'mid_ed_rec' : (bins[:-1]+bins[1:])/2.,
                              'rel_rec' : group.rel.mean()})
                              .reset_index()
-                             .drop('ed_inj',axis=1)
+                             .drop('ed_rec',axis=1)
                              .dropna(how='any'))
 
     return ed_rat
+
+def characterize_one_flare(flc, f, rmax=3., rmin=.1, iterations=200):
+    """
+    Takes the data of a recovered flare and return the data with
+    information about recovery probability and corrected equivalent
+    duration.
+
+    Parameters
+    -----------
+    flc : FlareLightCurve
+
+    f : Series
+        A row from the FlareLightCurve.flares DataFrame
+    rmax : 3. or float >1.
+        Upper bound of amplitude and duration range relative to recovered values.
+    rmin : .1 or float <1.
+        Lower bound of amplitude and duration range relative to recovered values.
+    iterations : 200 or int
+        Number of iterations for injection/recovery sampling.
+
+    Return
+    -------
+    Same as f but with 'ed_rec_corr' and 'rec_prob' keys added.
+    """
+    if rmax < 1.:
+        LOG.exception('rmax must be >=1.')
+    elif rmin >1.:
+        LOG.exception('rmin must be <=1.')
+    def relr(x, ed_rat):
+        return ed_rat.rel_rec[(x>ed_rat.min_ed_rec) & (x<=ed_rat.max_ed_rec)].iloc[0]
+
+    def recr(x, rec_prob):
+        return rec_prob.rec_prob[(x>rec_prob.min_ed_inj) & (x<=rec_prob.max_ed_inj)].iloc[0]
+
+    ampl = np.max(flc.flux[f.istart:f.istop])/flc.it_med[f.istart]-1.
+    f2 = copy.copy(f)
+    if ampl < 0:
+        LOG.info('Amplitude is smaller than global iterative median (not '
+                  'necessarily the local). Recovery very unlikely.\n')
+        f2['ed_rec_corr'] = np.nan
+        f2['rec_prob'] = 0.
+        return f2
+
+    dur = (f.tstop-f.tstart)
+    data, g = flc.sample_flare_recovery(iterations=iterations,
+                                        ampl=[ampl*rmin, ampl*rmax],
+                                        dur=[dur*rmin, dur*rmax])
+
+
+    if data[data.ed_rec>0].shape[0]==0:
+        LOG.info('This is just an outlier. Synthetic injection yields no recoveries.\n')
+        f2['ed_rec_corr'] = np.nan
+        f2['rec_prob'] = 0.
+        return f2
+    else:
+        data = data[(data.ed_inj > rmin*f.ed_rec) & (data.ed_inj < 20.*f.ed_rec)]
+        rec_prob = recovery_probability(data)
+        ed_rat = equivalent_duration_ratio(data)
+        erc = relr(f2.ed_rec, ed_rat)*f2.ed_rec
+        rp = recr(erc, rec_prob)
+        LOG.info('Corrected ED = {}. Recovery probability = {}.\n'.format(erc, rp))
+        f2['ed_rec_corr'] = erc
+        f2['rec_prob'] = rp
+
+    return f2

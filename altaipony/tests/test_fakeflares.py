@@ -18,14 +18,14 @@ def test_equivalent_duration_ratio():
     bins = 5
     minval= 3e-4
     maxval = 1200.3
-    data = pd.DataFrame({'ed_rec': [1e-6,1e-5,2e-5,4e-4,6e-2,0.54,1.33,4.5,12.2,44,901.3],
-                         'ed_inj': [minval,6e-4,8e-4,4e-3,0.1,1.1,1.9,6.8,16.2,49,maxval],
+    data = pd.DataFrame({'ed_rec': [minval,1e-5,2e-5,4e-4,6e-2,0.54,1.33,4.5,12.2,44,maxval],
+                         'ed_inj': [1e-4,6e-4,8e-4,4e-3,0.1,1.1,1.9,6.8,16.2,49,1500.3],
                          'cstart':1})
     ed_rat = equivalent_duration_ratio(data, bins=bins)
     assert ed_rat.shape[0] == bins-1
-    assert minval*.99 == ed_rat.loc[0,'min_ed_inj']
-    assert maxval*1.01 == ed_rat.loc[3,'max_ed_inj']
-    assert (901.3/1200.3+44/49)/2 == ed_rat.loc[3,'rel_rec']
+    assert 1e-4 == ed_rat.loc[0,'min_ed_rec']
+    assert maxval*1.01 == ed_rat.loc[3,'max_ed_rec']
+    assert (1500.3/maxval + 49/44)/2 == ed_rat.loc[3,'rel_rec']
 
 def test_recovery_probability():
     bins = 5
@@ -98,7 +98,6 @@ def test_inject_fake_flares():
     assert fake_flc.detrended_flux_err.all() >= 1e-10
     assert fake_flc.detrended_flux.all() <= 1.
     assert fake_flc.detrended_flux.shape == flc.detrended_flux.shape
-    print(fake_flc.fake_flares)
     flc = mock_flc(detrended=False)
     np.random.seed(84712)
     flc = flc.find_gaps()

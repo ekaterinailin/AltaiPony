@@ -13,6 +13,7 @@ from .altai import (find_flares, find_iterative_median,)
 from .fakeflares import (inject_fake_flares,
                          merge_fake_and_recovered_events,
                          merge_complex_flares,
+                         characterize_one_flare,
                          )
 
 
@@ -243,7 +244,7 @@ class FlareLightCurve(KeplerLightCurve):
         inject_before_detrending : False or bool
             If True, fake flare are injected directly into raw data.
         kwargs : dict
-            Keyword arguments to pass to inject_fake_flares
+            Keyword arguments to pass to generate_fake_flare_distribution
 
         Return
         -------
@@ -282,12 +283,32 @@ class FlareLightCurve(KeplerLightCurve):
         bar.finish()
         return combined_irr, fake_lc
 
-    def characterize_flare_recovery(self, **kwargs):
+    def characterize_flares(self, **kwargs):
         """
-        Computes ed_corr(ed_rec) and recovery probability (ed_corr (= ed_inj)).
-        """
-        res = sample_flare_recovery(self, **kwargs)
-        columns = ['ed_rec','ed_inj','rec_prob']
+        Add information about recovery probability and systematic energy
+        correction for every flare in a light curve using injection/recovery
+        sampling of synthetic flares.
 
-        #analysis function
-        return res
+        Parameters
+        -----------
+        kwargs : dict
+            Keyword arguments to pass to characterize_one_flare.
+
+        Return
+        -------
+        FlareLightCurve with modified flares attribute, now containing 'rec_prob'
+        and 'ed_rec_corr'.
+        """
+        flc = copy.copy(self)
+        if flc.flares.shape[0]==0:
+            flc = self.find_flares()
+        if flc.flares.shape[0]>0:
+            f2 = pd.DataFrame(columns=flc.flares.columns)
+            for i,f in flc.flares.iterrows():
+                res = characterize_one_flare(flc,f,**kwargs)
+                f2 = f2.append(res, ignore_index=True)
+            flc.flares = f2
+            return flc
+        else:
+            LOG.info('No flares to characterize.')
+            return flc
