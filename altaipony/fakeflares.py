@@ -10,7 +10,8 @@ LOG = logging.getLogger(__name__)
 
 
 def inject_fake_flares(lc, mode='hawley2014', gapwindow=0.1, fakefreq=.25,
-                       inject_before_detrending=False,**kwargs):
+                       inject_before_detrending=False, d=False, seed=0,
+                       **kwargs):
 
     '''
     Create a number of events, inject them in to data
@@ -32,8 +33,12 @@ def inject_fake_flares(lc, mode='hawley2014', gapwindow=0.1, fakefreq=.25,
         flares per day
     inject_before_detrending : True or bool
         By default, flares are injected before the light curve is detrended.
+    d :
+
+    seed :
+
     kwargs : dict
-        Keyword arguments to pass to generate_fake_flare_distribution
+        Keyword arguments to pass to generate_fake_flare_distribution.
 
     Returns:
     ------------
@@ -88,7 +93,10 @@ def inject_fake_flares(lc, mode='hawley2014', gapwindow=0.1, fakefreq=.25,
         error = gap_fake_lc.__dict__[typerr]
         flux = gap_fake_lc.__dict__[typ]
         time = gap_fake_lc.time
-        distribution  = generate_fake_flare_distribution(nfake, mode=mode, **kwargs)
+        mintime, maxtime = np.min(time), np.max(time)
+        dtime = maxtime - mintime
+        distribution  = generate_fake_flare_distribution(nfake, mode=mode, d=d,
+                                                         seed=seed, **kwargs)
         dur_fake[ckm:ckm+nfake], ampl_fake[ckm:ckm+nfake] = distribution
         #loop over the numer of fake flares you want to generate
         for k in range(ckm, ckm+nfake):
@@ -96,7 +104,8 @@ def inject_fake_flares(lc, mode='hawley2014', gapwindow=0.1, fakefreq=.25,
     	    isok = False
     	    while isok is False:
     	        # choose a random peak time
-    	        t0 =  random.uniform(np.min(time),np.max(time))
+    	        t0 = mod_random(1, d=d, seed=seed*k) * dtime + mintime
+    	        #t0 =  random.uniform(np.min(time),np.max(time))
                 # Are there any real flares to deal with?
     	        if real_flares_in_gap.tstart.shape[0]>0:
                     # Are there any real flares happening at peak time?
@@ -130,7 +139,7 @@ def inject_fake_flares(lc, mode='hawley2014', gapwindow=0.1, fakefreq=.25,
     return fake_lc
 
 def generate_fake_flare_distribution(nfake, ampl=[1e-4, 1e2], dur=[1, 2e3],
-                                     mode='hawley2014'):
+                                     mode='hawley2014', **kwargs ):
 
     '''
     Creates different distributions of fake flares to be injected into light curves.
@@ -149,6 +158,8 @@ def generate_fake_flare_distribution(nfake, ampl=[1e-4, 1e2], dur=[1, 2e3],
         Duration range in minutes.
     mode: 'hawley2014' or 'uniform'
         Distribution of fake flares in (duration, amplitude) space.
+    kwargs : dict
+        Keyword arguments to pass to mod_random
 
     Return
     -------
@@ -158,8 +169,8 @@ def generate_fake_flare_distribution(nfake, ampl=[1e-4, 1e2], dur=[1, 2e3],
 
     if mode=='uniform':
 
-        dur_fake =  (np.random.random(nfake) * (dur[1] - dur[0]) + dur[0])
-        ampl_fake = (np.random.random(nfake) * (ampl[1] - ampl[0]) + ampl[0])
+        dur_fake =  (mod_random(nfake, **kwargs) * (dur[1] - dur[0]) + dur[0])
+        ampl_fake = (mod_random(nfake, **kwargs) * (ampl[1] - ampl[0]) + ampl[0])
         dur_fake = dur_fake / 60. / 24.
 
     elif mode=='hawley2014':
@@ -167,8 +178,8 @@ def generate_fake_flare_distribution(nfake, ampl=[1e-4, 1e2], dur=[1, 2e3],
         c_range = np.array([np.log10(5) - 6., np.log10(5) - 4.])                #estimated from Fig. 10 in Hawley et al. (2014)
         alpha = 2                                                               #estimated from Fig. 10 in Hawley et al. (2014)
         ampl_H14 = [np.log10(i) for i in ampl]
-        lnampl_fake = (np.random.random(nfake) * (ampl_H14[1] - ampl_H14[0]) + ampl_H14[0])
-        rand = np.random.random(nfake)
+        lnampl_fake = (mod_random(nfake, **kwargs) * (ampl_H14[1] - ampl_H14[0]) + ampl_H14[0])
+        rand = mod_random(nfake, **kwargs)
         dur_max = (1./alpha) * (lnampl_fake - c_range[0])
         dur_min = (1./alpha) * (lnampl_fake - c_range[1])
         lndur_fake = np.array([rand[a] * (dur_max[a] - dur_min[a]) +
@@ -178,6 +189,24 @@ def generate_fake_flare_distribution(nfake, ampl=[1e-4, 1e2], dur=[1, 2e3],
         dur_fake = np.power(np.full(nfake,10), lndur_fake) / 60. / 24.
 
     return dur_fake, ampl_fake
+
+def mod_random(x, d=False, seed=667):
+    """
+    Helper functio that generates deterministic random numbers if needed for
+    testing.
+
+    Parameters
+    -----------
+    d : False or bool
+        Flag to set if random numbers shall be deterministic.
+    seed : 5 or int
+        Sets the seed value for random number generator.
+    """
+    if d == True:
+        np.random.seed(seed)
+        return np.random.random(x)
+    else:
+        return np.random.random(x)
 
 def aflare(t, tpeak, dur, ampl, upsample=False, uptime=10):
     '''
@@ -395,7 +424,7 @@ def equivalent_duration_ratio(data, bins=30):
 
     return ed_rat
 
-def characterize_one_flare(flc, f, rmax=3., rmin=.1, iterations=200):
+def characterize_one_flare(flc, f, rmax=3., rmin=.05, iterations=200,**kwargs):
     """
     Takes the data of a recovered flare and return the data with
     information about recovery probability and corrected equivalent
@@ -409,10 +438,12 @@ def characterize_one_flare(flc, f, rmax=3., rmin=.1, iterations=200):
         A row from the FlareLightCurve.flares DataFrame
     rmax : 3. or float >1.
         Upper bound of amplitude and duration range relative to recovered values.
-    rmin : .1 or float <1.
+    rmin : .05 or float <1.
         Lower bound of amplitude and duration range relative to recovered values.
     iterations : 200 or int
         Number of iterations for injection/recovery sampling.
+    kwargs : dict
+        Keyword arguments to pass to sample_flare_recovery.
 
     Return
     -------
@@ -430,6 +461,7 @@ def characterize_one_flare(flc, f, rmax=3., rmin=.1, iterations=200):
 
     ampl = np.max(flc.flux[f.istart:f.istop])/flc.it_med[f.istart]-1.
     f2 = copy.copy(f)
+
     if ampl < 0:
         LOG.info('Amplitude is smaller than global iterative median (not '
                   'necessarily the local). Recovery very unlikely.\n')
@@ -438,10 +470,10 @@ def characterize_one_flare(flc, f, rmax=3., rmin=.1, iterations=200):
         return f2
 
     dur = (f.tstop-f.tstart)
-    data, g = flc.sample_flare_recovery(iterations=iterations,
-                                        ampl=[ampl*rmin, ampl*rmax],
-                                        dur=[dur*rmin, dur*rmax])
-
+    data, g = flc.sample_flare_recovery(ampl=[ampl*rmin, ampl*rmax],
+                                        dur=[dur*rmin, dur*rmax],
+                                        iterations = iterations,
+                                        **kwargs)
     if data[data.ed_rec>0].shape[0]==0:
         LOG.info('This is just an outlier. Synthetic injection yields no recoveries.\n')
         f2['ed_rec_corr'] = 0.

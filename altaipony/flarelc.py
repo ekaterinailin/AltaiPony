@@ -249,7 +249,7 @@ class FlareLightCurve(KeplerLightCurve):
         inject_before_detrending : False or bool
             If True, fake flare are injected directly into raw data.
         kwargs : dict
-            Keyword arguments to pass to generate_fake_flare_distribution
+            Keyword arguments to pass to inject_fake_flares
 
         Return
         -------
@@ -275,7 +275,7 @@ class FlareLightCurve(KeplerLightCurve):
             injs = fake_lc.fake_flares
             if inject_before_detrending == True:
                 fake_lc = fake_lc.detrend()
-            fake_lc = fake_lc.find_flares(fake=True,)
+            fake_lc = fake_lc.find_flares(fake=True)
             recs = fake_lc.flares
 
             injection_recovery_results = merge_fake_and_recovered_events(injs, recs)
@@ -288,7 +288,7 @@ class FlareLightCurve(KeplerLightCurve):
         bar.finish()
         return combined_irr, fake_lc
 
-    def characterize_flares(self, **kwargs):
+    def characterize_flares(self, inject_before_detrending=False, **kwargs):
         """
         Add information about recovery probability and systematic energy
         correction for every flare in a light curve using injection/recovery
@@ -296,6 +296,8 @@ class FlareLightCurve(KeplerLightCurve):
 
         Parameters
         -----------
+        inject_before_detrending : False or bool
+
         kwargs : dict
             Keyword arguments to pass to characterize_one_flare.
 
@@ -305,12 +307,22 @@ class FlareLightCurve(KeplerLightCurve):
         and 'ed_rec_corr'.
         """
         flc = copy.copy(self)
+        if ((flc.detrended_flux is None) & (inject_before_detrending==False)):
+            LOG.error('Please de-trend light curve first or set '
+                          'inject_before_detrending=True. The latter is advised.')
+            raise AttributeError('detrended_flux attribute is missing.')
+        elif ((flc.detrended_flux is None) & (inject_before_detrending==True)):
+            flc = flc.detrend()
+            flc = flc.find_flares()
+            flc = find_iterative_median(flc)
         if flc.flares.shape[0]==0:
-            flc = self.find_flares()
+            flc = flc.find_flares()
         if flc.flares.shape[0]>0:
             f2 = pd.DataFrame(columns=flc.flares.columns)
             for i,f in flc.flares.iterrows():
-                res = characterize_one_flare(flc,f,**kwargs)
+                res = characterize_one_flare(flc,f,
+                                             inject_before_detrending=inject_before_detrending,
+                                             **kwargs)
                 f2 = f2.append(res, ignore_index=True)
             flc.flares = f2
             return flc

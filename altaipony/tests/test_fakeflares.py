@@ -9,10 +9,15 @@ from ..fakeflares import (inject_fake_flares,
                           merge_fake_and_recovered_events,
                           merge_complex_flares,
                           recovery_probability,
-                          equivalent_duration_ratio)
+                          equivalent_duration_ratio,
+                          mod_random)
 
 
 from .test_flarelc import mock_flc
+
+def test_mod_random():
+    assert mod_random(1, d=True)[0] == pytest.approx(0.48661046)
+    assert mod_random(1)[0] != mod_random(1)[0]
 
 def test_equivalent_duration_ratio():
     bins = 5
@@ -73,7 +78,7 @@ def test_generate_fake_flare_distribution():
     dur, ampl = generate_fake_flare_distribution(n)
     assert (dur <= 20).all()
     assert (dur >= 1e-4).all()
-    assert (ampl <= 1e3).all()
+    assert (ampl <= 1e2).all()
     assert (ampl >= 1e-4).all()
     assert len(dur) == n
     assert len(ampl) == n
@@ -81,7 +86,18 @@ def test_generate_fake_flare_distribution():
     dur, ampl = generate_fake_flare_distribution(n, mode='uniform')
     assert (dur <= 2e3/60/24).all()
     assert (dur >= 0.5/60/24).all()
-    assert (ampl <= 1e3).all()
+    assert (ampl <= 1e2).all()
+    assert (ampl >= 1e-4).all()
+    assert len(dur) == n
+    assert len(ampl) == n
+
+    n = 10
+    dur, ampl = generate_fake_flare_distribution(n, d=True)
+    assert dur[2] == pytest.approx(0.04032164)
+    assert ampl[2] ==  pytest.approx(1.47937582e-01)
+    assert (dur <= 20).all()
+    assert (dur >= 1e-4).all()
+    assert (ampl <= 1e2).all()
     assert (ampl >= 1e-4).all()
     assert len(dur) == n
     assert len(ampl) == n

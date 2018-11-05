@@ -11,8 +11,12 @@ from . import test_ids, test_paths
 def test_sample_flare_recovery():
     pass
 
-def test_characterize_flare_recovery():
-    pass
+def test_characterize_flares():
+    flc = mock_flc(detrended=True)
+    lc = flc.characterize_flares(iterations=1, d=True, fakefreq=.75, seed=20)
+    assert lc.flares.rec_prob.iloc[0] == 0.0
+    assert lc.flares.ed_rec.iloc[0] == pytest.approx(3455.887599271639)
+    assert lc.flares.ed_rec_corr.iloc[0] == pytest.approx(11550.085471909213)
 
 def test_repr():
     pass
