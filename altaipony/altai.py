@@ -7,7 +7,7 @@ from lightkurve import KeplerLightCurve
 
 LOG = logging.getLogger(__name__)
 
-def find_flares_in_cont_obs_period(flux, error, N1=3, N2=2, N3=3):
+def find_flares_in_cont_obs_period(flux, median, error, N1=3, N2=3, N3=3):
     '''
     The algorithm for local changes due to flares defined by
     S. W. Chang et al. (2015), Eqn. 3a-d
@@ -39,41 +39,42 @@ def find_flares_in_cont_obs_period(flux, error, N1=3, N2=2, N3=3):
     isflare : numpy array of booleans
         datapoints are flagged with 1 if they belong to a flare candidate
     '''
+    isflare = np.zeros_like(flux, dtype='bool')
+    for i in range(2):    #1st round find large excursions that blow up sigma
+        sigma = np.nanstd(flux[~isflare])
 
-    median = np.nanmedian(flux)
-    sigma = np.nanstd(flux)
-    T0 = flux - median # excursion should be positive #"N0"
-    T1 = np.abs(flux - median) / sigma #N1
-    T2 = np.abs(flux - median - error) / sigma #N2
-    # apply thresholds N0-N2:
-    LOG.debug('Factor above standard deviation: N1 = {},\n'
-             'Factor above standard deviation + uncertainty N2 = {},\n'
-             'Minimum number of consecutive data points for candidate N3 = {}'
-             .format(N1,N2,N3))
-    pass_thresholds = np.where((T0 > 0) & (T1 > N1) & (T2 > N2))
-    #array of indices where thresholds are exceeded:
-    is_pass_thresholds = np.zeros_like(flux)
-    is_pass_thresholds[pass_thresholds] = 1
+        T0 = flux - median # excursion should be positive #"N0"
+        T1 = np.abs(flux - median) / sigma #N1
+        T2 = np.abs(flux - median - error) / sigma #N2
+        # apply thresholds N0-N2:
+        LOG.debug('Factor above standard deviation: N1 = {},\n'
+                 'Factor above standard deviation + uncertainty N2 = {},\n'
+                 'Minimum number of consecutive data points for candidate N3 = {}'
+                 .format(N1,N2,N3))
+        pass_thresholds = np.where((T0 > 0) & (T1 > N1) & (T2 > N2))
+        #array of indices where thresholds are exceeded:
+        is_pass_thresholds = np.zeros_like(flux)
+        is_pass_thresholds[pass_thresholds] = 1
 
-    # Need to find cumulative number of points that pass_thresholds
-    # Counted in reverse!
-    # Examples reverse_counts = [0 0 0 3 2 1 0 0 1 0 4 3 2 1 0 0 0 1 0 2 1 0]
-    #                 isflare = [0 0 0 1 1 1 0 0 0 0 1 1 1 1 0 0 0 0 0 0 0 0]
+        # Need to find cumulative number of points that pass_thresholds
+        # Counted in reverse!
+        # Examples reverse_counts = [0 0 0 3 2 1 0 0 1 0 4 3 2 1 0 0 0 1 0 2 1 0]
+        #                 isflare = [0 0 0 1 1 1 0 0 0 0 1 1 1 1 0 0 0 0 0 0 0 0]
 
-    reverse_counts = np.zeros_like(flux, dtype='int')
-    for k in range(2, len(flux)):
-        reverse_counts[-k] = (is_pass_thresholds[-k]
-                             * (reverse_counts[-(k-1)]
-                                + is_pass_thresholds[-k]))
+        reverse_counts = np.zeros_like(flux, dtype='int')
+        for k in range(2, len(flux)):
+            reverse_counts[-k] = (is_pass_thresholds[-k]
+                                 * (reverse_counts[-(k-1)]
+                                    + is_pass_thresholds[-k]))
 
-    # find flare start where values in reverse_counts switch from 0 to >=N3
-    istart_i = np.where((reverse_counts[1:] >= N3) &
-                        (reverse_counts[:-1] - reverse_counts[1:] < 0))[0] + 1
-    # use the value of reverse_counts to determine how many points away stop is
-    istop_i = istart_i + (reverse_counts[istart_i])
-    isflare = np.zeros_like(flux, dtype='int')
-    for (l,r) in list(zip(istart_i,istop_i)):
-        isflare[l:r+1] = 1
+        # find flare start where values in reverse_counts switch from 0 to >=N3
+        istart_i = np.where((reverse_counts[1:] >= N3) &
+                            (reverse_counts[:-1] - reverse_counts[1:] < 0))[0] + 1
+        # use the value of reverse_counts to determine how many points away stop is
+        istop_i = istart_i + (reverse_counts[istart_i])
+        isflare = np.zeros_like(flux, dtype='bool')
+        for (l,r) in list(zip(istart_i,istop_i)):
+            isflare[l:r+1] = True
     return isflare
 
 def find_flares(flc, minsep=3):
@@ -91,17 +92,18 @@ def find_flares(flc, minsep=3):
     ----------
     numpy arrays of start and stop cadence numbers of flare candidates
     '''
-    lc = copy.copy(flc)
+    lc = copy.deepcopy(flc)
     istart = np.array([], dtype='int')
     istop = np.array([], dtype='int')
 
     #Now work on periods of continuous observation with no gaps
     for (le,ri) in lc.gaps:
         error = lc.detrended_flux_err[le:ri]
-        flux_diff = lc.detrended_flux[le:ri] - lc.it_med[le:ri]
+        flux = lc.detrended_flux[le:ri]
+        median = lc.it_med[le:ri]
 
         # run final flare-find on DATA - MODEL
-        isflare = find_flares_in_cont_obs_period(flux_diff, error)
+        isflare = find_flares_in_cont_obs_period(flux, median, error)
 
         # now pick out final flare candidate indices
         candidates = np.where( isflare > 0)[0]
@@ -146,7 +148,7 @@ def find_flares(flc, minsep=3):
     return lc
 
 
-def find_iterative_median(flc, n=5):
+def find_iterative_median(flc, n=50):
 
     """
     Find the iterative median value for a continuous observation period using
@@ -164,22 +166,24 @@ def find_iterative_median(flc, n=5):
     FlareLightCurve with the it_med attribute filled in.
     """
 
-    lc = copy.copy(flc)
+    lc = copy.deepcopy(flc)
     lc.it_med = np.full_like(flc.detrended_flux, np.median(flc.detrended_flux))
 
     for (le,ri) in lc.gaps:
-        error = lc.detrended_flux_err[le:ri]
-        flux = lc.detrended_flux[le:ri]
+        error = flc.detrended_flux_err[le:ri]
+        flux = flc.detrended_flux[le:ri]
         med = np.nanmedian(flux)
         it_med = np.nanmedian(flux) * np.ones_like(flux)
         isflare = np.zeros_like(flux, dtype=bool)
         #find a median that is not skewed by actual flares
         for i in range(n):
-            flux_diff = flux - it_med
-            flux_diff[isflare] = med
-            isflare_add = find_flares_in_cont_obs_period(flux_diff, error, N3=1)
+            flux[isflare] = med
+            isflare_add = find_flares_in_cont_obs_period(flux, it_med,
+                                                         error, N3=1)
+            if len(isflare_add)==0:
+                break
             isflare = np.logical_or(isflare, isflare_add)
-            med = np.nanmedian(flux[isflare])
+            med = np.nanmedian(flux[~isflare])
             it_med = np.nanmedian(flux[~isflare]) * np.ones_like(flux)
 
         lc.it_med[le:ri] = it_med

@@ -104,7 +104,7 @@ def inject_fake_flares(lc, mode='hawley2014', gapwindow=0.1, fakefreq=.25,
     	    isok = False
     	    while isok is False:
     	        # choose a random peak time
-    	        t0 = mod_random(1, d=d, seed=seed*k) * dtime + mintime
+    	        t0 = (mod_random(1, d=d, seed=seed*k) * dtime + mintime)[0]
     	        #t0 =  random.uniform(np.min(time),np.max(time))
                 # Are there any real flares to deal with?
     	        if real_flares_in_gap.tstart.shape[0]>0:
