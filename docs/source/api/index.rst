@@ -3,7 +3,7 @@ API Documentation
 
 .. toctree::
 	:caption: Core Functions
-	:maxdepth: 1
+	:maxdepth: 2
 
 	flarelc
 	lcio
