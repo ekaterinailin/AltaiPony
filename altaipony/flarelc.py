@@ -29,45 +29,48 @@ class FlareLightCurve(KeplerLightCurve):
     Attributes
     -------------
     time : array-like
-        Time measurements
+        Time measurements.
     flux : array-like
-        Data flux for every time point
+        Flux count for every time point.
     flux_err : array-like
-        Uncertainty on each flux data point
+        Uncertainty on each flux data point.
     time_format : str
-
+        String specifying how an instant of time is represented,
+        e.g., 'bkjd' or ‘jd'.
     time_scale : str
-
+        String that specifies how the time is measured, e.g.,
+         tdb', ‘tt', ‘ut1', or 'utc'.
     time_unit : astropy.unit
-        Astropy unit object defining unit of time
+        Astropy unit object defining unit of time.
     centroid_col : array-like
-
+        Centroid column coordinates as a function of time.
     centroid_row : array-like
-
+        Centroid row coordinates as a function of time.
     quality : array-like
-
+        Kepler quality flags
     quality_bitmask : str
         Can be 'none', 'default', 'hard' or 'hardest'
     channel : int
-
+        Channel number, where aperture is located on the CCD
     campaign : int
         K2 campaign number
     quarter : int
         Kepler Quarter number
-    mission :
-
-    cadenceno :
-
+    mission : string
+        Mission identifier, e.g., 'K2' or 'Kepler'.
+    cadenceno : array-like
+        Cadence number - unique identifier.
     targetid : int
         EPIC ID number
     ra : float
-        RA
+        RA in deg.
     dec : float
-        declination
-    label :
-
+        Declination in deg.
+    label : string
+        'EPIC xxxxxxxxx'
     meta : dict
-
+        Free-form metadata associated with the LightCurve. Not populated in
+        general.
     detrended_flux : array-like
         K2SC detrend flux, same units as flux
     detrended_flux_err : array-like
@@ -78,8 +81,12 @@ class FlareLightCurve(KeplerLightCurve):
         Each tuple contains the start and end indices of observation gaps. See
         ``find_gaps``
     flares : DataFrame
-
+        Table of flares, their start and stop time, recovered equivalent duration
+        (ED), and, if applicable, recovery probability, ratio of recovered ED to
+        injected synthetic ED. Also information about quality flags may be stored
+        here.
     it_med : array-like
+        Iterative median, see the ``find_iterative_median`` method.
 
 
     """
