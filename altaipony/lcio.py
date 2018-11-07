@@ -37,7 +37,7 @@ def from_TargetPixel_source(target, **kwargs):
         Keyword arguments to pass to `KeplerTargetPixelFile.from_archive()
         <https://lightkurve.keplerscience.org/api/lightkurve.targetpixelfile.KeplerTargetPixelFile.html#lightkurve.targetpixelfile.KeplerTargetPixelFile.from_archive>`_
     """
-    tpf = KeplerTargetPixelFile.from_archive(target, quality_bitmask='none',
+    tpf = KeplerTargetPixelFile.from_archive(target, quality_bitmask='default',
                                              **kwargs)
     k2sc_keys = {'primary_header' : tpf.hdu[0].header,
                  'data_header' : tpf.hdu[1].header,
