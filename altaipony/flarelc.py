@@ -7,6 +7,8 @@ import progressbar
 
 from k2sc.standalone import k2sc_lc
 from lightkurve import KeplerLightCurve, KeplerTargetPixelFile
+from lightkurve.utils import KeplerQualityFlags
+
 from astropy.io import fits
 
 from .altai import (find_flares, find_iterative_median,)
@@ -329,3 +331,32 @@ class FlareLightCurve(KeplerLightCurve):
         else:
             LOG.info('No flares to characterize.')
             return flc
+
+    def mark_flagged_flares(self, explain=False):
+        """
+        Mark all flares that coincide with K2 flagged cadences.
+        Explain the flags if needed.
+
+        Parameters
+        -----------
+        explain : False or bool
+            If True, an ``explanation`` column will be added to the flares table
+            explaining the flags that were raised during the flare duration.
+
+        Returns
+        --------
+        FlareLightCurve with the flares table supplemented with an integer
+        ``quality`` and, if applicable, a string ``explanation`` column.
+        """
+        lc = copy.copy(self)
+        f = lc.flares
+        if 'quality' not in f.columns:
+            f['quality'] = 0
+        f.quality = f.apply(lambda x: np.sum(lc.quality[x.istart:x.istop],
+                                             dtype=int),
+                            axis=1)
+        if explain == True:
+            g = lambda x: ', '.join(KeplerQualityFlags.decode(x.quality))
+            f['explanation'] = f.apply(g, axis=1)
+        lc.flares = f
+        return lc

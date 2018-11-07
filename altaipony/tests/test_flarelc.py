@@ -8,6 +8,14 @@ from ..lcio import from_K2SC_file
 from .. import PACKAGEDIR
 from . import test_ids, test_paths
 
+def test_mark_flagged_flares():
+    flc = mock_flc(detrended=True)
+    flc = flc.find_flares()
+    flc = flc.mark_flagged_flares(explain=True)
+    assert flc.flares.quality.iloc[0] == 1152
+    assert flc.flares.explanation.iloc[0] == ("Sudden sensitivity dropout, "
+                                             "Cosmic ray in optimal aperture")
+
 def test_sample_flare_recovery():
     pass
 
@@ -41,6 +49,7 @@ def mock_flc(origin='TPF', detrended=False):
     """
     n = 1000
     time = np.arange(0, n/48, 1./48.)
+    quality = np.zeros_like(time)
     np.random.seed(33)
     flux_err = np.random.rand(n)/100.
     if detrended==False:
@@ -51,10 +60,13 @@ def mock_flc(origin='TPF', detrended=False):
     flux[16] = 750.
     flux[17] = 630.
     flux[18] = 580.
+    quality[17] = 1024
+    quality[18] = 128
     keys = {'flux' : flux, 'flux_err' : flux_err, 'time' : time,
             'pos_corr1' : np.zeros(n), 'pos_corr2' : np.zeros(n),
             'cadenceno' : np.arange(n), 'targetid' : 80000000,
-            'origin' : origin, 'it_med' : np.full_like(time,500.005),}
+            'origin' : origin, 'it_med' : np.full_like(time,500.005),
+            'quality' : quality}
 
     if detrended == False:
         flc = FlareLightCurve(**keys)

@@ -148,7 +148,7 @@ def from_K2SC_file(path, campaign=None, lctype='SAP_FLUX', **kwargs):
                           time_scale=klc.time_scale, ra=klc.ra, dec=klc.dec,
                           channel=klc.channel, time_unit=u.day,
                           flux_unit = u.electron/u.s, origin='K2SC',
-                          pos_corr1=dr.x, pos_corr2=dr.y)
+                          pos_corr1=dr.x, pos_corr2=dr.y, quality=klc.quality)
     hdu.close()
     del dr
 
