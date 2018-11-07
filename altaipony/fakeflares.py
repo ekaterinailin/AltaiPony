@@ -333,10 +333,11 @@ def merge_complex_flares(data):
     data.loc[data.cstart == 0.,'cstart'] = np.arange(maximum,maximum+3*size,3)
     data.loc[data.cstop == 0.,'cstop'] = np.arange(maximum+1,maximum+3*size+1,3)
     g = data.groupby(['cstart','cstop'])
-    data_wo_overlaps = pd.DataFrame(columns=data.columns.values)
+    data_wo_overlaps = pd.DataFrame(columns=np.append(data.columns.values,'complex'))
     for (start, stop), d in g:
         if d.shape[0] > 1:
             row = {
+            'complex' : True,
             'peak_time' : d.peak_time[d.amplitude.idxmax()],
             'amplitude' : d.amplitude.max(),
             'cstart' : d.cstart.min(),
@@ -351,7 +352,9 @@ def merge_complex_flares(data):
             'tstop' : d.tstop.max(),}
             e = pd.DataFrame(row, index=[0])
         else:
-            e = copy.copy(d)
+            x = d.to_dict()
+            x['complex'] = False
+            e = pd.DataFrame(x)
         data_wo_overlaps = data_wo_overlaps.append(e, ignore_index=True,sort=True)
     data_wo_overlaps.loc[data_wo_overlaps.cstart >= maximum,'cstart'] = np.zeros(size)
     data_wo_overlaps.loc[data_wo_overlaps.cstop >= maximum,'cstop'] = np.zeros(size)

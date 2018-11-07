@@ -144,8 +144,8 @@ def test_merge_complex_flares():
     gen = np.random.rand(12,12)
     gen[-1] = gen[3]
     cols = ['amplitude', 'cstart', 'cstop', 'duration_d', 'ed_inj', 'ed_rec',
-       'ed_rec_err', 'istart', 'istop', 'peak_time', 'tstart', 'tstop']
+            'ed_rec_err', 'istart', 'istop', 'peak_time', 'tstart', 'tstop']
     data = pd.DataFrame(data=gen, columns=cols)
     resolved_data = merge_complex_flares(data)
     assert resolved_data.shape[0] == 11
-    assert len(resolved_data.columns.values) == 12
+    assert len(resolved_data.columns.values) == 13
