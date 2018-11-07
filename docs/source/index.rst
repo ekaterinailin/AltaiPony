@@ -4,10 +4,10 @@
    contain the root `toctree` directive.
 
 ======================================================
-AltaiPony - Find and analyse flares in K2 light curves
+Find and analyse flares in K2 light curves
 ======================================================
 
-This package replaces the original Appaloosa_. **AltaiPony** finds flares in Kepler and K2 photometry. It is optimised to work with K2SC de-trended light curves but fetches ``KeplerTargetPixelFiles`` for ancillary data or if you want to remove systematic and periodic variability (vulgo *de-trending*) yourself. You can use most functionalities from lightkurve_'s ``KeplerLightCurve`` class. **AltaiPony** also runs **k2sc** for de-trending and flare characterization.
+**AltaiPony** replaces the original Appaloosa_. **AltaiPony** finds flares in Kepler and K2 photometry. It is optimised to work with K2SC de-trended light curves but fetches ``KeplerTargetPixelFiles`` for ancillary data or if you want to remove systematic and periodic variability (vulgo *de-trending*) yourself. You can use most functionalities from lightkurve_'s ``KeplerLightCurve`` class. **AltaiPony** also runs **k2sc** for de-trending and flare characterization.
 
 .. _user-docs:
 
