@@ -13,8 +13,10 @@ def test_mark_flagged_flares():
     flc = flc.find_flares()
     flc = flc.mark_flagged_flares(explain=True)
     assert flc.flares.quality.iloc[0] == 1152
-    assert flc.flares.explanation.iloc[0] == ("Sudden sensitivity dropout, "
-                                             "Cosmic ray in optimal aperture")
+    s1 = "Sudden sensitivity dropout, Cosmic ray in optimal aperture"
+    s2 = "Cosmic ray in optimal aperture, Sudden sensitivity dropout"
+    qs = flc.flares.explanation.iloc[0]
+    assert ((qs == s1) | (qs == s2))
 
 def test_sample_flare_recovery():
     pass
