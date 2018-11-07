@@ -115,7 +115,7 @@ def from_K2SC_file(path, campaign=None, lctype='SAP_FLUX', **kwargs):
     campaign : None or int
         K2 observing campaign
     lctype : 'SAP_FLUX' or 'PDCSAP_FLUX'
-        Takes in either raw or _PDC_ flux, default is 'SAP_FLUX' because it seems
+        Takes in either raw or `PDC` flux, default is `SAP_FLUX` because it seems
         to work best with the K2SC detrending pipeline.
     kwargs : dict
         Keyword arguments to pass to `KeplerLightCurveFile.from_archive
@@ -164,9 +164,10 @@ def from_K2SC_source(target, campaign=None):
     Parameters
     ------------
     target : str
-        ID or path to K2SC light curve
+        ID or path to K2SC light curve-
     campaign : None or int
-        K2 Campaign number
+        K2 Campaign number.
+
     Returns
     --------
     FlareLightCurve

@@ -39,7 +39,7 @@ class FlareLightCurve(KeplerLightCurve):
         e.g., 'bkjd' or ‘jd'.
     time_scale : str
         String that specifies how the time is measured, e.g.,
-         tdb', ‘tt', ‘ut1', or 'utc'.
+        tdb', ‘tt', ‘ut1', or 'utc'.
     time_unit : astropy.unit
         Astropy unit object defining unit of time.
     centroid_col : array-like
@@ -47,39 +47,39 @@ class FlareLightCurve(KeplerLightCurve):
     centroid_row : array-like
         Centroid row coordinates as a function of time.
     quality : array-like
-        Kepler quality flags
+        Kepler quality flags.
     quality_bitmask : str
-        Can be 'none', 'default', 'hard' or 'hardest'
+        Can be 'none', 'default', 'hard' or 'hardest'.
     channel : int
-        Channel number, where aperture is located on the CCD
+        Channel number, where aperture is located on the CCD.
     campaign : int
-        K2 campaign number
+        K2 campaign number.
     quarter : int
-        Kepler Quarter number
+        Kepler Quarter number.
     mission : string
         Mission identifier, e.g., 'K2' or 'Kepler'.
     cadenceno : array-like
         Cadence number - unique identifier.
     targetid : int
-        EPIC ID number
+        EPIC ID number.
     ra : float
         RA in deg.
     dec : float
         Declination in deg.
     label : string
-        'EPIC xxxxxxxxx'
+        'EPIC xxxxxxxxx'.
     meta : dict
         Free-form metadata associated with the LightCurve. Not populated in
         general.
     detrended_flux : array-like
-        K2SC detrend flux, same units as flux
+        K2SC detrend flux, same units as flux.
     detrended_flux_err : array-like
-        K2SC detrend flux error, same units as flux
+        K2SC detrend flux error, same units as flux.
     flux_trends : array-like
-        Astrophysical variability as derived by K2SC
+        Astrophysical variability as derived by K2SC.
     gaps : list of tuples of ints
         Each tuple contains the start and end indices of observation gaps. See
-        ``find_gaps``
+        ``find_gaps``.
     flares : DataFrame
         Table of flares, their start and stop time, recovered equivalent duration
         (ED), and, if applicable, recovery probability, ratio of recovered ED to
@@ -135,6 +135,9 @@ class FlareLightCurve(KeplerLightCurve):
         return('FlareLightCurve(ID: {})'.format(self.targetid))
 
     def __getitem__(self, key):
+        """
+        Override default indexing to cover all time-domain attributes.
+        """
         copy_self = copy.copy(self)
         copy_self.time = self.time[key]
         copy_self.flux = self.flux[key]
@@ -166,6 +169,10 @@ class FlareLightCurve(KeplerLightCurve):
             minimum number of datapoints in continuous observation,
             i.e., w/o gaps as defined by maxgap
 
+        Returns
+        --------
+        FlareLightCurve
+
         '''
         lc = copy.copy(self)
         dt = np.diff(lc.time)
@@ -186,6 +193,10 @@ class FlareLightCurve(KeplerLightCurve):
     def detrend(self):
         """
         De-trends a FlareLightCurve using ``K2SC``.
+
+        Returns
+        --------
+        FlareLightCurve
         """
         #make sure there is no detrended_flux already
         if self.origin != 'TPF':
@@ -220,16 +231,16 @@ class FlareLightCurve(KeplerLightCurve):
     def find_flares(self, minsep=3, fake=False):
 
         '''
-        Find flares in a FlareLightCurve.
+        Find flares in a ``FlareLightCurve``.
 
         Parameters
         -------------
         minsep : 3 or int
-            minimum distance between two candidate start times in datapoints
+            Minimum distance between two candidate start times in datapoints.
 
-        Return
+        Returns
         ----------
-        numpy arrays of start and stop cadence numbers of flare candidates
+        FlareLightCurve
         '''
         if ((fake==False) & (self.flares.shape[0]>0)):
             return self
@@ -260,12 +271,13 @@ class FlareLightCurve(KeplerLightCurve):
         kwargs : dict
             Keyword arguments to pass to inject_fake_flares
 
-        Return
+        Returns
         -------
-        ed_correction_factor : numpy 2D array
-            Contains [recovered equivalent duration, systematic correction factor].
-        recovery_probability : numpy 2D array
-            Contains [corrected equivalent duration, recovery probability].
+        combined_irr : DataFrame
+            All injected and recovered flares. Complex flare superpositions are
+            collapsed.
+        fake_lc : FlareLightCurve
+            Light curve with the last iteration of synthetic flares injected.
         """
         lc = copy.copy(self)
         lc = lc.find_gaps()
@@ -308,12 +320,13 @@ class FlareLightCurve(KeplerLightCurve):
         inject_before_detrending : False or bool
 
         kwargs : dict
-            Keyword arguments to pass to characterize_one_flare.
+            Keyword arguments to pass to :py:func:`characterize_one_flare`.
 
         Return
         -------
-        FlareLightCurve with modified flares attribute, now containing 'rec_prob'
-        and 'ed_rec_corr'.
+        FlareLightCurve
+            The flares attribute is modified, now containing `rec_prob`
+            and `ed_rec_corr` columns.
         """
         flc = copy.copy(self)
         if ((flc.detrended_flux is None) & (inject_before_detrending==False)):

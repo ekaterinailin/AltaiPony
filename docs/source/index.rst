@@ -13,7 +13,7 @@ Find and analyse flares in K2 light curves
 
 .. toctree::
 	:caption: Contents
-	:maxdepth: 1
+	:maxdepth: 2
 
 	install
    	api/index
