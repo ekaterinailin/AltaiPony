@@ -2,9 +2,11 @@ API Documentation
 ==================
 
 .. toctree::
-	:caption: API Documentation
+	:caption: Core Functions
 	:maxdepth: 1
 
 	flarelc
 	lcio
+	altai
+	fakeflares
 
