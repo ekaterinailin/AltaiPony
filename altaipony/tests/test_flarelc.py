@@ -24,9 +24,9 @@ def test_sample_flare_recovery():
 def test_characterize_flares():
     flc = mock_flc(detrended=True)
     lc = flc.characterize_flares(iterations=1, d=True, fakefreq=.75, seed=20)
-    assert lc.flares.rec_prob.iloc[0] == 1.0
-    assert lc.flares.ed_rec.iloc[0] == pytest.approx(3455.887599271639)
-    assert lc.flares.ed_rec_corr.iloc[0] == pytest.approx(9867.814363911202)
+    assert lc.flares.loc[0, 'rec_prob'] == 1.0
+    assert lc.flares.loc[0, 'ed_rec'] == pytest.approx(3455.887599271639)
+    assert lc.flares.loc[0, 'ed_rec_corr'] == pytest.approx(9867.814363911202)
 
 def test_repr():
     pass
@@ -123,7 +123,7 @@ def test_find_flares():
     """Test that an obvious flare is recovered sufficiently well."""
     flc = mock_flc(detrended=True)
     flc = flc.find_flares()
-    assert flc.flares['ed_rec'][0] == pytest.approx(3455.8875941, rel=1e-4)
+    assert flc.flares.loc[0,'ed_rec'] == pytest.approx(3455.8875941, rel=1e-4)
     assert flc.flares['ed_rec_err'][0] < flc.flares['ed_rec'][0]
     assert flc.flares['istart'][0] == 15
     assert flc.flares['istop'][0] == 19

@@ -10,10 +10,17 @@ from ..fakeflares import (inject_fake_flares,
                           merge_complex_flares,
                           recovery_probability,
                           equivalent_duration_ratio,
-                          mod_random)
+                          mod_random,
+                          characterize_one_flare,)
 
 
 from .test_flarelc import mock_flc
+
+def test_characterize_one_flare():
+    pass
+
+def test_resolve_complexity():
+    pass
 
 def test_mod_random():
     assert mod_random(1, d=True)[0] == pytest.approx(0.48661046)

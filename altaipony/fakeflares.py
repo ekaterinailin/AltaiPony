@@ -427,7 +427,8 @@ def equivalent_duration_ratio(data, bins=30):
 
     return ed_rat
 
-def characterize_one_flare(flc, f, rmax=3., rmin=.05, iterations=200,**kwargs):
+def characterize_one_flare(flc, f, rmax=3., rmin=.05, iterations=200,
+                           complexity='simple_only', **kwargs):
     """
     Takes the data of a recovered flare and return the data with
     information about recovery probability and corrected equivalent
@@ -445,6 +446,11 @@ def characterize_one_flare(flc, f, rmax=3., rmin=.05, iterations=200,**kwargs):
         Lower bound of amplitude and duration range relative to recovered values.
     iterations : 200 or int
         Number of iterations for injection/recovery sampling.
+    complexity : 'simple_only' or str
+        If 'simple_only' is used, all superimposed flares will be ignored.
+        If 'complex_only' is used, all simple flares will be ignored.
+        If 'all' is used, all flares are used for characterization but the
+        fraction of complex flares is returned.
     kwargs : dict
         Keyword arguments to pass to sample_flare_recovery.
 
@@ -477,6 +483,8 @@ def characterize_one_flare(flc, f, rmax=3., rmin=.05, iterations=200,**kwargs):
                                         dur=[dur*rmin, dur*rmax],
                                         iterations = iterations,
                                         **kwargs)
+    data = resolve_complexity(data, complexity=complexity)
+
     if data[data.ed_rec>0].shape[0]==0:
         LOG.info('This is just an outlier. Synthetic injection yields no recoveries.\n')
         f2['ed_rec_corr'] = 0.
@@ -493,3 +501,22 @@ def characterize_one_flare(flc, f, rmax=3., rmin=.05, iterations=200,**kwargs):
         f2['rec_prob'] = rp
 
     return f2
+
+def resolve_complexity(data, complexity):
+    """
+    Either deal with only simple or complex flares or ignore the difference and
+    just give the fraction of complex flares in the synthetic sample.
+    """
+    if complexity == 'simple_only':
+        data = data[data.complex == False]
+        data.loc[:,'complex_fraction'] = 0.
+        return data
+    elif complexity == 'complex_only':
+        data = data[data.complex == True]
+        data.loc[:,'complex_fraction'] = 1.
+        return data
+    elif complexity == 'all':
+        count_complex = data.complex.astype(float).sum()
+        size = data.shape[0]
+        data.loc[:,'complex_fraction'] = count_complex/size
+        return data

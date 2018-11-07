@@ -256,8 +256,8 @@ class FlareLightCurve(KeplerLightCurve):
 
         return lc
 
-    def sample_flare_recovery(self, iterations=20,
-                                    inject_before_detrending=False, **kwargs):
+    def sample_flare_recovery(self, iterations=20, inject_before_detrending=False,
+                              **kwargs):
         """
         Runs a number of injection recovery cycles and characterizes the light
         curve by recovery probability and equivalent duration underestimation.
@@ -309,7 +309,8 @@ class FlareLightCurve(KeplerLightCurve):
         bar.finish()
         return combined_irr, fake_lc
 
-    def characterize_flares(self, inject_before_detrending=False, **kwargs):
+    def characterize_flares(self, inject_before_detrending=False,
+                            complexity = 'simple_only', **kwargs):
         """
         Add information about recovery probability and systematic energy
         correction for every flare in a light curve using injection/recovery
@@ -318,6 +319,14 @@ class FlareLightCurve(KeplerLightCurve):
         Parameters
         -----------
         inject_before_detrending : False or bool
+            If True, synthetic flares are injected before de-trending and the
+            light curve is de-trended after each iteration. This is computationally
+            intense.
+        complexity : 'simple_only' or str
+            If 'simple_only' is used, all superimposed flares will be ignored.
+            If 'complex_only' is used, all simple flares will be ignored.
+            If 'all' is used, all flares are used for characterization but the
+            fraction of complex flares is returned.
 
         kwargs : dict
             Keyword arguments to pass to :py:func:`characterize_one_flare`.
@@ -342,7 +351,7 @@ class FlareLightCurve(KeplerLightCurve):
         if flc.flares.shape[0]>0:
             f2 = pd.DataFrame(columns=flc.flares.columns)
             for i,f in flc.flares.iterrows():
-                res = characterize_one_flare(flc,f,
+                res = characterize_one_flare(flc, f, complexity=complexity,
                                              inject_before_detrending=inject_before_detrending,
                                              **kwargs)
                 f2 = f2.append(res, ignore_index=True)
