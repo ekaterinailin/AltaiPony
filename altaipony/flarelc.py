@@ -310,7 +310,7 @@ class FlareLightCurve(KeplerLightCurve):
         return combined_irr, fake_lc
 
     def characterize_flares(self, inject_before_detrending=False,
-                            complexity = 'simple_only', **kwargs):
+                            complexity = 'all', **kwargs):
         """
         Add information about recovery probability and systematic energy
         correction for every flare in a light curve using injection/recovery

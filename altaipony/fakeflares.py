@@ -325,7 +325,8 @@ def merge_complex_flares(data):
     Return
     -------
     DataFrame with the same columns as the input but with complex flares merged
-    together.
+    together. The 'complex' column contains the number of simple flares
+    superimposed in a given event.
     """
     data = data.fillna(0)
     size = len(data.cstart[data.cstart == 0])
@@ -337,7 +338,7 @@ def merge_complex_flares(data):
     for (start, stop), d in g:
         if d.shape[0] > 1:
             row = {
-            'complex' : True,
+            'complex' : d.shape[0],
             'peak_time' : d.peak_time[d.amplitude.idxmax()],
             'amplitude' : d.amplitude.max(),
             'cstart' : d.cstart.min(),
@@ -353,7 +354,7 @@ def merge_complex_flares(data):
             e = pd.DataFrame(row, index=[0])
         else:
             x = d.to_dict()
-            x['complex'] = False
+            x['complex'] = 1
             e = pd.DataFrame(x)
         data_wo_overlaps = data_wo_overlaps.append(e, ignore_index=True,sort=True)
     data_wo_overlaps.loc[data_wo_overlaps.cstart >= maximum,'cstart'] = np.zeros(size)
@@ -509,14 +510,14 @@ def resolve_complexity(data, complexity):
     """
     if complexity == 'simple_only':
         data = data[data.complex == False]
-        data.loc[:,'complex_fraction'] = 0.
+        data['complex_fraction'] = 0.
         return data
     elif complexity == 'complex_only':
         data = data[data.complex == True]
-        data.loc[:,'complex_fraction'] = 1.
+        data['complex_fraction'] = 1.
         return data
     elif complexity == 'all':
         count_complex = data.complex.astype(float).sum()
         size = data.shape[0]
-        data.loc[:,'complex_fraction'] = count_complex/size
+        data['complex_fraction'] = count_complex/size
         return data

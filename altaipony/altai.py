@@ -168,7 +168,8 @@ def find_iterative_median(flc, n=50):
 
     lc = copy.deepcopy(flc)
     lc.it_med = np.full_like(flc.detrended_flux, np.median(flc.detrended_flux))
-
+    if lc.gaps is None:
+        lc = lc.find_gaps()
     for (le,ri) in lc.gaps:
         error = flc.detrended_flux_err[le:ri]
         flux = flc.detrended_flux[le:ri]
@@ -180,12 +181,11 @@ def find_iterative_median(flc, n=50):
             flux[isflare] = med
             isflare_add = find_flares_in_cont_obs_period(flux, it_med,
                                                          error, N3=1)
-            if len(isflare_add)==0:
-                break
             isflare = np.logical_or(isflare, isflare_add)
             med = np.nanmedian(flux[~isflare])
             it_med = np.nanmedian(flux[~isflare]) * np.ones_like(flux)
-
+            if len(isflare_add)==0:
+                continue
         lc.it_med[le:ri] = it_med
     return lc
 

@@ -19,11 +19,20 @@ def test_mark_flagged_flares():
     assert ((qs == s1) | (qs == s2))
 
 def test_sample_flare_recovery():
+    flc = mock_flc(detrended=True)
+    data, fflc = flc.sample_flare_recovery()
+    #make sure no flares are injected overlapping true flares
+    assert data[(data.istart > 14) & (data.istart < 19)].shape[0] == 0
+    #test if all injected event are covered in the merged flares:
+    assert data.shape[0] + (data[data.complex > 1].complex -1).sum() == data.complex.sum()
+    assert fflc.gaps == [(0, 1000)]
+    assert np.median(fflc.it_med) == pytest.approx(500.005274113832)
     pass
 
 def test_characterize_flares():
     flc = mock_flc(detrended=True)
     lc = flc.characterize_flares(iterations=1, d=True, fakefreq=.75, seed=20)
+    print(lc.flares)
     assert lc.flares.loc[0, 'rec_prob'] == 1.0
     assert lc.flares.loc[0, 'ed_rec'] == pytest.approx(3455.887599271639)
     assert lc.flares.loc[0, 'ed_rec_corr'] == pytest.approx(9867.814363911202)

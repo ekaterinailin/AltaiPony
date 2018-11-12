@@ -4,12 +4,21 @@ import pytest
 from ..altai import (find_flares,
                      find_flares_in_cont_obs_period,
                      chi_square,
-                     equivalent_duration,)
+                     equivalent_duration,
+                     find_iterative_median)
 from ..flarelc import FlareLightCurve
 from .test_flarelc import mock_flc
 
 def test_iterative_median():
-    pass
+
+    flc = mock_flc(detrended=True)
+    lc1 = find_iterative_median(flc, n=1)
+    lc2 = find_iterative_median(flc, n=2)
+    # test that gaps are found if none are defined
+    assert flc.gaps != lc1.gaps
+    # test that find_iterative_median converges after one iteration for mock FLC
+    assert np.median(flc.it_med) != np.median(lc1.it_med)
+    assert np.median(lc1.it_med) == np.median(lc2.it_med)
 
 def test_find_flares():
      """
