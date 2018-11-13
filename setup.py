@@ -14,7 +14,8 @@ setuptools.setup(
     url="https://github.com/ekaterinailin/AltaiPony",
     packages=setuptools.find_packages(),
     install_requires = ['lightkurve>=1.0b21','numpy>=1.15.1', 'pandas>=0.23.4',
-                        'progressbar2', 'git+https://github.com/OxES/k2sc.git']
+                        'progressbar2', 'k2sc']
+    dependency_links=['git+ssh://git@github.com/OxES/k2sc.git']
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",
