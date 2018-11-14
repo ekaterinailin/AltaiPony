@@ -27,7 +27,7 @@ def test_sample_flare_recovery():
     assert data.shape[0] + (data[data.complex > 1].complex -1).sum() == data.complex.sum()
     assert fflc.gaps == [(0, 1000)]
     assert np.median(fflc.it_med) == pytest.approx(500.005274113832)
-    pass
+
 
 def test_characterize_flares():
     flc = mock_flc(detrended=True)

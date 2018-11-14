@@ -34,6 +34,10 @@ class FlareLightCurve(KeplerLightCurve):
         Flux count for every time point.
     flux_err : array-like
         Uncertainty on each flux data point.
+    pixel_flux : multi-dimensional array
+        Flux in the target pixels from the KeplerTargetPixelFile.
+    pixel_flux_err : multi-dimensional array
+        Uncertainty on pixel_flux.
     time_format : str
         String specifying how an instant of time is represented,
         e.g., 'bkjd' or ‘jd'.
@@ -98,7 +102,8 @@ class FlareLightCurve(KeplerLightCurve):
                  meta={}, detrended_flux=None, detrended_flux_err=None,
                  flux_trends=None, gaps=None, flares=None, flux_unit = None,
                  primary_header=None, data_header=None, pos_corr1=None,
-                 pos_corr2=None, origin='FLC', fake_flares=None, it_med=None):
+                 pos_corr2=None, origin='FLC', fake_flares=None, it_med=None,
+                 pixel_flux=None, pixel_flux_err=None):
 
         super(FlareLightCurve, self).__init__(time=time, flux=flux, flux_err=flux_err, time_format=time_format, time_scale=time_scale,
                                               centroid_col=centroid_col, centroid_row=centroid_row, quality=quality,
@@ -117,6 +122,8 @@ class FlareLightCurve(KeplerLightCurve):
         self.detrended_flux = detrended_flux
         self.detrended_flux_err = detrended_flux_err
         self.it_med = it_med
+        self.pixel_flux = pixel_flux
+        self.pixel_flux_err = pixel_flux_err
 
         columns = ['istart', 'istop', 'cstart', 'cstop', 'tstart',
                    'tstop', 'ed_rec', 'ed_rec_err']
@@ -152,6 +159,10 @@ class FlareLightCurve(KeplerLightCurve):
             copy_self.it_med = self.it_med[key]
         if copy_self.flux_trends is not None:
             copy_self.flux_trends = self.flux_trends[key]
+        if copy_self.pixel_flux is not None:
+            copy_self.pixel_flux = self.pixel_flux[key]
+        if copy_self.pixel_flux_err is not None:
+            copy_self.pixel_flux_err = self.pixel_flux_err[key]
         return copy_self
 
     def find_gaps(self, maxgap=0.09, minspan=10):
@@ -388,4 +399,20 @@ class FlareLightCurve(KeplerLightCurve):
             g = lambda x: ', '.join(KeplerQualityFlags.decode(x.quality))
             f['explanation'] = f.apply(g, axis=1)
         lc.flares = f
+        return lc
+
+    def get_saturation_level(self, factor=10):
+        """
+        Goes back to the TPF and measures the maximum saturation level during a
+        flare, averaged over the aperture mask.
+
+        Parameters
+        -----------
+        factor : 10 or float
+            Saturation level in full well depths.
+
+        Returns
+        -------
+        FlareLightCurve with modified 'flares' attribute.
+        """
         return lc

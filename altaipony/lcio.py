@@ -39,13 +39,15 @@ def from_TargetPixel_source(target, **kwargs):
     """
     tpf = KeplerTargetPixelFile.from_archive(target, quality_bitmask='default',
                                              **kwargs)
-    k2sc_keys = {'primary_header' : tpf.hdu[0].header,
-                 'data_header' : tpf.hdu[1].header,
-                 'pos_corr1' : tpf.pos_corr1,
-                 'pos_corr2' : tpf.pos_corr2,}
+    keys = {'primary_header' : tpf.hdu[0].header,
+            'data_header' : tpf.hdu[1].header,
+            'pos_corr1' : tpf.pos_corr1,
+            'pos_corr2' : tpf.pos_corr2,
+            'pixel_flux' : tpf.flux,
+            'pixel_flux_err' : tpf.flux_err,}
 
     lc = tpf.to_lightcurve()
-    lc = from_KeplerLightCurve(lc, origin = 'TPF', **k2sc_keys)
+    lc = from_KeplerLightCurve(lc, origin = 'TPF', **keys)
 
     return lc
 
@@ -75,6 +77,9 @@ def from_KeplerLightCurve_source(target, lctype='SAP_FLUX',**kwargs):
     lcf = KeplerLightCurveFile.from_archive(target, quality_bitmask=None, **kwargs)
     lc = lcf.get_lightcurve(lctype)
     flc = from_KeplerLightCurve(lc, origin='KLC')
+    LOG.warning('Using from_KeplerLightCurve_source limits AltaiPony\'s functionality'
+                ' to lightkurve\'s K2SFF de-trending, and flare finding. better '
+                'use from_TargetPixel_source or from_K2SC_source.')
     return flc
 
 
@@ -99,12 +104,12 @@ def from_KeplerLightCurve(lc, origin='KLC', **kwargs):
     """
     flc = FlareLightCurve(**vars(lc), time_unit=u.day, origin=origin,
                            flux_unit = u.electron/u.s, **kwargs)
-    flc[np.isfinite(flc.time)]
+    flc = flc[np.isfinite(flc.time)]
 
     return flc
 
 
-def from_K2SC_file(path, campaign=None, lctype='SAP_FLUX', **kwargs):
+def from_K2SC_file(path, campaign=None, **kwargs):
     """
     Read in a K2SC de-trended light curve and convert it to a ``FlareLightCurve``.
 
@@ -114,9 +119,6 @@ def from_K2SC_file(path, campaign=None, lctype='SAP_FLUX', **kwargs):
         path to light curve
     campaign : None or int
         K2 observing campaign
-    lctype : 'SAP_FLUX' or 'PDCSAP_FLUX'
-        Takes in either raw or `PDC` flux, default is `SAP_FLUX` because it seems
-        to work best with the K2SC detrending pipeline.
     kwargs : dict
         Keyword arguments to pass to `KeplerLightCurveFile.from_archive
         <https://lightkurve.keplerscience.org/api/lightkurve.lightcurvefile.KeplerLightCurveFile.html#lightkurve.lightcurvefile.KeplerLightCurveFile.from_archive>`_
@@ -130,15 +132,17 @@ def from_K2SC_file(path, campaign=None, lctype='SAP_FLUX', **kwargs):
     hdu = fitsopen(path)
     dr = hdu[1].data
     targetid = int(path.split('-')[0][-9:])
-    klcf = KeplerLightCurveFile.from_archive(targetid, quality_bitmask='none',
-                                             campaign=campaign, **kwargs)
-    klc = klcf.get_lightcurve(lctype)
+    ktpf = KeplerTargetPixelFile.from_archive(targetid, campaign=campaign, **kwargs)
+    klc = ktpf.to_lightcurve()
     #Only use those cadences that are present in both files:
-    values, counts = np.unique(np.append(klc.cadenceno, dr.cadence), return_counts=True)
-    cadences = values[ np.where( counts == 2 ) ] #you could check if counts can be 3 or more and throw an exception in that case
+    all_cadences = np
+    values, counts = np.unique(np.concatenate((klc.cadenceno, dr.cadence, ktpf.cadenceno)),
+                               return_counts=True)
+    cadences = values[ np.where( counts == 3 ) ] #you could check if counts can be 4 or more and throw an exception in that case
     #note that order of cadences is irrelevant for the following to be right
     dr = dr[ np.isin( dr.cadence, cadences) ]
     klc = klc[ np.isin( klc.cadenceno, cadences) ]
+    ktpf = ktpf[ np.isin( ktpf.cadenceno, cadences)]
 
     flc = FlareLightCurve(time=dr.time, flux=klc.flux, detrended_flux=dr.flux,
                           detrended_flux_err=dr.error, cadenceno=dr.cadence,
@@ -148,7 +152,8 @@ def from_K2SC_file(path, campaign=None, lctype='SAP_FLUX', **kwargs):
                           time_scale=klc.time_scale, ra=klc.ra, dec=klc.dec,
                           channel=klc.channel, time_unit=u.day,
                           flux_unit = u.electron/u.s, origin='K2SC',
-                          pos_corr1=dr.x, pos_corr2=dr.y, quality=klc.quality)
+                          pos_corr1=dr.x, pos_corr2=dr.y, quality=klc.quality,
+                          pixel_flux=ktpf.flux, pixel_flux_err=ktpf.flux_err, )
     hdu.close()
     del dr
 
