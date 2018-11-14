@@ -8,7 +8,8 @@ import k2sc.core as k2sc_flag_values
 from astropy import units as u
 from astropy.io.fits.hdu.hdulist import fitsopen
 
-from lightkurve import KeplerLightCurveFile, KeplerTargetPixelFile, KeplerLightCurve
+from lightkurve import KeplerLightCurveFile
+from lightkurve import search_targetpixelfile, search_lightcurvefile
 
 from .flarelc import FlareLightCurve
 from .mast import download_kepler_products
@@ -34,22 +35,28 @@ def from_TargetPixel_source(target, **kwargs):
     target : str or int
         EPIC ID (e.g., 211119999) or path to zipped ``KeplerTargetPixelFile``
     kwargs : dict
-        Keyword arguments to pass to `KeplerTargetPixelFile.from_archive()
-        <https://lightkurve.keplerscience.org/api/lightkurve.targetpixelfile.KeplerTargetPixelFile.html#lightkurve.targetpixelfile.KeplerTargetPixelFile.from_archive>`_
+        Keyword arguments to pass to `lightkurve.search_targetpixelfile()
+        <http://docs.lightkurve.org/api/lightkurve.search.search_targetpixelfile.html#lightkurve.search.search_targetpixelfile>`_
     """
-    tpf = KeplerTargetPixelFile.from_archive(target, quality_bitmask='default',
-                                             **kwargs)
-    keys = {'primary_header' : tpf.hdu[0].header,
-            'data_header' : tpf.hdu[1].header,
-            'pos_corr1' : tpf.pos_corr1,
-            'pos_corr2' : tpf.pos_corr2,
-            'pixel_flux' : tpf.flux,
-            'pixel_flux_err' : tpf.flux_err,}
+    tpf_list = search_targetpixelfile(target, **kwargs)
 
-    lc = tpf.to_lightcurve()
-    lc = from_KeplerLightCurve(lc, origin = 'TPF', **keys)
+    if len(tpf_list) > 1:
+        LOG.error('Target data identifier must be unique. Provide campaign or cadence.')
+        return
+    else:
+        tpf = tpf_list.download()
 
-    return lc
+        keys = {'primary_header' : tpf.hdu[0].header,
+                'data_header' : tpf.hdu[1].header,
+                'pos_corr1' : tpf.pos_corr1,
+                'pos_corr2' : tpf.pos_corr2,
+                'pixel_flux' : tpf.flux,
+                'pixel_flux_err' : tpf.flux_err,}
+
+        lc = tpf.to_lightcurve()
+        lc = from_KeplerLightCurve(lc, origin = 'TPF', **keys)
+
+        return lc
 
 
 def from_KeplerLightCurve_source(target, lctype='SAP_FLUX',**kwargs):
@@ -66,21 +73,26 @@ def from_KeplerLightCurve_source(target, lctype='SAP_FLUX',**kwargs):
         takes in either raw or *PDC* flux, default is 'SAP_FLUX' because it seems
         to work best with the K2SC detrending pipeline
     kwargs : dict
-        Keyword arguments to pass to `KeplerLightCurveFile.from_archive
-        <https://lightkurve.keplerscience.org/api/lightkurve.lightcurvefile.KeplerLightCurveFile.html#lightkurve.lightcurvefile.KeplerLightCurveFile.from_archive>`_
+        Keyword arguments to pass to `lightkurve.search_lightcurvefile()
+        <http://docs.lightkurve.org/api/lightkurve.search.search_lightcurvefile.html>`_
 
     Returns
     --------
     FlareLightCurve
     """
 
-    lcf = KeplerLightCurveFile.from_archive(target, quality_bitmask=None, **kwargs)
-    lc = lcf.get_lightcurve(lctype)
-    flc = from_KeplerLightCurve(lc, origin='KLC')
-    LOG.warning('Using from_KeplerLightCurve_source limits AltaiPony\'s functionality'
-                ' to lightkurve\'s K2SFF de-trending, and flare finding. better '
-                'use from_TargetPixel_source or from_K2SC_source.')
-    return flc
+    lcf_list = search_lightcurvefile(target, **kwargs)
+    if len(lcf_list) > 1:
+        LOG.error('Target data identifier must be unique. Provide campaign or cadence.')
+        return
+    else:
+        lcf = lcf_list.download()
+        lc = lcf.get_lightcurve(lctype)
+        flc = from_KeplerLightCurve(lc, origin='KLC')
+        LOG.warning('Using from_KeplerLightCurve_source limits AltaiPony\'s functionality'
+                    ' to lightkurve\'s K2SFF de-trending, and flare finding. better '
+                    'use from_TargetPixel_source or from_K2SC_source.')
+        return flc
 
 
 def from_KeplerLightCurve(lc, origin='KLC', **kwargs):
@@ -102,6 +114,7 @@ def from_KeplerLightCurve(lc, origin='KLC', **kwargs):
     -----------
     FlareLightCurve
     """
+    print(vars(lc).keys())
     flc = FlareLightCurve(**vars(lc), time_unit=u.day, origin=origin,
                            flux_unit = u.electron/u.s, **kwargs)
     flc = flc[np.isfinite(flc.time)]
@@ -109,7 +122,7 @@ def from_KeplerLightCurve(lc, origin='KLC', **kwargs):
     return flc
 
 
-def from_K2SC_file(path, campaign=None, **kwargs):
+def from_K2SC_file(path, **kwargs):
     """
     Read in a K2SC de-trended light curve and convert it to a ``FlareLightCurve``.
 
@@ -117,8 +130,6 @@ def from_K2SC_file(path, campaign=None, **kwargs):
     ------------
     path : str
         path to light curve
-    campaign : None or int
-        K2 observing campaign
     kwargs : dict
         Keyword arguments to pass to `KeplerLightCurveFile.from_archive
         <https://lightkurve.keplerscience.org/api/lightkurve.lightcurvefile.KeplerLightCurveFile.html#lightkurve.lightcurvefile.KeplerLightCurveFile.from_archive>`_
@@ -132,34 +143,40 @@ def from_K2SC_file(path, campaign=None, **kwargs):
     hdu = fitsopen(path)
     dr = hdu[1].data
     targetid = int(path.split('-')[0][-9:])
-    ktpf = KeplerTargetPixelFile.from_archive(targetid, campaign=campaign, **kwargs)
-    klc = ktpf.to_lightcurve()
-    #Only use those cadences that are present in both files:
-    all_cadences = np
-    values, counts = np.unique(np.concatenate((klc.cadenceno, dr.cadence, ktpf.cadenceno)),
-                               return_counts=True)
-    cadences = values[ np.where( counts == 3 ) ] #you could check if counts can be 4 or more and throw an exception in that case
-    #note that order of cadences is irrelevant for the following to be right
-    dr = dr[ np.isin( dr.cadence, cadences) ]
-    klc = klc[ np.isin( klc.cadenceno, cadences) ]
-    ktpf = ktpf[ np.isin( ktpf.cadenceno, cadences)]
+    tpf_list = search_targetpixelfile(targetid, **kwargs)
+    if len(tpf_list) > 1:
+        LOG.error('Target data identifier must be unique. Provide campaign or cadence.')
+        return
+    else:
+        ktpf = tpf_list.download()
+        klc = ktpf.to_lightcurve()
+        print(klc.quality_bitmask)
+        #Only use those cadences that are present in all TPF, KLC, and K2SC LC:
+        values, counts = np.unique(np.concatenate((klc.cadenceno, dr.cadence, ktpf.cadenceno)),
+                                   return_counts=True)
+        cadences = values[ np.where( counts == 3 ) ] #you could check if counts can be 4 or more and throw an exception in that case
+        #note that order of cadences is irrelevant for the following to be right
+        dr = dr[ np.isin( dr.cadence, cadences) ]
+        klc = klc[ np.isin( klc.cadenceno, cadences) ]
+        ktpf = ktpf[ np.isin( ktpf.cadenceno, cadences)]
 
-    flc = FlareLightCurve(time=dr.time, flux=klc.flux, detrended_flux=dr.flux,
-                          detrended_flux_err=dr.error, cadenceno=dr.cadence,
-                          flux_trends = dr.trtime, targetid=targetid,
-                          campaign=klc.campaign, centroid_col=klc.centroid_col,
-                          centroid_row=klc.centroid_row,time_format=klc.time_format,
-                          time_scale=klc.time_scale, ra=klc.ra, dec=klc.dec,
-                          channel=klc.channel, time_unit=u.day,
-                          flux_unit = u.electron/u.s, origin='K2SC',
-                          pos_corr1=dr.x, pos_corr2=dr.y, quality=klc.quality,
-                          pixel_flux=ktpf.flux, pixel_flux_err=ktpf.flux_err, )
-    hdu.close()
-    del dr
+        flc = FlareLightCurve(time=dr.time, flux=klc.flux, detrended_flux=dr.flux,
+                              detrended_flux_err=dr.error, cadenceno=dr.cadence,
+                              flux_trends = dr.trtime, targetid=targetid,
+                              campaign=klc.campaign, centroid_col=klc.centroid_col,
+                              centroid_row=klc.centroid_row,time_format=klc.time_format,
+                              time_scale=klc.time_scale, ra=klc.ra, dec=klc.dec,
+                              channel=klc.channel, time_unit=u.day,
+                              flux_unit = u.electron/u.s, origin='K2SC',
+                              pos_corr1=dr.x, pos_corr2=dr.y, quality=klc.quality,
+                              pixel_flux=ktpf.flux, pixel_flux_err=ktpf.flux_err,
+                              quality_bitmask=ktpf.quality_bitmask )
+        hdu.close()
+        del dr
 
-    flc = flc[(np.isfinite(flc.detrended_flux)) &
-              (np.isfinite(flc.detrended_flux_err))]
-    return flc
+        flc = flc[(np.isfinite(flc.detrended_flux)) &
+                  (np.isfinite(flc.detrended_flux_err))]
+        return flc
 
 
 def from_K2SC_source(target, campaign=None):

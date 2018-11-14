@@ -38,7 +38,8 @@ def FlareLightCurve_testhelper(flc, ID, ra, dec, channel, from_tpf = False):
     assert flc.time.shape == flc.flux_err.shape
 
     assert flc.campaign == campaign
-    assert ((flc.quality_bitmask == 'none') or (flc.quality_bitmask == None))
+    #Wait until Nick's bugfix #325 is an official version feature 
+    #assert flc.quality_bitmask == 'default'
     assert flc.time_format == 'bkjd'
     assert flc.time_scale == 'tdb'
     assert flc.quarter == None
