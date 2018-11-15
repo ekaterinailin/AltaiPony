@@ -114,7 +114,6 @@ def from_KeplerLightCurve(lc, origin='KLC', **kwargs):
     -----------
     FlareLightCurve
     """
-    print(vars(lc).keys())
     flc = FlareLightCurve(**vars(lc), time_unit=u.day, origin=origin,
                            flux_unit = u.electron/u.s, **kwargs)
     flc = flc[np.isfinite(flc.time)]
@@ -150,7 +149,6 @@ def from_K2SC_file(path, **kwargs):
     else:
         ktpf = tpf_list.download()
         klc = ktpf.to_lightcurve()
-        print(klc.quality_bitmask)
         #Only use those cadences that are present in all TPF, KLC, and K2SC LC:
         values, counts = np.unique(np.concatenate((klc.cadenceno, dr.cadence, ktpf.cadenceno)),
                                    return_counts=True)
@@ -170,7 +168,8 @@ def from_K2SC_file(path, **kwargs):
                               flux_unit = u.electron/u.s, origin='K2SC',
                               pos_corr1=dr.x, pos_corr2=dr.y, quality=klc.quality,
                               pixel_flux=ktpf.flux, pixel_flux_err=ktpf.flux_err,
-                              quality_bitmask=ktpf.quality_bitmask )
+                              quality_bitmask=ktpf.quality_bitmask,
+                              pipeline_mask=ktpf.pipeline_mask )
         hdu.close()
         del dr
 

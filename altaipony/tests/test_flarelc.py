@@ -8,6 +8,16 @@ from ..lcio import from_K2SC_file
 from .. import PACKAGEDIR
 from . import test_ids, test_paths
 
+def test_get_saturation():
+    flc = mock_flc(detrended=True)
+    flc = flc.find_flares()
+    r1 = flc.get_saturation()
+    assert r1.flares.saturation_f10.iloc[0] == False
+    r2 = flc.get_saturation(return_level=True)
+    assert r2.flares.saturation_f10.iloc[0] == pytest.approx(0.0495,1e-2)
+    r3 = flc.get_saturation(factor=1e-2)
+    assert r3.flares['saturation_f0.01'].iloc[0] == True
+
 def test_mark_flagged_flares():
     flc = mock_flc(detrended=True)
     flc = flc.find_flares()
@@ -32,7 +42,6 @@ def test_sample_flare_recovery():
 def test_characterize_flares():
     flc = mock_flc(detrended=True)
     lc = flc.characterize_flares(iterations=1, d=True, fakefreq=.75, seed=20)
-    print(lc.flares)
     assert lc.flares.loc[0, 'rec_prob'] == 1.0
     assert lc.flares.loc[0, 'ed_rec'] == pytest.approx(3455.887599271639)
     assert lc.flares.loc[0, 'ed_rec_corr'] == pytest.approx(9867.814363911202)
@@ -60,13 +69,21 @@ def mock_flc(origin='TPF', detrended=False):
     """
     n = 1000
     time = np.arange(0, n/48, 1./48.)
+    pixel_time = np.outer(time,np.full((3,3), 1)).reshape((1000,3,3))
+    np.random.seed(13854)
+
+    pipeline_mask = np.array([[False, False, False],
+                              [False, True,  False],
+                              [False, False, False],])
     quality = np.zeros_like(time)
     np.random.seed(33)
     flux_err = np.random.rand(n)/100.
     if detrended==False:
         flux = np.sin(time/2)*7. + 500. +flux_err
+        pixel_flux = np.random.rand(len(time),3,3)/100.+500.+np.sin(pixel_time/2)*7.
     else:
         flux = 500. + flux_err
+        pixel_flux = np.random.rand(len(time),3,3)/100.+500.
     flux[15] = 1.e3
     flux[16] = 750.
     flux[17] = 630.
@@ -77,7 +94,8 @@ def mock_flc(origin='TPF', detrended=False):
             'pos_corr1' : np.zeros(n), 'pos_corr2' : np.zeros(n),
             'cadenceno' : np.arange(n), 'targetid' : 80000000,
             'origin' : origin, 'it_med' : np.full_like(time,500.005),
-            'quality' : quality}
+            'quality' : quality, 'pipeline_mask' : pipeline_mask,
+            'pixel_flux' : pixel_flux,}
 
     if detrended == False:
         flc = FlareLightCurve(**keys)

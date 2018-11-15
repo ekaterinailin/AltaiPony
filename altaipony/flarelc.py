@@ -38,6 +38,8 @@ class FlareLightCurve(KeplerLightCurve):
         Flux in the target pixels from the KeplerTargetPixelFile.
     pixel_flux_err : multi-dimensional array
         Uncertainty on pixel_flux.
+    pipeline_mask : multi-dimensional boolean array
+        TargetPixelFile mask for aperture photometry.
     time_format : str
         String specifying how an instant of time is represented,
         e.g., 'bkjd' or ‘jd'.
@@ -103,7 +105,7 @@ class FlareLightCurve(KeplerLightCurve):
                  flux_trends=None, gaps=None, flares=None, flux_unit = None,
                  primary_header=None, data_header=None, pos_corr1=None,
                  pos_corr2=None, origin='FLC', fake_flares=None, it_med=None,
-                 pixel_flux=None, pixel_flux_err=None):
+                 pixel_flux=None, pixel_flux_err=None, pipeline_mask=None):
 
         super(FlareLightCurve, self).__init__(time=time, flux=flux, flux_err=flux_err, time_format=time_format, time_scale=time_scale,
                                               centroid_col=centroid_col, centroid_row=centroid_row, quality=quality,
@@ -124,6 +126,7 @@ class FlareLightCurve(KeplerLightCurve):
         self.it_med = it_med
         self.pixel_flux = pixel_flux
         self.pixel_flux_err = pixel_flux_err
+        self.pipeline_mask = pipeline_mask
 
         columns = ['istart', 'istop', 'cstart', 'cstop', 'tstart',
                    'tstop', 'ed_rec', 'ed_rec_err']
@@ -401,7 +404,7 @@ class FlareLightCurve(KeplerLightCurve):
         lc.flares = f
         return lc
 
-    def get_saturation_level(self, factor=10):
+    def get_saturation(self, factor=10, return_level=False):
         """
         Goes back to the TPF and measures the maximum saturation level during a
         flare, averaged over the aperture mask.
@@ -415,4 +418,19 @@ class FlareLightCurve(KeplerLightCurve):
         -------
         FlareLightCurve with modified 'flares' attribute.
         """
-        return lc
+        flc = copy.copy(self)
+
+        def sat(flares, flc=flc):
+            pfl = flc.pixel_flux[flares.istart:flares.istop]
+            flare_aperture_pfl = pfl[:,flc.pipeline_mask]
+            saturation_level = np.nanmean(flare_aperture_pfl,axis=1)/well_depth
+            if return_level == False:
+                return np.any(saturation_level > factor)
+            else:
+                return np.nanmax(saturation_level)
+
+        well_depth = 10093
+        colname = 'saturation_f{}'.format(factor)
+        flc.flares[colname] = flc.flares.apply(sat, axis=1)
+
+        return flc
