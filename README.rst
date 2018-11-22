@@ -25,7 +25,7 @@ Installation
     
     git clone https://github.com/ekaterinailin/AltaiPony.git
     cd AltaiPony
-    python setup.py install
+    python3 setup.py install
 
 
 Getting Started
