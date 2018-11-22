@@ -8,7 +8,6 @@ from scipy.stats import binned_statistic
 
 LOG = logging.getLogger(__name__)
 
-
 def inject_fake_flares(lc, mode='hawley2014', gapwindow=0.1, fakefreq=.25,
                        inject_before_detrending=False, d=False, seed=0,
                        **kwargs):
@@ -503,7 +502,7 @@ def characterize_one_flare(flc, f, rmax=3., rmin=.05, iterations=200,
 
     return f2
 
-def resolve_complexity(data, complexity):
+def resolve_complexity(data, complexity='all'):
     """
     Either deal with only simple or complex flares or ignore the difference and
     just give the fraction of complex flares in the synthetic sample.
