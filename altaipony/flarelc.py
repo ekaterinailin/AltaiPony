@@ -129,7 +129,7 @@ class FlareLightCurve(KeplerLightCurve):
         self.pipeline_mask = pipeline_mask
 
         columns = ['istart', 'istop', 'cstart', 'cstop', 'tstart',
-                   'tstop', 'ed_rec', 'ed_rec_err']
+                   'tstop', 'ed_rec', 'ed_rec_err', 'ampl_rec']
         if flares is None:
             self.flares = pd.DataFrame(columns=columns)
         else:

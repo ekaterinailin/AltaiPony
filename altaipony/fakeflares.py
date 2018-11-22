@@ -468,10 +468,9 @@ def characterize_one_flare(flc, f, rmax=3., rmin=.05, iterations=200,
     def recr(x, rec_prob):
         return rec_prob.rec_prob[(x>rec_prob.min_ed_inj) & (x<=rec_prob.max_ed_inj)].iloc[0]
 
-    ampl = np.max(flc.flux[f.istart:f.istop])/flc.it_med[f.istart]-1.
     f2 = copy.copy(f)
 
-    if ampl < 0:
+    if f.ampl_rec < 0:
         LOG.info('Amplitude is smaller than global iterative median (not '
                   'necessarily the local). Recovery very unlikely.\n')
         f2['ed_rec_corr'] = 0.
@@ -479,7 +478,7 @@ def characterize_one_flare(flc, f, rmax=3., rmin=.05, iterations=200,
         return f2
 
     dur = (f.tstop-f.tstart)
-    data, g = flc.sample_flare_recovery(ampl=[ampl*rmin, ampl*rmax],
+    data, g = flc.sample_flare_recovery(ampl=[f.ampl_rec*rmin, f.ampl_rec*rmax],
                                         dur=[dur*rmin, dur*rmax],
                                         iterations = iterations,
                                         **kwargs)

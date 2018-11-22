@@ -130,6 +130,8 @@ def find_flares(flc, minsep=3):
     if len(istart)>0:
         l = [equivalent_duration(lc, i, j, err=True) for (i,j) in zip(istart, istop)]
         ed_rec, ed_rec_err = zip(*l)
+        fl = lc.detrended_flux
+        ampl_rec = [np.max(fl[i:j])/lc.it_med[i]-1. for (i,j) in zip(istart,istop)]
         cstart = lc.cadenceno[istart]
         cstop = lc.cadenceno[istop]
         tstart = lc.time[istart]
@@ -137,6 +139,7 @@ def find_flares(flc, minsep=3):
 
         lc.flares = lc.flares.append(pd.DataFrame({'ed_rec' : ed_rec,
                                       'ed_rec_err' : ed_rec_err,
+                                      'ampl_rec' : ampl_rec,
                                       'istart' : istart,
                                       'istop' : istop,
                                       'cstart' : cstart,
