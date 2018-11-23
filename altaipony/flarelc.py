@@ -298,7 +298,7 @@ class FlareLightCurve(KeplerLightCurve):
         lc = find_iterative_median(lc)
         columns =  ['istart', 'istop', 'cstart', 'cstop', 'tstart', 'tstop',
                     'ed_rec', 'ed_rec_err', 'duration_d', 'amplitude', 'ed_inj',
-                    'peak_time']
+                    'peak_time', 'ampl_rec']
         combined_irr = pd.DataFrame(columns=columns)
 
         widgets = [progressbar.Percentage(), progressbar.Bar()]

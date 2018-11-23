@@ -24,8 +24,8 @@ def inject_fake_flares(lc, mode='loglog', gapwindow=0.1, fakefreq=.25,
     -------------
     lc: FlareLightCurve
         contains info about flare start and stop in lc.flares
-    mode : 'hawley2014' or 'rand'
-        de-trending mode
+    mode : 'loglog', 'hawley2014' or 'rand'
+        injection mode
     gapwindow : 0.1 or float
 
     fakefreq : .25 or float
@@ -137,7 +137,7 @@ def inject_fake_flares(lc, mode='loglog', gapwindow=0.1, fakefreq=.25,
     fake_lc.fake_flares = fake_lc.fake_flares[fake_lc.fake_flares.peak_time != 0.]
     return fake_lc
 
-def generate_fake_flare_distribution(nfake, ampl=[1e-4, 1e2], dur=[10, 2e4],
+def generate_fake_flare_distribution(nfake, ampl=[1e-4, 1e2], dur=[7e-3, 2],
                                      mode='loglog', **kwargs ):
 
     '''
@@ -146,6 +146,7 @@ def generate_fake_flare_distribution(nfake, ampl=[1e-4, 1e2], dur=[10, 2e4],
     "uniform": Flares are distibuted evenly in duration and amplitude space.
     "hawley2014": Flares are distributed in a strip around a power law with
     exponent alpha, see Fig. 10 in Hawley et al. (2014).
+    "loglog":
 
     Parameters
     -----------
@@ -154,8 +155,8 @@ def generate_fake_flare_distribution(nfake, ampl=[1e-4, 1e2], dur=[10, 2e4],
     ampl: [1e-4, 1e2] or list of floats
         Amplitude range in relative flux units.
     dur: [10, 2e4] or list of floats
-        Duration range in minutes.
-    mode: 'hawley2014' or 'uniform'
+        Duration range in days.
+    mode: 'loglog', 'hawley2014' or 'uniform'
         Distribution of fake flares in (duration, amplitude) space.
     kwargs : dict
         Keyword arguments to pass to mod_random
@@ -165,12 +166,11 @@ def generate_fake_flare_distribution(nfake, ampl=[1e-4, 1e2], dur=[10, 2e4],
     dur_fake: durations of generated fake flares in days
     ampl_fake: amplitudes of generated fake flares in relative flux units
     '''
-
     if mode=='uniform':
 
         dur_fake =  (mod_random(nfake, **kwargs) * (dur[1] - dur[0]) + dur[0])
         ampl_fake = (mod_random(nfake, **kwargs) * (ampl[1] - ampl[0]) + ampl[0])
-        dur_fake = dur_fake / 60. / 24.
+        dur_fake = dur_fake
 
     elif mode=='hawley2014':
 
@@ -185,7 +185,7 @@ def generate_fake_flare_distribution(nfake, ampl=[1e-4, 1e2], dur=[10, 2e4],
                               dur_min[a]
                               for a in range(nfake)])
         ampl_fake = np.power(np.full(nfake,10), lnampl_fake)
-        dur_fake = np.power(np.full(nfake,10), lndur_fake) / 60. / 24.
+        dur_fake = np.power(np.full(nfake,10), lndur_fake)
 
     elif mode=='loglog':
 
@@ -193,10 +193,10 @@ def generate_fake_flare_distribution(nfake, ampl=[1e-4, 1e2], dur=[10, 2e4],
         lnampl_fake = (mod_random(nfake, **kwargs) * (ampl_max - ampl_min) + ampl_min)
         rand = mod_random(nfake, **kwargs)
         dur_min, dur_max = [np.log10(i) for i in dur]
-        lndur_fake = np.array([rand[a] / alpha * (dur_max - dur_min) + dur_min
+        lndur_fake = np.array([rand[a] * (dur_max - dur_min) + dur_min
                               for a in range(nfake)])
         ampl_fake = np.power(np.full(nfake,10), lnampl_fake)
-        dur_fake = np.power(np.full(nfake,10), lndur_fake) / 60. / 24.
+        dur_fake = np.power(np.full(nfake,10), lndur_fake)
 
     return dur_fake, ampl_fake
 
@@ -488,13 +488,13 @@ def characterize_one_flare(flc, f, rmax=3., rmin=.05, iterations=200,
         f2['rec_prob'] = 0.
         return f2
 
-    dur = (f.tstop-f.tstart)
+    dur = f.tstop-f.tstart
     data, g = flc.sample_flare_recovery(ampl=[f.ampl_rec*rmin, f.ampl_rec*rmax],
-                                        dur=[dur*rmin, dur*rmax],
+                                        dur=[dur*rmin*10, dur*rmax*10],
                                         iterations = iterations,
                                         **kwargs)
-    data = resolve_complexity(data, complexity=complexity)
 
+    data = resolve_complexity(data, complexity=complexity)
     if data[data.ed_rec>0].shape[0]==0:
         LOG.info('This is just an outlier. Synthetic injection yields no recoveries.\n')
         f2['ed_rec_corr'] = 0.

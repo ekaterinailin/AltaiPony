@@ -42,7 +42,6 @@ def find_flares_in_cont_obs_period(flux, median, error, N1=3, N2=3, N3=3):
     isflare = np.zeros_like(flux, dtype='bool')
     for i in range(2):    #1st round find large excursions that blow up sigma
         sigma = np.nanstd(flux[~isflare])
-
         T0 = flux - median # excursion should be positive #"N0"
         T1 = np.abs(flux - median) / sigma #N1
         T2 = np.abs(flux - median - error) / sigma #N2

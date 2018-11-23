@@ -91,17 +91,17 @@ def test_generate_fake_flare_distribution():
     assert len(ampl) == n
 
     dur, ampl = generate_fake_flare_distribution(n, mode='uniform')
-    assert (dur <= 2e3/60/24).all()
-    assert (dur >= 0.5/60/24).all()
+    assert (dur <= 2e4/60/24).all()
+    assert (dur >= 10./60/24).all()
     assert (ampl <= 1e2).all()
     assert (ampl >= 1e-4).all()
     assert len(dur) == n
     assert len(ampl) == n
 
     n = 10
-    dur, ampl = generate_fake_flare_distribution(n, d=True)
-    assert dur[2] == pytest.approx(0.04032164)
-    assert ampl[2] ==  pytest.approx(1.47937582e-01)
+    dur, ampl = generate_fake_flare_distribution(n, mode='loglog', d=True)
+    assert dur[2] == pytest.approx(0.13889317143)
+    assert ampl[2] ==  pytest.approx(0.06759607589523)
     assert (dur <= 20).all()
     assert (dur >= 1e-4).all()
     assert (ampl <= 1e2).all()
