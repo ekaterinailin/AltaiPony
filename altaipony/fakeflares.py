@@ -8,7 +8,7 @@ from scipy.stats import binned_statistic
 
 LOG = logging.getLogger(__name__)
 
-def inject_fake_flares(lc, mode='hawley2014', gapwindow=0.1, fakefreq=.25,
+def inject_fake_flares(lc, mode='loglog', gapwindow=0.1, fakefreq=.25,
                        inject_before_detrending=False, d=False, seed=0,
                        **kwargs):
 
@@ -137,8 +137,8 @@ def inject_fake_flares(lc, mode='hawley2014', gapwindow=0.1, fakefreq=.25,
     fake_lc.fake_flares = fake_lc.fake_flares[fake_lc.fake_flares.peak_time != 0.]
     return fake_lc
 
-def generate_fake_flare_distribution(nfake, ampl=[1e-4, 1e2], dur=[1, 2e3],
-                                     mode='hawley2014', **kwargs ):
+def generate_fake_flare_distribution(nfake, ampl=[1e-4, 1e2], dur=[10, 2e4],
+                                     mode='loglog', **kwargs ):
 
     '''
     Creates different distributions of fake flares to be injected into light curves.
@@ -153,7 +153,7 @@ def generate_fake_flare_distribution(nfake, ampl=[1e-4, 1e2], dur=[1, 2e3],
         Number of fake flares to be created.
     ampl: [1e-4, 1e2] or list of floats
         Amplitude range in relative flux units.
-    dur: [1, 2e3] or list of floats
+    dur: [10, 2e4] or list of floats
         Duration range in minutes.
     mode: 'hawley2014' or 'uniform'
         Distribution of fake flares in (duration, amplitude) space.
@@ -183,6 +183,17 @@ def generate_fake_flare_distribution(nfake, ampl=[1e-4, 1e2], dur=[1, 2e3],
         dur_min = (1./alpha) * (lnampl_fake - c_range[1])
         lndur_fake = np.array([rand[a] * (dur_max[a] - dur_min[a]) +
                               dur_min[a]
+                              for a in range(nfake)])
+        ampl_fake = np.power(np.full(nfake,10), lnampl_fake)
+        dur_fake = np.power(np.full(nfake,10), lndur_fake) / 60. / 24.
+
+    elif mode=='loglog':
+
+        ampl_max, ampl_min = [np.log10(i) for i in ampl]
+        lnampl_fake = (mod_random(nfake, **kwargs) * (ampl_max - ampl_min) + ampl_min)
+        rand = mod_random(nfake, **kwargs)
+        dur_min, dur_max = [np.log10(i) for i in dur]
+        lndur_fake = np.array([rand[a] / alpha * (dur_max - dur_min) + dur_min
                               for a in range(nfake)])
         ampl_fake = np.power(np.full(nfake,10), lnampl_fake)
         dur_fake = np.power(np.full(nfake,10), lndur_fake) / 60. / 24.
