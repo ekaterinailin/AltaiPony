@@ -41,7 +41,8 @@ def test_sample_flare_recovery():
 
 def test_characterize_flares():
     flc = mock_flc(detrended=True)
-    lc = flc.characterize_flares(iterations=1, d=True, fakefreq=1.15, seed=45)
+    lc = flc.characterize_flares(iterations=1, d=True, fakefreq=1.15, seed=44,
+                                 rmax=1.5, rmin=0.75)
     assert lc.flares.loc[0, 'rec_prob'] == 1.0
     assert lc.flares.loc[0, 'ed_rec'] == pytest.approx(3455.887599271639)
     assert lc.flares.loc[0, 'ed_rec_corr'] == pytest.approx(10201.04698)
