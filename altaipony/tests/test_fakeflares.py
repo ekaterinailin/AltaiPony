@@ -17,6 +17,7 @@ from ..fakeflares import (inject_fake_flares,
 from .test_flarelc import mock_flc
 
 def test_characterize_one_flare():
+    flc = mock_flc(detrended=True)
     pass
 
 def test_resolve_complexity():

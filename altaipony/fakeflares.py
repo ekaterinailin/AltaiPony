@@ -170,7 +170,7 @@ def generate_fake_flare_distribution(nfake, ampl=[1e-4, 1e2], dur=[7e-3, 2],
 
         dur_fake =  (mod_random(nfake, **kwargs) * (dur[1] - dur[0]) + dur[0])
         ampl_fake = (mod_random(nfake, **kwargs) * (ampl[1] - ampl[0]) + ampl[0])
-        dur_fake = dur_fake
+
 
     elif mode=='hawley2014':
 
@@ -204,7 +204,6 @@ def generate_fake_flare_distribution(nfake, ampl=[1e-4, 1e2], dur=[7e-3, 2],
         misfit = np.where(~((lnrat_fake < rat_max) & (lnrat_fake > rat_min)))
 
         while len(misfit[0]) > 0:
-            print(misfit)
             lndur_misfit, lnampl_misfit = generate_loglog(dur, ampl, len(misfit[0]))
             lndur_fake[misfit] = lndur_misfit
             lnampl_fake[misfit] = lnampl_misfit
@@ -513,19 +512,12 @@ def characterize_one_flare(flc, f, rmax=5., rmin=.2, iterations=200,
     ampl=[f.ampl_rec*rmin, f.ampl_rec*rmax]
     dur=[dur*rmin, dur*rmax]
     rat=[rat*scale, rat/scale]
-    print('ampl',ampl,
-          '\ndur',dur,
-          '\nrat', rat)
     # If the scale factor cuts out too much from the ampl-dur parameter space,
     # shrink it accordingly:
     from operator import le,ge
     for (i, op) in [(0,ge),(1,le)]:
-        print(dur[i],ampl[i]/rat[i])
         if op(dur[i],ampl[i]/rat[i]):
             ampl[i] = rat[i]*dur[i]
-    print('ampl',ampl,
-          '\ndur',dur,
-          '\nrat', rat)
     data, g = flc.sample_flare_recovery(ampl=ampl, dur=dur, rat=rat,
                                         iterations = iterations,
                                         **kwargs)

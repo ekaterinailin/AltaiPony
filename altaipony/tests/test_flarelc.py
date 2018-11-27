@@ -52,7 +52,7 @@ def test_repr():
 def test_getitem():
     pass
 
-def mock_flc(origin='TPF', detrended=False, ampl=1.):
+def mock_flc(origin='TPF', detrended=False, ampl=1., dur=1):
     """
     Mocks a FlareLightCurve with a sinusoid variation and a single positive outlier.
 
@@ -84,10 +84,10 @@ def mock_flc(origin='TPF', detrended=False, ampl=1.):
     else:
         flux = 500. + flux_err
         pixel_flux = np.random.rand(len(time),3,3)/100.+500.
-    flux[15] = 500.+500.*ampl
-    flux[16] = 500.+250.*ampl
-    flux[17] = 500.+130.*ampl
-    flux[18] = 500.+80.*ampl
+    flux[15:15+dur] = 500.+500.*ampl
+    flux[15+dur:15+2*dur] = 500.+250.*ampl
+    flux[15+2*dur:15+3*dur] = 500.+130.*ampl
+    flux[15+3*dur:15+4*dur] = 500.+80.*ampl
     quality[17] = 1024
     quality[18] = 128
     keys = {'flux' : flux, 'flux_err' : flux_err, 'time' : time,
