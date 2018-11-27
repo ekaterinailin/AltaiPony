@@ -204,6 +204,7 @@ def generate_fake_flare_distribution(nfake, ampl=[1e-4, 1e2], dur=[7e-3, 2],
         misfit = np.where(~((lnrat_fake < rat_max) & (lnrat_fake > rat_min)))
 
         while len(misfit[0]) > 0:
+            print(misfit)
             lndur_misfit, lnampl_misfit = generate_loglog(dur, ampl, len(misfit[0]))
             lndur_fake[misfit] = lndur_misfit
             lnampl_fake[misfit] = lnampl_misfit
@@ -453,8 +454,8 @@ def equivalent_duration_ratio(data, bins=30):
 
     return ed_rat
 
-def characterize_one_flare(flc, f, rmax=3., rmin=.05, iterations=200,
-                           complexity='simple_only', **kwargs):
+def characterize_one_flare(flc, f, rmax=5., rmin=.2, iterations=200,
+                           complexity='simple_only', scale=0.2, **kwargs):
     """
     Takes the data of a recovered flare and return the data with
     information about recovery probability and corrected equivalent
@@ -466,10 +467,12 @@ def characterize_one_flare(flc, f, rmax=3., rmin=.05, iterations=200,
 
     f : Series
         A row from the FlareLightCurve.flares DataFrame
-    rmax : 3. or float >1.
+    rmax : 5. or float >1.
         Upper bound of amplitude and duration range relative to recovered values.
-    rmin : .05 or float <1.
+    rmin : .2 or float <1.
         Lower bound of amplitude and duration range relative to recovered values.
+    scale : 0.2 or float
+
     iterations : 200 or int
         Number of iterations for injection/recovery sampling.
     complexity : 'simple_only' or str
@@ -506,12 +509,24 @@ def characterize_one_flare(flc, f, rmax=3., rmin=.05, iterations=200,
     dur = f.tstop - f.tstart
     rat = f.ampl_rec / dur
 
-    print('ampl',[f.ampl_rec*rmin, f.ampl_rec*rmax],
-          '\ndur',[dur*rmin, dur*rmax],
-          '\nrat', [rat*rmin/rmax*5, rat*rmax/rmin/5.])
-    data, g = flc.sample_flare_recovery(ampl=[f.ampl_rec*rmin, f.ampl_rec*rmax],
-                                        dur=[dur*rmin, dur*rmax],
-                                        rat=[rat*rmin/rmax*5, rat*rmax/rmin/5.],
+
+    ampl=[f.ampl_rec*rmin, f.ampl_rec*rmax]
+    dur=[dur*rmin, dur*rmax]
+    rat=[rat*scale, rat/scale]
+    print('ampl',ampl,
+          '\ndur',dur,
+          '\nrat', rat)
+    # If the scale factor cuts out too much from the ampl-dur parameter space,
+    # shrink it accordingly:
+    from operator import le,ge
+    for (i, op) in [(0,ge),(1,le)]:
+        print(dur[i],ampl[i]/rat[i])
+        if op(dur[i],ampl[i]/rat[i]):
+            ampl[i] = rat[i]*dur[i]
+    print('ampl',ampl,
+          '\ndur',dur,
+          '\nrat', rat)
+    data, g = flc.sample_flare_recovery(ampl=ampl, dur=dur, rat=rat,
                                         iterations = iterations,
                                         **kwargs)
 

@@ -41,11 +41,10 @@ def test_sample_flare_recovery():
 
 def test_characterize_flares():
     flc = mock_flc(detrended=True)
-    lc = flc.characterize_flares(iterations=1, d=True, fakefreq=1.15, seed=44,
-                                 rmax=1.5, rmin=0.75)
-    assert lc.flares.loc[0, 'rec_prob'] == 1.0
+    lc = flc.characterize_flares(iterations=1, d=True, fakefreq=1.2, seed=781)
+    assert lc.flares.loc[0, 'rec_prob'] == pytest.approx(0.66666666666)
     assert lc.flares.loc[0, 'ed_rec'] == pytest.approx(3455.887599271639)
-    assert lc.flares.loc[0, 'ed_rec_corr'] == pytest.approx(10201.04698)
+    assert lc.flares.loc[0, 'ed_rec_corr'] == pytest.approx(6524.739276618502)
 
 def test_repr():
     pass
@@ -53,7 +52,7 @@ def test_repr():
 def test_getitem():
     pass
 
-def mock_flc(origin='TPF', detrended=False):
+def mock_flc(origin='TPF', detrended=False, ampl=1.):
     """
     Mocks a FlareLightCurve with a sinusoid variation and a single positive outlier.
 
@@ -85,10 +84,10 @@ def mock_flc(origin='TPF', detrended=False):
     else:
         flux = 500. + flux_err
         pixel_flux = np.random.rand(len(time),3,3)/100.+500.
-    flux[15] = 1.e3
-    flux[16] = 750.
-    flux[17] = 630.
-    flux[18] = 580.
+    flux[15] = 500.+500.*ampl
+    flux[16] = 500.+250.*ampl
+    flux[17] = 500.+130.*ampl
+    flux[18] = 500.+80.*ampl
     quality[17] = 1024
     quality[18] = 128
     keys = {'flux' : flux, 'flux_err' : flux_err, 'time' : time,
