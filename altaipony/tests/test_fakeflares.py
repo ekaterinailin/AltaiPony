@@ -35,10 +35,11 @@ def test_equivalent_duration_ratio():
                          'ed_inj': [1e-4,6e-4,8e-4,4e-3,0.1,1.1,1.9,6.8,16.2,49,1500.3],
                          'cstart':1})
     ed_rat = equivalent_duration_ratio(data, bins=bins)
-    assert ed_rat.shape[0] == bins-1
+    assert ed_rat.shape[0] == np.rint(data.shape[0]/3.)-1
     assert 1e-4 == ed_rat.loc[0,'min_ed_rec']
-    assert maxval*1.01 == ed_rat.loc[3,'max_ed_rec']
-    assert (1500.3/maxval + 49/44)/2 == ed_rat.loc[3,'rel_rec']
+    assert maxval*1.01 == ed_rat.loc[2,'max_ed_rec']
+    assert 1/((0.06/.1+.54/1.1+1.33/1.9+4.5/6.8)/4.) == ed_rat.loc[1,'rel_rec']
+    return ed_rat, data
 
 def test_recovery_probability():
     bins = 5
@@ -48,10 +49,10 @@ def test_recovery_probability():
                          'ed_inj': [minval,6e-4,8e-4,4e-3,0.1,1.1,1.9,6.8,16.2,49,maxval],
                          'cstart':1})
     rec_prob = recovery_probability(data,bins=bins)
-    assert rec_prob.rec_prob.astype(float).tolist() == [0.,0.,0.75,1.]
-    assert rec_prob.shape[0] == bins-1
+    assert rec_prob.rec_prob.astype(float).tolist() == [0.,0.5,1.]
+    assert rec_prob.shape[0] == 3
     assert minval*.99 == rec_prob.loc[0,'min_ed_inj']
-    assert maxval*1.01 == rec_prob.loc[3,'max_ed_inj']
+    assert maxval*1.01 == rec_prob.loc[2,'max_ed_inj']
 
 def test_merge_fake_and_recovered_events():
 
@@ -149,11 +150,12 @@ def test_aflare_and_equivalent_duration():
     assert integral == pytest.approx(1.22e7,rel=1e-2)
 
 def test_merge_complex_flares():
-    gen = np.random.rand(12,12)
+    gen = np.random.rand(13,13)
     gen[-1] = gen[3]
     cols = ['amplitude', 'cstart', 'cstop', 'duration_d', 'ed_inj', 'ed_rec',
-            'ed_rec_err', 'istart', 'istop', 'peak_time', 'tstart', 'tstop']
+            'ed_rec_err', 'istart', 'istop', 'peak_time', 'tstart', 'tstop',
+            'ampl_rec']
     data = pd.DataFrame(data=gen, columns=cols)
     resolved_data = merge_complex_flares(data)
-    assert resolved_data.shape[0] == 11
-    assert len(resolved_data.columns.values) == 13
+    assert resolved_data.shape[0] == 12
+    assert len(resolved_data.columns.values) == 14

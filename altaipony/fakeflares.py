@@ -171,6 +171,19 @@ def generate_fake_flare_distribution(nfake, ampl=[1e-4, 1e2], dur=[7e-3, 2],
         dur_fake =  (mod_random(nfake, **kwargs) * (dur[1] - dur[0]) + dur[0])
         ampl_fake = (mod_random(nfake, **kwargs) * (ampl[1] - ampl[0]) + ampl[0])
 
+    elif mode=='uniform_ratio':
+        dur_fake =  (mod_random(nfake, **kwargs) * (dur[1] - dur[0]) + dur[0])
+        ampl_fake = (mod_random(nfake, **kwargs) * (ampl[1] - ampl[0]) + ampl[0])
+        rat_fake = ampl_fake/dur_fake
+        misfit = np.where(~((rat_fake < rat[1]) & (rat_fake > rat[0])))
+
+        while len(misfit[0]) > 0:
+            dur_fake_mf =  (mod_random(len(misfit[0]), **kwargs) * (dur[1] - dur[0]) + dur[0])
+            ampl_fake_mf = (mod_random(len(misfit[0]), **kwargs) * (ampl[1] - ampl[0]) + ampl[0])
+            dur_fake[misfit] = dur_fake_mf
+            ampl_fake[misfit] = ampl_fake_mf
+            rat_fake = ampl_fake/dur_fake
+            misfit = np.where(~((rat_fake < rat[1]) & (rat_fake > rat[0])))
 
     elif mode=='hawley2014':
 
@@ -345,7 +358,7 @@ def merge_complex_flares(data):
     -----------
     data : DataFrame
         Columns: ['amplitude', 'cstart', 'cstop', 'duration_d', 'ed_inj', 'ed_rec',
-       'ed_rec_err', 'istart', 'istop', 'peak_time', 'tstart', 'tstop']
+       'ed_rec_err', 'istart', 'istop', 'peak_time', 'tstart', 'tstop','ampl_rec']
 
     Return
     -------
@@ -375,7 +388,8 @@ def merge_complex_flares(data):
             'istart' : d.istart.min(),
             'istop' : d.istop.max(),
             'tstart' : d.tstart.min(),
-            'tstop' : d.tstop.max(),}
+            'tstop' : d.tstop.max(),
+            'ampl_rec' : d.ampl_rec.max()}
             e = pd.DataFrame(row, index=[0])
         else:
             x = d.to_dict()
@@ -407,12 +421,12 @@ def recovery_probability(data, bins=30):
     data['rec'] = data.ed_rec.astype(bool).astype(float)
     bins = np.logspace(np.log10(max(data.ed_inj.min()*.99, 1e-4)),
                        np.log10(data.ed_inj.max()*1.01),
-                       num=bins)
+                       num=min(int(np.rint(data.shape[0]/3)),bins))
     group = data.groupby(pd.cut(data.ed_inj,bins))
     rec_prob = (pd.DataFrame({'min_ed_inj' : bins[:-1],
                              'max_ed_inj' : bins[1:],
                              'mid_ed_inj' : (bins[:-1]+bins[1:])/2.,
-                             'rec_prob' : group.rec.sum()/group.ed_inj.count()})
+                             'rec_prob' : group.rec.mean()})
                              .reset_index()
                              .drop('ed_inj',axis=1))
 
@@ -429,7 +443,7 @@ def equivalent_duration_ratio(data, bins=30):
         Table with columns that contain injected and recovered equivalent
         durations of synthetic flares.
     bins : 30 or int
-        Size of look-up table.
+        Maximum size of look-up table.
 
     Return
     ------
@@ -438,22 +452,22 @@ def equivalent_duration_ratio(data, bins=30):
     """
     d = data[data.ed_rec>0]
     d = d[['ed_inj','ed_rec']]
-    d['rel']=d.ed_inj/d.ed_rec
+    d['rel']=d.ed_rec/d.ed_inj
     bins = np.logspace(np.log10(max(data.ed_rec.min()*.99, 1e-4)),
                        np.log10(data.ed_rec.max()*1.01),
-                       num=bins)
+                       num=min(int(np.rint(d.shape[0]/3)),bins))
     group = d.groupby(pd.cut(d.ed_rec,bins))
     ed_rat = (pd.DataFrame({'min_ed_rec' : bins[:-1],
                              'max_ed_rec' : bins[1:],
                              'mid_ed_rec' : (bins[:-1]+bins[1:])/2.,
-                             'rel_rec' : group.rel.mean()})
+                             'rel_rec' : 1/group.rel.mean()})
                              .reset_index()
                              .drop('ed_rec',axis=1)
                              .dropna(how='any'))
 
     return ed_rat
 
-def characterize_one_flare(flc, f, rmax=5., rmin=.2, iterations=200,
+def characterize_one_flare(flc, f, rmax=10., rmin=.1, iterations=200,
                            complexity='simple_only', scale=0.2, **kwargs):
     """
     Takes the data of a recovered flare and return the data with
@@ -466,9 +480,9 @@ def characterize_one_flare(flc, f, rmax=5., rmin=.2, iterations=200,
 
     f : Series
         A row from the FlareLightCurve.flares DataFrame
-    rmax : 5. or float >1.
+    rmax : 10. or float >1.
         Upper bound of amplitude and duration range relative to recovered values.
-    rmin : .2 or float <1.
+    rmin : .1 or float <1.
         Lower bound of amplitude and duration range relative to recovered values.
     scale : 0.2 or float
 
@@ -503,14 +517,14 @@ def characterize_one_flare(flc, f, rmax=5., rmin=.2, iterations=200,
                   'necessarily the local). Recovery very unlikely.\n')
         f2['ed_rec_corr'] = 0.
         f2['rec_prob'] = 0.
-        return f2
+        return f2, [],[]
 
     dur = f.tstop - f.tstart
     rat = f.ampl_rec / dur
 
 
-    ampl=[f.ampl_rec*rmin, f.ampl_rec*rmax]
-    dur=[dur*rmin, dur*rmax]
+    ampl=[f.ampl_rec*rmin/3., f.ampl_rec*rmax/3.]
+    dur=[dur*rmin*2, dur*rmax*2]
     rat=[rat*scale, rat/scale]
     # If the scale factor cuts out too much from the ampl-dur parameter space,
     # shrink it accordingly:
@@ -527,7 +541,7 @@ def characterize_one_flare(flc, f, rmax=5., rmin=.2, iterations=200,
         LOG.info('This is just an outlier. Synthetic injection yields no recoveries.\n')
         f2['ed_rec_corr'] = 0.
         f2['rec_prob'] = 0.
-        return f2
+        return f2, data, g
     else:
         data = data[(data.ed_inj > rmin*f.ed_rec) & (data.ed_inj < 20.*f.ed_rec)]
         rec_prob = recovery_probability(data)
@@ -538,7 +552,7 @@ def characterize_one_flare(flc, f, rmax=5., rmin=.2, iterations=200,
         f2['ed_rec_corr'] = erc
         f2['rec_prob'] = rp
 
-    return f2
+    return f2, data, g
 
 def resolve_complexity(data, complexity='all'):
     """

@@ -259,7 +259,11 @@ class FlareLightCurve(KeplerLightCurve):
         if ((fake==False) & (self.flares.shape[0]>0)):
             return self
         else:
-            lc = copy.copy(self)
+            lc = copy.deepcopy(self)
+            #re-init flares
+            columns = ['istart', 'istop', 'cstart', 'cstop', 'tstart',
+                       'tstop', 'ed_rec', 'ed_rec_err', 'ampl_rec']
+            lc.flares = pd.DataFrame(columns=columns)
             #find continuous observing periods
             lc = lc.find_gaps()
             #find the true median value iteratively
@@ -293,7 +297,7 @@ class FlareLightCurve(KeplerLightCurve):
         fake_lc : FlareLightCurve
             Light curve with the last iteration of synthetic flares injected.
         """
-        lc = copy.copy(self)
+        lc = copy.deepcopy(self)
         lc = lc.find_gaps()
         lc = find_iterative_median(lc)
         columns =  ['istart', 'istop', 'cstart', 'cstop', 'tstart', 'tstop',
@@ -351,7 +355,7 @@ class FlareLightCurve(KeplerLightCurve):
             The flares attribute is modified, now containing `rec_prob`
             and `ed_rec_corr` columns.
         """
-        flc = copy.copy(self)
+        flc = copy.deepcopy(self)
         if ((flc.detrended_flux is None) & (inject_before_detrending==False)):
             LOG.error('Please de-trend light curve first or set '
                           'inject_before_detrending=True. The latter is advised.')
@@ -365,15 +369,15 @@ class FlareLightCurve(KeplerLightCurve):
         if flc.flares.shape[0]>0:
             f2 = pd.DataFrame(columns=flc.flares.columns)
             for i,f in flc.flares.iterrows():
-                res = characterize_one_flare(flc, f, complexity=complexity,
+                res, data, fake_lc = characterize_one_flare(flc, f, complexity=complexity,
                                              inject_before_detrending=inject_before_detrending,
                                              **kwargs)
                 f2 = f2.append(res, ignore_index=True)
             flc.flares = f2
-            return flc
+            return flc, data, fake_lc
         else:
             LOG.info('No flares to characterize.')
-            return flc
+            return flc, [], []
 
     def mark_flagged_flares(self, explain=False):
         """
