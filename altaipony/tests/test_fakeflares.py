@@ -29,17 +29,17 @@ def test_mod_random():
 
 def test_equivalent_duration_ratio():
     bins = 5
-    minval= 3e-4
+    minval= 1e-5
     maxval = 1200.3
-    data = pd.DataFrame({'ed_rec': [minval,1e-5,2e-5,4e-4,6e-2,0.54,1.33,4.5,12.2,44,maxval],
-                         'ed_inj': [1e-4,6e-4,8e-4,4e-3,0.1,1.1,1.9,6.8,16.2,49,1500.3],
+    data = pd.DataFrame({'ed_rec': [minval,2e-5,2e-5,4e-4,1e-2,6e-2,0.54,1.33,4.5,12.2,44,maxval],
+                         'ed_inj': [1e-4,6e-4,8e-4,4e-3,0.05,0.1,1.1,1.9,6.8,16.2,49,1500.3],
                          'cstart':1})
-    ed_rat = equivalent_duration_ratio(data, bins=bins)
-    assert ed_rat.shape[0] == np.rint(data.shape[0]/3.)-1
-    assert 1e-4 == ed_rat.loc[0,'min_ed_rec']
-    assert maxval*1.01 == ed_rat.loc[2,'max_ed_rec']
-    assert 1/((0.06/.1+.54/1.1+1.33/1.9+4.5/6.8)/4.) == ed_rat.loc[1,'rel_rec']
-    return ed_rat, data
+    ed_rat = equivalent_duration_ratio(data, bins=bins, fixed_bins=True)
+    assert ed_rat.shape[0] == 5
+    assert minval*0.99 == pytest.approx(ed_rat.loc[0,'min_ed_rec'])
+    assert maxval*1.01 == ed_rat.loc[4,'max_ed_rec']
+    assert 5. == ed_rat.loc[1,'rel_rec']
+
 
 def test_recovery_probability():
     bins = 5
@@ -48,11 +48,11 @@ def test_recovery_probability():
     data = pd.DataFrame({'ed_rec': [0.,0.,0.,0.,0.,0.,1.33,4.5,12.2,44,901.3],
                          'ed_inj': [minval,6e-4,8e-4,4e-3,0.1,1.1,1.9,6.8,16.2,49,maxval],
                          'cstart':1})
-    rec_prob = recovery_probability(data,bins=bins)
-    assert rec_prob.rec_prob.astype(float).tolist() == [0.,0.5,1.]
-    assert rec_prob.shape[0] == 3
+    rec_prob = recovery_probability(data,bins=bins,fixed_bins=True)
+    assert rec_prob.rec_prob.astype(float).tolist() == [0.0, 0.0, 0.5, 1.0, 1.0]
+    assert rec_prob.shape[0] == 5
     assert minval*.99 == rec_prob.loc[0,'min_ed_inj']
-    assert maxval*1.01 == rec_prob.loc[2,'max_ed_inj']
+    assert maxval*1.01 == rec_prob.loc[4,'max_ed_inj']
 
 def test_merge_fake_and_recovered_events():
 
@@ -102,8 +102,10 @@ def test_generate_fake_flare_distribution():
 
     n = 10
     dur, ampl = generate_fake_flare_distribution(n, mode='loglog', d=True)
+    print(dur)
+    print(ampl)
     assert dur[2] == pytest.approx(0.13889317143)
-    assert ampl[2] ==  pytest.approx(0.06759607589523)
+    assert ampl[2] ==  pytest.approx(0.1479375816948176)
     assert (dur <= 20).all()
     assert (dur >= 1e-4).all()
     assert (ampl <= 1e2).all()
