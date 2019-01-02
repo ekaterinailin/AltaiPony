@@ -13,6 +13,9 @@
 		    :target: https://github.com/ekaterinailin/AltaiPony/blob/master/LICENSE 
 		    :alt: GitHub	      
 
+
+.. image:: logo.png
+
 AltaiPony
 =========
 
