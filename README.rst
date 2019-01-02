@@ -15,6 +15,8 @@
 
 
 .. image:: logo.png
+   :scale: 50 %
+   :alt: Credit: Elizaveta Ilin, 2018
 
 AltaiPony
 =========
