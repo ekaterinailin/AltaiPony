@@ -131,8 +131,7 @@ def inject_fake_flares(lc, mode='loglog', gapwindow=0.1, fakefreq=.25,
     injected_events = {'duration_d' : dur_fake, 'amplitude' : ampl_fake,
                        'ed_inj' : ed_fake, 'peak_time' : t0_fake}
     fake_lc.fake_flares = fake_lc.fake_flares.append(pd.DataFrame(injected_events),
-                                                     ignore_index=True,
-                                                     sort=True)
+                                                     ignore_index=True,)
     #workaround
     fake_lc.fake_flares = fake_lc.fake_flares[fake_lc.fake_flares.peak_time != 0.]
     return fake_lc
@@ -366,7 +365,7 @@ def merge_complex_flares(data):
             x = d.to_dict()
             x['complex'] = 1
             e = pd.DataFrame(x)
-        data_wo_overlaps = data_wo_overlaps.append(e, ignore_index=True,sort=True)
+        data_wo_overlaps = data_wo_overlaps.append(e, ignore_index=True)
     data_wo_overlaps.loc[data_wo_overlaps.cstart >= maximum,'cstart'] = np.zeros(size)
     data_wo_overlaps.loc[data_wo_overlaps.cstop >= maximum,'cstop'] = np.zeros(size)
     return data_wo_overlaps

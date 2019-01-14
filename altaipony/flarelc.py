@@ -316,8 +316,7 @@ class FlareLightCurve(KeplerLightCurve):
             injection_recovery_results = merge_fake_and_recovered_events(injs, recs)
             irr_w_merged_complex_flares = merge_complex_flares(injection_recovery_results)
             combined_irr = combined_irr.append(irr_w_merged_complex_flares,
-                                                      ignore_index=True,
-                                                      sort=True)
+                                                      ignore_index=True,)
 
             bar.update(i + 1)
         bar.finish()

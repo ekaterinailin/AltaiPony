@@ -145,7 +145,7 @@ def find_flares(flc, minsep=3):
                                       'cstop' : cstop,
                                       'tstart' : tstart,
                                       'tstop' : tstop,}),
-                                      ignore_index=True, sort=True)
+                                      ignore_index=True)
 
     return lc
 

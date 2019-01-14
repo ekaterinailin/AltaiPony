@@ -114,7 +114,8 @@ def from_KeplerLightCurve(lc, origin='KLC', **kwargs):
     -----------
     FlareLightCurve
     """
-    flc = FlareLightCurve(**vars(lc), time_unit=u.day, origin=origin,
+    keys = vars(lc)
+    flc = FlareLightCurve(keys, time_unit=u.day, origin=origin,
                            flux_unit = u.electron/u.s, **kwargs)
     flc = flc[np.isfinite(flc.time)]
 
