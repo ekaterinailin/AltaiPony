@@ -315,7 +315,7 @@ def merge_fake_and_recovered_events(injs, recs):
     merged = injs.merge(recs,how='outer')
     merged_recovered = merged[(merged.tstart < merged.peak_time) & (merged.tstop > merged.peak_time)]
     rest = injs[~injs.amplitude.isin(merged_recovered.amplitude.values)]
-    merged_all = merged_recovered.append(rest,sort=True).drop('temp',axis=1)
+    merged_all = merged_recovered.append(rest).drop('temp',axis=1)
     return merged_all
 
 def merge_complex_flares(data):
