@@ -123,7 +123,7 @@ def test_find_gaps():
 def test_detrend():
     flc = mock_flc()
     try:
-        flc = flc.detrend()
+        flc = flc.detrend(de_niter=3)
         assert flc.detrended_flux.shape == flc.flux.shape
         assert flc.pv == pytest.approx([-4.52464711,  1.98863195, 34.25116362,
                                         0.10506948, -5.9999997 , 17.,
@@ -143,7 +143,7 @@ def test_detrend_fails():
     err_string = ('Only KeplerTargetPixelFile derived FlareLightCurves can be'
               ' passed to detrend().')
     with pytest.raises(ValueError) as err:
-        flc.detrend()
+        flc.detrend(de_niter=3)
     assert err_string == err.value.args[0]
 
 def test_find_flares():
