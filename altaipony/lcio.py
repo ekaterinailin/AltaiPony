@@ -153,23 +153,23 @@ def from_K2SC_file(path, **kwargs):
         ktpf = tpf_list.download()
         klc = ktpf.to_lightcurve()
         #Only use those cadences that are present in all TPF, KLC, and K2SC LC:
-        values, counts = np.unique(np.concatenate((klc.cadenceno, dr.cadence, ktpf.cadenceno)),
+        values, counts = np.unique(np.concatenate((klc.cadenceno, dr['CADENCE'], ktpf.cadenceno)),
                                    return_counts=True)
         cadences = values[ np.where( counts == 3 ) ] #you could check if counts can be 4 or more and throw an exception in that case
         #note that order of cadences is irrelevant for the following to be right
-        dr = dr[ np.isin( dr.cadence, cadences) ]
+        dr = dr[ np.isin( dr['CADENCE '], cadences) ]
         klc = klc[ np.isin( klc.cadenceno, cadences) ]
         ktpf = ktpf[ np.isin( ktpf.cadenceno, cadences)]
 
-        flc = FlareLightCurve(time=dr.time, flux=klc.flux, detrended_flux=dr.flux,
-                              detrended_flux_err=dr.error, cadenceno=dr.cadence,
-                              flux_trends = dr.trtime, targetid=targetid,
+        flc = FlareLightCurve(time=dr['TIME'], flux=klc.flux, detrended_flux=dr['FLUX'],
+                              detrended_flux_err=dr['ERROR'], cadenceno=dr['CADENCE'],
+                              flux_trends = dr['TRTIME'], targetid=targetid,
                               campaign=klc.campaign, centroid_col=klc.centroid_col,
                               centroid_row=klc.centroid_row,time_format=klc.time_format,
                               time_scale=klc.time_scale, ra=klc.ra, dec=klc.dec,
                               channel=klc.channel, time_unit=u.day,
                               flux_unit = u.electron/u.s, origin='K2SC',
-                              pos_corr1=dr.x, pos_corr2=dr.y, quality=klc.quality,
+                              pos_corr1=dr['X'], pos_corr2=dr['Y'], quality=klc.quality,
                               pixel_flux=ktpf.flux, pixel_flux_err=ktpf.flux_err,
                               quality_bitmask=ktpf.quality_bitmask,
                               pipeline_mask=ktpf.pipeline_mask )

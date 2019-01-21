@@ -1,5 +1,6 @@
 import numpy as np
 import pytest
+from astropy.io.fits.hdu.hdulist import fitsopen
 from inspect import currentframe, getframeinfo
 
 from ..flarelc import FlareLightCurve
@@ -92,10 +93,11 @@ def mock_flc(origin='TPF', detrended=False):
     quality[18] = 128
     keys = {'flux' : flux, 'flux_err' : flux_err, 'time' : time,
             'pos_corr1' : np.zeros(n), 'pos_corr2' : np.zeros(n),
-            'cadenceno' : np.arange(n), 'targetid' : 80000000,
+            'cadenceno' : np.arange(n), 'targetid' : 800000000,
             'origin' : origin, 'it_med' : np.full_like(time,500.005),
             'quality' : quality, 'pipeline_mask' : pipeline_mask,
-            'pixel_flux' : pixel_flux,}
+            'pixel_flux' : pixel_flux, 'campaign' : 5, 'ra' : 22.,
+            'dec' : 22., 'mission' : 'K2', 'channel' : 55}
 
     if detrended == False:
         flc = FlareLightCurve(**keys)
@@ -120,10 +122,10 @@ def test_find_gaps():
     lc = lc.find_gaps()
     assert lc.gaps == [(0, 2505), (2505, 3293)] #[(0, 2582), (2582, 3424)]
 
-def test_detrend():
+def test_detrend(**kwargs):
     flc = mock_flc()
     try:
-        flc = flc.detrend(de_niter=3)
+        flc = flc.detrend(de_niter=3,**kwargs)
         assert flc.detrended_flux.shape == flc.flux.shape
         assert flc.pv == pytest.approx([-4.52464711,  1.98863195, 34.25116362,
                                         0.10506948, -5.9999997 , 17.,
@@ -135,7 +137,16 @@ def test_detrend():
     #test non TPF derived LC fails
     #test the shapes are the same for all
     # test that the necessary attributes are kept
-    pass
+
+def test_detrend_IO():
+    #the mock_flc needs ra, dec, mission, and channel only for k2sc detrending!
+    test_detrend(save_k2sc=True, folder='{}/tests/testfiles/'.format(PACKAGEDIR))
+    flc = fitsopen('{}/tests/testfiles/pony_k2sc_k2_llc_800000000-c05_kepler_v2_lc.fits'.format(PACKAGEDIR))
+    flc = flc[1].data
+    mockflc = mock_flc()
+    print (flc['TRTIME']-mockflc.flux)
+    assert (flc['TIME'] == mockflc.time).all()
+    assert (flc['CADENCE'] == mockflc.cadenceno).all()
 
 def test_detrend_fails():
     """If detrend fails, an error is raised with given string."""

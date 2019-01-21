@@ -204,9 +204,11 @@ class FlareLightCurve(KeplerLightCurve):
 
         return lc
 
-    def detrend(self, de_niter=3, **kwargs):
+    def detrend(self, save_k2sc=False, folder='', de_niter=3, **kwargs):
         """
         De-trends a FlareLightCurve using ``K2SC``.
+        Optionally saves the LightCurve in a fits file that can
+        be read as K2SC file. 
         
         Parameters:
         ----------
@@ -214,6 +216,12 @@ class FlareLightCurve(KeplerLightCurve):
             Differential Evolution global optimizer parameter. K2SC
             default is 150, here set to 3 as a safety net to avoid
             unintenional computational effort.
+        save_k2sc : False or bool
+            If True, the light curve is saved as a fits file to a
+            given folder.
+        folder : str
+            If folder is empty, the fits file will be stored in the
+            working directory.
         kwargs : dict
             Keyword arguments to pass to k2sc 
 
@@ -249,6 +257,12 @@ class FlareLightCurve(KeplerLightCurve):
                 LOG.error('Detrending failed because probably Cholesky '
                           'decomposition failed. Try again, you shall succeed.')
             new_lc.__class__ = FlareLightCurve
+            
+            if save_k2sc == True:
+                new_lc.to_fits(path='{0}pony_k2sc_k2_llc_{1}-c{2:02d}_kepler_v2_lc.fits'.format(folder, new_lc.targetid, new_lc.campaign),
+                               overwrite=True,
+                               flux=new_lc.detrended_flux, error=new_lc.detrended_flux_err, time=new_lc.time,
+                               trtime=new_lc.flux_trends, cadence=new_lc.cadenceno.astype(np.int32), x=new_lc.pos_corr1, y=new_lc.pos_corr2)
             return new_lc
 
     def find_flares(self, minsep=3, fake=False):
@@ -442,3 +456,4 @@ class FlareLightCurve(KeplerLightCurve):
         flc.flares[colname] = flc.flares.apply(sat, axis=1)
 
         return flc
+
