@@ -13,6 +13,12 @@
 		    :target: https://github.com/ekaterinailin/AltaiPony/blob/master/LICENSE 
 		    :alt: GitHub	      
 
+
+.. image:: logo.png
+   :height: 100px
+   :width: 100px
+   :alt: Credit: Elizaveta Ilin, 2018
+
 AltaiPony
 =========
 
