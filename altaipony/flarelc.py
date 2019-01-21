@@ -204,9 +204,18 @@ class FlareLightCurve(KeplerLightCurve):
 
         return lc
 
-    def detrend(self, de_niter=3):
+    def detrend(self, de_niter=3, **kwargs):
         """
         De-trends a FlareLightCurve using ``K2SC``.
+        
+        Parameters:
+        ----------
+        de_niter : int
+            Differential Evolution global optimizer parameter. K2SC
+            default is 150, here set to 3 as a safety net to avoid
+            unintenional computational effort.
+        kwargs : dict
+            Keyword arguments to pass to k2sc 
 
         Returns
         --------
@@ -226,7 +235,7 @@ class FlareLightCurve(KeplerLightCurve):
             #K2SC MAGIC
             new_lc.__class__ = k2sc_lc
             try:
-                new_lc.k2sc(de_niter=de_niter)
+                new_lc.k2sc(de_niter=de_niter, **kwargs)
                 new_lc.detrended_flux = (new_lc.corr_flux - new_lc.tr_time
                                       + np.nanmedian(new_lc.tr_time))
                 new_lc.detrended_flux_err = copy.copy(new_lc.flux_err) # does k2sc share their uncertainties somewhere?

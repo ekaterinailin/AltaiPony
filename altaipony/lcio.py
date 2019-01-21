@@ -115,14 +115,10 @@ def from_KeplerLightCurve(lc, origin='KLC', **kwargs):
     FlareLightCurve
     """
     attributes = lc.__dict__
-    x = [a for a in attributes if not(a[0].startswith('__') and a[0].endswith('__'))]
-    #print(attributes)
-    z = attributes.copy()   # start with x's keys and values
+    z = attributes.copy() 
     z.update(kwargs)
-    print(z)
-   # keys = {**attributes, **kwargs}
     flc = FlareLightCurve(time_unit=u.day, origin=origin,
-                           flux_unit = u.electron/u.s, **z)#, **kwargs
+                           flux_unit = u.electron/u.s, **z)
     flc = flc[np.isfinite(flc.time)]
 
     return flc
