@@ -100,6 +100,7 @@ def find_flares(flc, minsep=3):
         error = lc.detrended_flux_err[le:ri]
         flux = lc.detrended_flux[le:ri]
         median = lc.it_med[le:ri]
+
         # run final flare-find on DATA - MODEL
         isflare = find_flares_in_cont_obs_period(flux, median, error)
 

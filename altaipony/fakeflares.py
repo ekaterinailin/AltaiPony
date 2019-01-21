@@ -137,7 +137,7 @@ def inject_fake_flares(lc, mode='loglog', gapwindow=0.1, fakefreq=.25,
     return fake_lc
 
 def generate_fake_flare_distribution(nfake, ampl=[1e-4, 1e2], dur=[7e-3, 2],
-                                     rat=[1e-3,1e4], mode='loglog', **kwargs ):
+                                     mode='loglog', **kwargs ):
 
     '''
     Creates different distributions of fake flares to be injected into light curves.
@@ -155,7 +155,7 @@ def generate_fake_flare_distribution(nfake, ampl=[1e-4, 1e2], dur=[7e-3, 2],
         Amplitude range in relative flux units.
     dur: [10, 2e4] or list of floats
         Duration range in days.
-    mode: 'loglog', 'hawley2014', 'uniform_ratio', or 'uniform'
+    mode: 'loglog', 'hawley2014' or 'uniform'
         Distribution of fake flares in (duration, amplitude) space.
     kwargs : dict
         Keyword arguments to pass to mod_random
@@ -165,27 +165,11 @@ def generate_fake_flare_distribution(nfake, ampl=[1e-4, 1e2], dur=[7e-3, 2],
     dur_fake: durations of generated fake flares in days
     ampl_fake: amplitudes of generated fake flares in relative flux units
     '''
-    def generate_range(n, tup, **kwargs):
-        return (mod_random(n, **kwargs) * (tup[1] - tup[0]) + tup[0])
-
     if mode=='uniform':
 
-        dur_fake =  generate_range(nfake, dur, **kwargs)
-        ampl_fake = generate_range(nfake, ampl, **kwargs)
-
-    elif mode=='uniform_ratio':
-        dur_fake =  generate_range(nfake, dur, **kwargs)
-        ampl_fake = generate_range(nfake, ampl, **kwargs)
-        rat_fake = ampl_fake/dur_fake
-        misfit = np.where(~((rat_fake < rat[1]) & (rat_fake > rat[0])))
-
-        while len(misfit[0]) > 0:
-            dur_fake_mf =  generate_range(len(misfit[0]), dur, **kwargs)
-            ampl_fake_mf = generate_range(len(misfit[0]), ampl, **kwargs)
-            dur_fake[misfit] = dur_fake_mf
-            ampl_fake[misfit] = ampl_fake_mf
-            rat_fake = ampl_fake/dur_fake
-            misfit = np.where(~((rat_fake < rat[1]) & (rat_fake > rat[0])))
+        dur_fake =  (mod_random(nfake, **kwargs) * (dur[1] - dur[0]) + dur[0])
+        ampl_fake = (mod_random(nfake, **kwargs) * (ampl[1] - ampl[0]) + ampl[0])
+        dur_fake = dur_fake
 
     elif mode=='hawley2014':
 
@@ -203,32 +187,13 @@ def generate_fake_flare_distribution(nfake, ampl=[1e-4, 1e2], dur=[7e-3, 2],
         dur_fake = np.power(np.full(nfake,10), lndur_fake)
 
     elif mode=='loglog':
-        def generate_loglog(dur, ampl, nfake):
 
-            lnampl = [np.log10(i) for i in ampl]
-            lnampl_fake = generate_range(nfake, lnampl, **kwargs)
-            lndur = [np.log10(i) for i in dur]
-            lndur_fake = generate_range(nfake, lndur, **kwargs)
-            return lndur_fake, lnampl_fake
-
-        lndur_fake, lnampl_fake = generate_loglog(dur, ampl, nfake)
-        rat_min, rat_max = [np.log10(i) for i in rat]
-        lnrat_fake = lnampl_fake-lndur_fake
-        misfit = np.where(~((lnrat_fake < rat_max) & (lnrat_fake > rat_min)))
-        wait = 0
-
-        while len(misfit[0]) > 0:
-            wait+=1
-            lndur_misfit, lnampl_misfit = generate_loglog(dur, ampl, len(misfit[0]))
-            lndur_fake[misfit] = lndur_misfit
-            lnampl_fake[misfit] = lnampl_misfit
-            lnrat_fake = lnampl_fake-lndur_fake
-            misfit = np.where(~((lnrat_fake < rat_max) & (lnrat_fake > rat_min)))
-            if wait > 100:
-                LOG.exception('Generating fake flares takes too long.'
-                              'Reconsider dur_factor, ampl_factor, and ratio_factor.')
-                raise ValueError
-
+        ampl_max, ampl_min = [np.log10(i) for i in ampl]
+        lnampl_fake = (mod_random(nfake, **kwargs) * (ampl_max - ampl_min) + ampl_min)
+        rand = mod_random(nfake, **kwargs)
+        dur_min, dur_max = [np.log10(i) for i in dur]
+        lndur_fake = np.array([rand[a] * (dur_max - dur_min) + dur_min
+                              for a in range(nfake)])
         ampl_fake = np.power(np.full(nfake,10), lnampl_fake)
         dur_fake = np.power(np.full(nfake,10), lndur_fake)
 
@@ -364,12 +329,12 @@ def merge_complex_flares(data):
     -----------
     data : DataFrame
         Columns: ['amplitude', 'cstart', 'cstop', 'duration_d', 'ed_inj', 'ed_rec',
-       'ed_rec_err', 'istart', 'istop', 'peak_time', 'tstart', 'tstop','ampl_rec']
+       'ed_rec_err', 'istart', 'istop', 'peak_time', 'tstart', 'tstop']
 
     Return
     -------
     DataFrame with the same columns as the input but with complex flares merged
-    together. A new 'complex' column contains the number of simple flares
+    together. The 'complex' column contains the number of simple flares
     superimposed in a given event.
     """
     data = data.fillna(0)
@@ -394,8 +359,7 @@ def merge_complex_flares(data):
             'istart' : d.istart.min(),
             'istop' : d.istop.max(),
             'tstart' : d.tstart.min(),
-            'tstop' : d.tstop.max(),
-            'ampl_rec' : d.ampl_rec.max()}
+            'tstop' : d.tstop.max(),}
             e = pd.DataFrame(row, index=[0])
         else:
             x = d.to_dict()
@@ -406,7 +370,7 @@ def merge_complex_flares(data):
     data_wo_overlaps.loc[data_wo_overlaps.cstop >= maximum,'cstop'] = np.zeros(size)
     return data_wo_overlaps
 
-def recovery_probability(data, bins=30, bintype='log', fixed_bins=False):
+def recovery_probability(data, bins=30):
     """
     Calculate a look-up table that returns the recovery probability of a flare
     with some true equivalent duration in seconds.
@@ -418,9 +382,6 @@ def recovery_probability(data, bins=30, bintype='log', fixed_bins=False):
         whether this flare was recovered or not.
     bins : 30 or int
         Size of look-up table.
-    bintype : 'log' or 'lin'
-
-    fixed_bins : False or bool
 
     Return
     ------
@@ -428,29 +389,20 @@ def recovery_probability(data, bins=30, bintype='log', fixed_bins=False):
     probability in these bins.
     """
     data['rec'] = data.ed_rec.astype(bool).astype(float)
-    if fixed_bins == False:
-        num = min(int(np.rint(data.shape[0]/100)), bins + 1)
-    else:
-        num = bins + 1
-    if bintype == 'log':
-        bins = np.logspace(np.log10(data.ed_inj.min()*.99),
-                           np.log10(data.ed_inj.max()*1.01),
-                           num=num)
-    elif bintype == 'lin':
-        bins = np.linspace(data.ed_inj.min(), data.ed_inj.max(), num=num)
-    else:
-        LOG.error('Bintype not recongnised. Use log or lin.')
+    bins = np.logspace(np.log10(max(data.ed_inj.min()*.99, 1e-4)),
+                       np.log10(data.ed_inj.max()*1.01),
+                       num=bins)
     group = data.groupby(pd.cut(data.ed_inj,bins))
     rec_prob = (pd.DataFrame({'min_ed_inj' : bins[:-1],
                              'max_ed_inj' : bins[1:],
                              'mid_ed_inj' : (bins[:-1]+bins[1:])/2.,
-                             'rec_prob' : group.rec.mean()})
+                             'rec_prob' : group.rec.sum()/group.ed_inj.count()})
                              .reset_index()
                              .drop('ed_inj',axis=1))
 
     return rec_prob
 
-def equivalent_duration_ratio(data, bins=30, bintype='log', fixed_bins=False):
+def equivalent_duration_ratio(data, bins=30):
     """
     Calculate a look-up table that returns the ratio of a flare's recovered
     equivalent duration to the injected one.
@@ -461,10 +413,7 @@ def equivalent_duration_ratio(data, bins=30, bintype='log', fixed_bins=False):
         Table with columns that contain injected and recovered equivalent
         durations of synthetic flares.
     bins : 30 or int
-        Maximum size of look-up table.
-    bintype : 'log' or 'lin'
-
-    fixed_bins : False or bool
+        Size of look-up table.
 
     Return
     ------
@@ -473,32 +422,23 @@ def equivalent_duration_ratio(data, bins=30, bintype='log', fixed_bins=False):
     """
     d = data[data.ed_rec>0]
     d = d[['ed_inj','ed_rec']]
-    d['rel'] = (d.ed_rec/d.ed_inj).astype(float)
-    if fixed_bins == False:
-        num = min(int(np.rint(data.shape[0]/100)), bins + 1)
-    else:
-        num = bins + 1
-
-    if bintype=='log':
-        bins = np.logspace(np.log10(d.ed_rec.min() * .99),
-                           np.log10(d.ed_rec.max() * 1.01),
-                           num=num)
-    elif bintype == 'lin':
-        bins = np.linspace(d.ed_rec.min(), d.ed_rec.max(), num=num)
+    d['rel']=d.ed_inj/d.ed_rec
+    bins = np.logspace(np.log10(max(data.ed_rec.min()*.99, 1e-4)),
+                       np.log10(data.ed_rec.max()*1.01),
+                       num=bins)
     group = d.groupby(pd.cut(d.ed_rec,bins))
     ed_rat = (pd.DataFrame({'min_ed_rec' : bins[:-1],
                              'max_ed_rec' : bins[1:],
                              'mid_ed_rec' : (bins[:-1]+bins[1:])/2.,
-                             'rel_rec' : 1/group.rel.mean()})
+                             'rel_rec' : group.rel.mean()})
                              .reset_index()
                              .drop('ed_rec',axis=1)
                              .dropna(how='any'))
 
     return ed_rat
 
-def characterize_one_flare(flc, f, ampl_factor=[0.01,2.], dur_factor=[0.01,2.],
-                           iterations=200, complexity='simple_only',
-                           ratio_factor=[0.5,2.], **kwargs):
+def characterize_one_flare(flc, f, rmax=3., rmin=.05, iterations=200,
+                           complexity='simple_only', **kwargs):
     """
     Takes the data of a recovered flare and return the data with
     information about recovery probability and corrected equivalent
@@ -510,10 +450,10 @@ def characterize_one_flare(flc, f, ampl_factor=[0.01,2.], dur_factor=[0.01,2.],
 
     f : Series
         A row from the FlareLightCurve.flares DataFrame
-    dur_factor
-    ampl_factor
-    ratio_factor : 0.2 or float
-
+    rmax : 3. or float >1.
+        Upper bound of amplitude and duration range relative to recovered values.
+    rmin : .05 or float <1.
+        Lower bound of amplitude and duration range relative to recovered values.
     iterations : 200 or int
         Number of iterations for injection/recovery sampling.
     complexity : 'simple_only' or str
@@ -528,22 +468,12 @@ def characterize_one_flare(flc, f, ampl_factor=[0.01,2.], dur_factor=[0.01,2.],
     -------
     Same as f but with 'ed_rec_corr' and 'rec_prob' keys added.
     """
-    for a in [ratio_factor, ampl_factor, dur_factor]:
-        if a[1] < 1.:
-            LOG.exception('All maximum factors must be >=1.')
-        elif a[0] >1.:
-            LOG.exception('All minimum factors must be <=1.')
+    if rmax < 1.:
+        LOG.exception('rmax must be >=1.')
+    elif rmin >1.:
+        LOG.exception('rmin must be <=1.')
     def relr(x, ed_rat):
-        try:
-            note=''
-            erc = ed_rat.rel_rec[(x>ed_rat.min_ed_rec) & (x<=ed_rat.max_ed_rec)].iloc[0]
-            return erc, note
-        except IndexError:
-            LOG.info('Recovery probability may be too low to find enough injected'
-                     ' flares to calculate a corrected ED. Will return recovery '
-                     'probability for recovered ED instead of corrected ED.')
-            note = '(for uncorrected ED)'
-            return 0, note
+        return ed_rat.rel_rec[(x>ed_rat.min_ed_rec) & (x<=ed_rat.max_ed_rec)].iloc[0]
 
     def recr(x, rec_prob):
         return rec_prob.rec_prob[(x>rec_prob.min_ed_inj) & (x<=rec_prob.max_ed_inj)].iloc[0]
@@ -555,21 +485,12 @@ def characterize_one_flare(flc, f, ampl_factor=[0.01,2.], dur_factor=[0.01,2.],
                   'necessarily the local). Recovery very unlikely.\n')
         f2['ed_rec_corr'] = 0.
         f2['rec_prob'] = 0.
-        return f2, [],[]
+        return f2
 
-    dur = (f.tstop - f.tstart) * np.array(dur_factor)
-    rat = f.ampl_rec / (f.tstop - f.tstart) * np.array(ratio_factor)
-    ampl = f.ampl_rec * np.array(ampl_factor)
-
-    # If the scale factor cuts out too much from the ampl-dur parameter space,
-    # shrink it accordingly:
-    from operator import le,ge
-    for (i, op) in [(0,ge),(1,le)]:
-        if op(dur[i],ampl[i]/rat[i]):
-            ampl[i] = rat[i]*dur[i]
-
-    data, g = flc.sample_flare_recovery(ampl=ampl, dur=dur, rat=rat,
-                                        iterations = iterations, mode='uniform_ratio',
+    dur = f.tstop-f.tstart
+    data, g = flc.sample_flare_recovery(ampl=[f.ampl_rec*rmin, f.ampl_rec*rmax],
+                                        dur=[dur*rmin*10, dur*rmax*10],
+                                        iterations = iterations,
                                         **kwargs)
 
     data = resolve_complexity(data, complexity=complexity)
@@ -577,22 +498,18 @@ def characterize_one_flare(flc, f, ampl_factor=[0.01,2.], dur_factor=[0.01,2.],
         LOG.info('This is just an outlier. Synthetic injection yields no recoveries.\n')
         f2['ed_rec_corr'] = 0.
         f2['rec_prob'] = 0.
-        return f2, data, g
+        return f2
     else:
-        data = data[(data.ed_inj > 0.05*f.ed_rec) & (data.ed_inj < 20.*f.ed_rec)]
-        rec_prob = recovery_probability(data, bintype='lin')
-        ed_rat = equivalent_duration_ratio(data, bintype='lin')
-        erc, note = relr(f2.ed_rec, ed_rat)
-        if erc == 0:
-            rp = recr(f2.ed_rec, rec_prob)
-        else:
-            erc *= f2.ed_rec
-            rp = recr(erc, rec_prob)
-        LOG.info('Corrected ED = {}. Recovery probability {} = {}.\n'.format(erc, note, rp))
+        data = data[(data.ed_inj > rmin*f.ed_rec) & (data.ed_inj < 20.*f.ed_rec)]
+        rec_prob = recovery_probability(data)
+        ed_rat = equivalent_duration_ratio(data)
+        erc = relr(f2.ed_rec, ed_rat)*f2.ed_rec
+        rp = recr(erc, rec_prob)
+        LOG.info('Corrected ED = {}. Recovery probability = {}.\n'.format(erc, rp))
         f2['ed_rec_corr'] = erc
         f2['rec_prob'] = rp
 
-    return f2, data, g
+    return f2
 
 def resolve_complexity(data, complexity='all'):
     """
@@ -600,15 +517,15 @@ def resolve_complexity(data, complexity='all'):
     just give the fraction of complex flares in the synthetic sample.
     """
     if complexity == 'simple_only':
-        data = data[data.complex == 1]
-        data.loc[:,'complex_fraction'] = 0.
+        data = data[data.complex == False]
+        data['complex_fraction'] = 0.
         return data
     elif complexity == 'complex_only':
-        data = data[data.complex > 1]
-        data.loc[:,'complex_fraction'] = 0.
+        data = data[data.complex == True]
+        data['complex_fraction'] = 1.
         return data
     elif complexity == 'all':
         count_complex = data.complex.astype(float).sum()
         size = data.shape[0]
-        data['complex_fraction'] = (count_complex-size)/size
+        data['complex_fraction'] = count_complex/size
         return data

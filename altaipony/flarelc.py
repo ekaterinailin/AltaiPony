@@ -282,11 +282,7 @@ class FlareLightCurve(KeplerLightCurve):
         if ((fake==False) & (self.flares.shape[0]>0)):
             return self
         else:
-            lc = copy.deepcopy(self)
-            #re-init flares
-            columns = ['istart', 'istop', 'cstart', 'cstop', 'tstart',
-                       'tstop', 'ed_rec', 'ed_rec_err', 'ampl_rec']
-            lc.flares = pd.DataFrame(columns=columns)
+            lc = copy.copy(self)
             #find continuous observing periods
             lc = lc.find_gaps()
             #find the true median value iteratively
@@ -320,7 +316,7 @@ class FlareLightCurve(KeplerLightCurve):
         fake_lc : FlareLightCurve
             Light curve with the last iteration of synthetic flares injected.
         """
-        lc = copy.deepcopy(self)
+        lc = copy.copy(self)
         lc = lc.find_gaps()
         lc = find_iterative_median(lc)
         columns =  ['istart', 'istop', 'cstart', 'cstop', 'tstart', 'tstop',
@@ -350,7 +346,7 @@ class FlareLightCurve(KeplerLightCurve):
         return combined_irr, fake_lc
 
     def characterize_flares(self, inject_before_detrending=False,
-                            complexity = 'simple_only', **kwargs):
+                            complexity = 'all', **kwargs):
         """
         Add information about recovery probability and systematic energy
         correction for every flare in a light curve using injection/recovery
@@ -377,7 +373,7 @@ class FlareLightCurve(KeplerLightCurve):
             The flares attribute is modified, now containing `rec_prob`
             and `ed_rec_corr` columns.
         """
-        flc = copy.deepcopy(self)
+        flc = copy.copy(self)
         if ((flc.detrended_flux is None) & (inject_before_detrending==False)):
             LOG.error('Please de-trend light curve first or set '
                           'inject_before_detrending=True. The latter is advised.')
@@ -391,7 +387,7 @@ class FlareLightCurve(KeplerLightCurve):
         if flc.flares.shape[0]>0:
             f2 = pd.DataFrame(columns=flc.flares.columns)
             for i,f in flc.flares.iterrows():
-                res, data, fake_lc = characterize_one_flare(flc, f, complexity=complexity,
+                res = characterize_one_flare(flc, f, complexity=complexity,
                                              inject_before_detrending=inject_before_detrending,
                                              **kwargs)
                 f2 = f2.append(res, ignore_index=True)
