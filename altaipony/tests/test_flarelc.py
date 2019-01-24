@@ -131,7 +131,7 @@ def test_detrend(**kwargs):
     try:
         flc = flc.detrend(de_niter=3,**kwargs)
         assert flc.detrended_flux.shape == flc.flux.shape
-        assert flc.pv[0] == pytest.approx([-4.52464711],rel=0.1)
+        assert flc.pv[0] == pytest.approx(-4.52464711,rel=0.1)
     except np.linalg.linalg.LinAlgError:
         warning.warn('Detrending of mock LC failed, this happens.')
         pass

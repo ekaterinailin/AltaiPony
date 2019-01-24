@@ -360,8 +360,9 @@ class FlareLightCurve(KeplerLightCurve):
         bar.finish()
         return combined_irr, fake_lc
 
-    def characterize_flares(self, inject_before_detrending=False,
-                            complexity = 'simple_only', **kwargs):
+    def characterize_flares(self, inject_before_detrending=False, de_niter=3,
+                            complexity = 'simple_only', save_example=False, 
+                            folder='', **kwargs):
         """
         Add information about recovery probability and systematic energy
         correction for every flare in a light curve using injection/recovery
@@ -378,7 +379,12 @@ class FlareLightCurve(KeplerLightCurve):
             If 'complex_only' is used, all simple flares will be ignored.
             If 'all' is used, all flares are used for characterization but the
             fraction of complex flares is returned.
-
+        de_niter : 3 or int
+            Number of K2SC GP iterations, set to 3 to avoid unintenional computational
+            effort.
+        save_example : False or bool
+            If True, save a fits file with inject_fake_flares after de-trending from the
+            last iteration as an example.
         kwargs : dict
             Keyword arguments to pass to :py:func:`characterize_one_flare`.
 
@@ -393,8 +399,8 @@ class FlareLightCurve(KeplerLightCurve):
             LOG.error('Please de-trend light curve first or set '
                           'inject_before_detrending=True. The latter is advised.')
             raise AttributeError('detrended_flux attribute is missing.')
-        elif ((flc.detrended_flux is None) & (inject_before_detrending==True)):
-            flc = flc.detrend()
+        elif (np.isnan(flc.detrended_flux).all() & (inject_before_detrending==True)):
+            flc = flc.detrend(de_niter=de_niter)
             flc = flc.find_flares()
             flc = find_iterative_median(flc)
         if flc.flares.shape[0]==0:
@@ -407,6 +413,11 @@ class FlareLightCurve(KeplerLightCurve):
                                              **kwargs)
                 f2 = f2.append(res, ignore_index=True)
             flc.flares = f2
+            if save_example == True:
+                new_lc.to_fits(path='{0}pony_fake_k2_llc_{1}-c{2:02d}_kepler_v2_lc.fits'.format(folder, new_lc.targetid, new_lc.campaign),
+                               overwrite=True,
+                               flux=new_lc.detrended_flux, error=new_lc.detrended_flux_err, time=new_lc.time,
+                               trtime=new_lc.flux_trends, cadence=new_lc.cadenceno.astype(np.int32), x=new_lc.pos_corr1, y=new_lc.pos_corr2)
             return flc
         else:
             LOG.info('No flares to characterize.')
