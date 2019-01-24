@@ -94,6 +94,9 @@ def find_flares(flc, minsep=3):
     lc = copy.deepcopy(flc)
     istart = np.array([], dtype='int')
     istop = np.array([], dtype='int')
+    
+    if np.isnan(lc.detrended_flux).all():
+        raise TypeError('Flare finding only works on de-trended light curves.')
 
     #Now work on periods of continuous observation with no gaps
     for (le,ri) in lc.gaps:

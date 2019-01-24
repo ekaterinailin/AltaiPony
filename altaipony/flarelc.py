@@ -123,13 +123,24 @@ class FlareLightCurve(KeplerLightCurve):
         self.origin = origin
         self.detrended_flux = detrended_flux
         self.detrended_flux_err = detrended_flux_err
-        self.it_med = it_med
         self.pixel_flux = pixel_flux
         self.pixel_flux_err = pixel_flux_err
         self.pipeline_mask = pipeline_mask
+        self.it_med = it_med
 
         columns = ['istart', 'istop', 'cstart', 'cstop', 'tstart',
                    'tstop', 'ed_rec', 'ed_rec_err', 'ampl_rec']
+        
+        if detrended_flux is None:
+            self.detrended_flux = np.full_like(flux, np.nan)
+        else:
+            self.detrended_flux = detrended_flux
+            
+        if detrended_flux_err is None:
+            self.detrended_flux_err = np.full_like(flux, np.nan)
+        else:
+            self.detrended_flux_err = detrended_flux_err
+        
         if flares is None:
             self.flares = pd.DataFrame(columns=columns)
         else:
@@ -461,3 +472,47 @@ class FlareLightCurve(KeplerLightCurve):
 
         return flc
 
+    def append(self, others):
+        """
+        Append FlareLightCurve objects. Copied from lightkurve
+        Parameters
+        ----------
+        others : LightCurve object or list of LightCurve objects
+            Light curves to be appended to the current one.
+        Returns
+        -------
+        new_lc : LightCurve object
+            Concatenated light curve.
+        """
+        if not hasattr(others, '__iter__'):
+            others = [others]
+        new_lc = copy.deepcopy(self)
+        for i in range(len(others)):
+            new_lc.time = np.append(new_lc.time, others[i].time)
+            new_lc.flux = np.append(new_lc.flux, others[i].flux)
+            new_lc.flux_err = np.append(new_lc.flux_err, others[i].flux_err)
+            if hasattr(new_lc, 'cadenceno'):
+                new_lc.cadenceno = np.append(new_lc.cadenceno, others[i].cadenceno)  # KJM
+            if hasattr(new_lc, 'quality'):
+                new_lc.quality = np.append(new_lc.quality, others[i].quality)
+            if hasattr(new_lc, 'centroid_col'):
+                new_lc.centroid_col = np.append(new_lc.centroid_col, others[i].centroid_col)
+            if hasattr(new_lc, 'centroid_row'):
+                new_lc.centroid_row = np.append(new_lc.centroid_row, others[i].centroid_row)
+            if hasattr(new_lc, 'pos_corr1'):
+                new_lc.pos_corr1 = np.append(new_lc.pos_corr1, others[i].pos_corr1)
+            if hasattr(new_lc, 'pos_corr2'):
+                new_lc.pos_corr2 = np.append(new_lc.pos_corr2, others[i].pos_corr2)
+            if hasattr(new_lc, 'detrended_flux'):
+                new_lc.detrended_flux = np.append(new_lc.detrended_flux, others[i].detrended_flux)
+            if hasattr(new_lc, 'detrended_flux_err'):
+                new_lc.detrended_flux_err = np.append(new_lc.detrended_flux_err, others[i].detrended_flux_err)
+            if hasattr(new_lc, 'flux_trends'):
+                new_lc.flux_trends = np.append(new_lc.flux_trends, others[i].flux_trends)
+            if hasattr(new_lc, 'it_med'):
+                new_lc.it_med = np.append(new_lc.it_med, others[i].it_med, axis=0)
+            if hasattr(new_lc, 'pixel_flux'):
+                new_lc.pixel_flux = np.append(new_lc.pixel_flux, others[i].pixel_flux,axis=0)
+            if hasattr(new_lc, 'pixel_flux_err'):
+                new_lc.pixel_flux_err = np.append(new_lc.pixel_flux_err, others[i].pixel_flux_err,axis=0)
+        return new_lc

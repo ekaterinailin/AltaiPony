@@ -83,9 +83,11 @@ def mock_flc(origin='TPF', detrended=False, ampl=1., dur=1):
     if detrended==False:
         flux = np.sin(time/2)*7. + 500. +flux_err
         pixel_flux = np.random.rand(len(time),3,3)/100.+500.+np.sin(pixel_time/2)*7.
+        pixel_flux_err = np.random.rand(len(time),3,3)/100.
     else:
         flux = 500. + flux_err
         pixel_flux = np.random.rand(len(time),3,3)/100.+500.
+        pixel_flux_err = np.random.rand(len(time),3,3)/100.
     flux[15:15+dur] += 500.*ampl
     flux[15+dur:15+2*dur] += 250.*ampl
     flux[15+2*dur:15+3*dur] += 130.*ampl
@@ -98,7 +100,8 @@ def mock_flc(origin='TPF', detrended=False, ampl=1., dur=1):
             'origin' : origin, 'it_med' : np.full_like(time,500.005),
             'quality' : quality, 'pipeline_mask' : pipeline_mask,
             'pixel_flux' : pixel_flux, 'campaign' : 5, 'ra' : 22.,
-            'dec' : 22., 'mission' : 'K2', 'channel' : 55}
+            'dec' : 22., 'mission' : 'K2', 'channel' : 55, 
+            'pixel_flux_err' : pixel_flux_err}
 
     if detrended == False:
         flc = FlareLightCurve(**keys)
@@ -170,3 +173,15 @@ def test_find_flares():
     assert flc.flares['cstart'][0] == 15
     assert flc.flares['tstart'][0] == pytest.approx(0.3125, rel=1e-4)
     assert flc.flares['tstop'][0] == pytest.approx(0.395833, rel=1e-4)
+    
+def test_append():
+    flc1 = mock_flc(detrended=True)
+    flc2 = mock_flc()
+    flc = flc1.append(flc2)
+    assert flc.flux.shape[0] == 2000
+    assert flc.flux_err.shape[0] == 2000
+    assert flc.detrended_flux.shape[0] == 2000
+    assert flc.detrended_flux.shape[0] == 2000
+    assert flc.pixel_flux.shape[0] == 2000    
+    assert flc.pixel_flux_err.shape[0] == 2000
+    assert flc.it_med.size == 2000

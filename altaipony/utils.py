@@ -15,7 +15,7 @@ def k2sc_quality_cuts(data):
     """
 
     data2 = data[np.isfinite(data.time) &
-                np.isfinite(data.pos_corr1) &
-                np.isfinite(data.pos_corr2)]
+                 np.isfinite(data.pos_corr1) &
+                 np.isfinite(data.pos_corr2)]
 
     return data2

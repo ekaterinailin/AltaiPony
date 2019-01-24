@@ -217,3 +217,5 @@ def from_K2SC_source(target, campaign=None):
     if len(path) == 1:
         return from_K2SC_file(path[0], campaign=campaign[0])
     return [from_K2SC_file(p, campaign=c) for p,c in zip(path, campaign)]
+
+
