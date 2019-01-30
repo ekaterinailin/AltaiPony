@@ -38,7 +38,7 @@ def FlareLightCurve_testhelper(flc, ID, ra, dec, channel, from_tpf = False):
     assert flc.time.shape == flc.flux_err.shape
 
     assert flc.campaign == campaign
-    #Wait until Nick's bugfix #325 is an official version feature 
+    #Wait until Nick's bugfix #325 is an official version feature
     #assert flc.quality_bitmask == 'default'
     assert flc.time_format == 'bkjd'
     assert flc.time_scale == 'tdb'
@@ -93,6 +93,18 @@ def test_from_K2SC_file():
     for (ID, path, ra, dec, channel) in iterator:
         flc = from_K2SC_file(path)
         FlareLightCurve_testhelper(flc, ID, ra, dec, channel)
+    for (ID, path, ra, dec, channel) in iterator:
+        flc = from_K2SC_file(path, add_TPF=False)
+        assert flc.time.shape == flc.flux.shape
+        assert flc.time.shape == flc.flux_err.shape
+        assert flc.time_format == None
+        assert flc.time_scale == None
+        assert flc.quarter == None
+        assert flc.ra == None
+        assert flc.dec == None
+        assert flc.targetid == int(ID)
+        assert flc.channel == None
+
 
 def test_from_KeplerLightCurve():
     #is implicitly tested by test_from_K2SC_source and test_from_TargetPixel_source

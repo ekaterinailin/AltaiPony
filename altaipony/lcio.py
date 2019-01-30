@@ -115,7 +115,7 @@ def from_KeplerLightCurve(lc, origin='KLC', **kwargs):
     FlareLightCurve
     """
     attributes = lc.__dict__
-    z = attributes.copy() 
+    z = attributes.copy()
     z.update(kwargs)
     flc = FlareLightCurve(time_unit=u.day, origin=origin,
                            flux_unit = u.electron/u.s, **z)
@@ -124,7 +124,7 @@ def from_KeplerLightCurve(lc, origin='KLC', **kwargs):
     return flc
 
 
-def from_K2SC_file(path, **kwargs):
+def from_K2SC_file(path, add_TPF=True, **kwargs):
     """
     Read in a K2SC de-trended light curve and convert it to a ``FlareLightCurve``.
 
@@ -132,6 +132,9 @@ def from_K2SC_file(path, **kwargs):
     ------------
     path : str
         path to light curve
+    add_TPF : True or bool
+        Default fetches TPF for additional info. Required for
+        K2SC de-trending.
     kwargs : dict
         Keyword arguments to pass to `KeplerLightCurveFile.from_archive
         <https://lightkurve.keplerscience.org/api/lightkurve.lightcurvefile.KeplerLightCurveFile.html#lightkurve.lightcurvefile.KeplerLightCurveFile.from_archive>`_
@@ -145,37 +148,78 @@ def from_K2SC_file(path, **kwargs):
     hdu = fitsopen(path)
     dr = hdu[1].data
     targetid = int(path.split('-')[0][-9:])
-    tpf_list = search_targetpixelfile(targetid, **kwargs)
-    if len(tpf_list) > 1:
-        LOG.error('Target data identifier must be unique. Provide campaign or cadence.')
-        return
-    else:
-        ktpf = tpf_list.download()
-        klc = ktpf.to_lightcurve()
-        #Only use those cadences that are present in all TPF, KLC, and K2SC LC:
-        values, counts = np.unique(np.concatenate((klc.cadenceno, dr['CADENCE'], ktpf.cadenceno)),
-                                   return_counts=True)
-        cadences = values[ np.where( counts == 3 ) ] #you could check if counts can be 4 or more and throw an exception in that case
-        #note that order of cadences is irrelevant for the following to be right
-        dr = dr[ np.isin( dr['CADENCE '], cadences) ]
-        klc = klc[ np.isin( klc.cadenceno, cadences) ]
-        ktpf = ktpf[ np.isin( ktpf.cadenceno, cadences)]
 
-        flc = FlareLightCurve(time=dr['TIME'], flux=klc.flux, detrended_flux=dr['FLUX'],
-                              detrended_flux_err=dr['ERROR'], cadenceno=dr['CADENCE'],
-                              flux_trends = dr['TRTIME'], targetid=targetid,
-                              campaign=klc.campaign, centroid_col=klc.centroid_col,
-                              centroid_row=klc.centroid_row,time_format=klc.time_format,
-                              time_scale=klc.time_scale, ra=klc.ra, dec=klc.dec,
-                              channel=klc.channel, time_unit=u.day,
-                              flux_unit = u.electron/u.s, origin='K2SC',
-                              pos_corr1=dr['X'], pos_corr2=dr['Y'], quality=klc.quality,
-                              pixel_flux=ktpf.flux, pixel_flux_err=ktpf.flux_err,
-                              quality_bitmask=ktpf.quality_bitmask,
-                              pipeline_mask=ktpf.pipeline_mask )
+    if add_TPF == True:
+        tpf_list = search_targetpixelfile(targetid, **kwargs)
+        #raw flux,campaign
+        if len(tpf_list) > 1:
+            LOG.error('Target data identifier must be unique. Provide campaign or cadence.')
+            return
+        else:
+            ktpf = tpf_list.download()
+            klc = ktpf.to_lightcurve()
+            #Only use those cadences that are present in all TPF, KLC, and K2SC LC:
+            values, counts = np.unique(np.concatenate((klc.cadenceno, dr['CADENCE'], ktpf.cadenceno)),
+                                       return_counts=True)
+            cadences = values[ np.where( counts == 3 ) ] #you could check if counts can be 4 or more and throw an exception in that case
+            #note that order of cadences is irrelevant for the following to be right
+            dr = dr[ np.isin( dr['CADENCE '], cadences) ]
+            klc = klc[ np.isin( klc.cadenceno, cadences) ]
+            ktpf = ktpf[ np.isin( ktpf.cadenceno, cadences)]
+
+            flc = FlareLightCurve(time=dr['TIME'], flux=klc.flux, detrended_flux=dr['FLUX'],
+                                  detrended_flux_err=dr['ERROR'], cadenceno=dr['CADENCE'],
+                                  flux_trends = dr['TRTIME'], targetid=targetid,
+                                  campaign=klc.campaign, centroid_col=klc.centroid_col,
+                                  centroid_row=klc.centroid_row,time_format=klc.time_format,
+                                  time_scale=klc.time_scale, ra=klc.ra, dec=klc.dec,
+                                  channel=klc.channel, time_unit=u.day,
+                                  flux_unit = u.electron/u.s, origin='K2SC',
+                                  pos_corr1=dr['X'], pos_corr2=dr['Y'], quality=klc.quality,
+                                  pixel_flux=ktpf.flux, pixel_flux_err=ktpf.flux_err,
+                                  quality_bitmask=ktpf.quality_bitmask,
+                                  pipeline_mask=ktpf.pipeline_mask )
+            hdu.close()
+            del dr
+
+            flc = flc[(np.isfinite(flc.detrended_flux)) &
+                      (np.isfinite(flc.detrended_flux_err))]
+            return flc
+    elif add_TPF == False:
+
+        keys = {  'time':'TIME',
+                    'detrended_flux':'FLUX',
+                    'detrended_flux_err':'ERROR',
+                    'cadenceno':'CADENCE',
+                    'flux_trends' : 'TRTIME',
+                    'campaign':'CAMPAIGN',
+                    'centroid_col':'CENTROID_COL',
+                    'centroid_row':'CENTROID_ROW',
+                    'time_format':'TIME_FORMAT',
+                    'time_scale':'TIME_SCALE',
+                    'ra':'RA',
+                    'dec':'DEC',
+                    'channel':'CHANNEL',
+                    'time_unit':'TIME_UNIT',
+                    'flux_unit' : 'FLUX_UNIT',
+                    'origin':'ORIGIN',
+                    'pos_corr1':'X',
+                    'pos_corr2':'Y',
+                    'quality':'QUALITY',
+                    'pixel_flux':'PIXEL_FLUX',
+                    'pixel_flux_err':'PIXEL_FLUX_ERR',
+                    'quality_bitmask':'QUALITY_BITMASK',
+                    'pipeline_mask':'PIPELINE_MASK' }
+        for k, v in keys.items():
+            if v in hdu[1].header:
+                keys[k] = hdu[1].header[v]
+            elif v.lower() in list(dr.names):
+                keys[k] = dr[v]
+            else:
+                keys[k] = None
+        flc = FlareLightCurve(targetid=targetid, **keys)
         hdu.close()
         del dr
-
         flc = flc[(np.isfinite(flc.detrended_flux)) &
                   (np.isfinite(flc.detrended_flux_err))]
         return flc
@@ -217,5 +261,3 @@ def from_K2SC_source(target, campaign=None):
     if len(path) == 1:
         return from_K2SC_file(path[0], campaign=campaign[0])
     return [from_K2SC_file(p, campaign=c) for p,c in zip(path, campaign)]
-
-
