@@ -145,11 +145,12 @@ def from_K2SC_file(path, add_TPF=True, **kwargs):
 
     """
 
-    hdu = fitsopen(path)
-    dr = hdu[1].data
-    targetid = int(path.split('-')[0][-9:])
 
     if add_TPF == True:
+        hdu = fitsopen(path)
+        dr = hdu[1].data
+        targetid = int(path.split('-')[0][-9:])
+
         tpf_list = search_targetpixelfile(targetid, **kwargs)
         #raw flux,campaign
         if len(tpf_list) > 1:
@@ -187,43 +188,69 @@ def from_K2SC_file(path, add_TPF=True, **kwargs):
             return flc
     elif add_TPF == False:
 
-        keys = {  'time':'TIME',
-                    'detrended_flux':'FLUX',
-                    'detrended_flux_err':'ERROR',
-                    'cadenceno':'CADENCE',
-                    'flux_trends' : 'TRTIME',
-                    'campaign':'CAMPAIGN',
-                    'centroid_col':'CENTROID_COL',
-                    'centroid_row':'CENTROID_ROW',
-                    'time_format':'TIME_FORMAT',
-                    'time_scale':'TIME_SCALE',
-                    'ra':'RA',
-                    'dec':'DEC',
-                    'channel':'CHANNEL',
-                    'time_unit':'TIME_UNIT',
-                    'flux_unit' : 'FLUX_UNIT',
-                    'origin':'ORIGIN',
-                    'pos_corr1':'X',
-                    'pos_corr2':'Y',
-                    'quality':'QUALITY',
-                    'pixel_flux':'PIXEL_FLUX',
-                    'pixel_flux_err':'PIXEL_FLUX_ERR',
-                    'quality_bitmask':'QUALITY_BITMASK',
-                    'pipeline_mask':'PIPELINE_MASK' }
-        for k, v in keys.items():
-            if v in hdu[1].header:
-                keys[k] = hdu[1].header[v]
-            elif v.lower() in list(dr.names):
-                keys[k] = dr[v]
-            else:
-                keys[k] = None
-        flc = FlareLightCurve(targetid=targetid, **keys)
-        hdu.close()
-        del dr
-        flc = flc[(np.isfinite(flc.detrended_flux)) &
-                  (np.isfinite(flc.detrended_flux_err))]
-        return flc
+        return from_fits_file(path)
 
+
+def from_fits_file(path):
+    '''
+    Loads a FlareLightCurve from some fits file.
+    If targetid is not given in the header, function
+    takes the last 9 digits before the first "-"
+    in the filename. In case of a K2 light curve
+    file this would be the EPIC ID.
+
+    Parameters:
+    -----------
+    path : str
+        path to light curve fits file
+
+    Return:
+    -----------
+    FlareLightCurve
+    '''
+    hdu = fitsopen(path)
+    dr = hdu[1].data
+
+    if 'TARGETID' in hdu[1].header:
+        targetid = hdu[1].header['TARGETID']
+    else:
+        targetid = int(path.split('-')[0][-9:])
+    keys = {  'time':'TIME',
+                'detrended_flux':'FLUX',
+                'detrended_flux_err':'ERROR',
+                'cadenceno':'CADENCE',
+                'flux_trends' : 'TRTIME',
+                'campaign':'CAMPAIGN',
+                'centroid_col':'CENTROID_COL',
+                'centroid_row':'CENTROID_ROW',
+                'time_format':'TIME_FORMAT',
+                'time_scale':'TIME_SCALE',
+                'ra':'RA',
+                'dec':'DEC',
+                'channel':'CHANNEL',
+                'time_unit':'TIME_UNIT',
+                'flux_unit' : 'FLUX_UNIT',
+                'origin':'ORIGIN',
+                'pos_corr1':'X',
+                'pos_corr2':'Y',
+                'quality':'QUALITY',
+                'pixel_flux':'PIXEL_FLUX',
+                'pixel_flux_err':'PIXEL_FLUX_ERR',
+                'quality_bitmask':'QUALITY_BITMASK',
+                'pipeline_mask':'PIPELINE_MASK' }
+    for k, v in keys.items():
+        if v in hdu[1].header:
+            keys[k] = hdu[1].header[v]
+        elif v.lower() in list(dr.names):
+            keys[k] = dr[v]
+        else:
+            keys[k] = None
+    flc = FlareLightCurve(targetid=targetid, **keys)
+    hdu.close()
+    del dr
+    flc = flc[(np.isfinite(flc.detrended_flux)) &
+              (np.isfinite(flc.detrended_flux_err))]
+    return flc
 
 def from_K2SC_source(target, campaign=None):
     """
