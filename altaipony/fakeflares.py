@@ -236,8 +236,8 @@ def generate_fake_flare_distribution(nfake, ampl=[1e-4, 1e2], dur=[7e-3, 2],
 
 def mod_random(x, d=False, seed=667):
     """
-    Helper functio that generates deterministic random numbers if needed for
-    testing.
+    Helper function that generates deterministic
+    random numbers if needed for testing.
 
     Parameters
     -----------

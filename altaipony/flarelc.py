@@ -18,7 +18,7 @@ from .fakeflares import (inject_fake_flares,
                          characterize_one_flare,
                          )
 
-
+import time
 LOG = logging.getLogger(__name__)
 
 class FlareLightCurve(KeplerLightCurve):
@@ -130,17 +130,17 @@ class FlareLightCurve(KeplerLightCurve):
 
         columns = ['istart', 'istop', 'cstart', 'cstop', 'tstart',
                    'tstop', 'ed_rec', 'ed_rec_err', 'ampl_rec']
-        
+
         if detrended_flux is None:
             self.detrended_flux = np.full_like(flux, np.nan)
         else:
             self.detrended_flux = detrended_flux
-            
+
         if detrended_flux_err is None:
             self.detrended_flux_err = np.full_like(flux, np.nan)
         else:
             self.detrended_flux_err = detrended_flux_err
-        
+
         if flares is None:
             self.flares = pd.DataFrame(columns=columns)
         else:
@@ -219,8 +219,8 @@ class FlareLightCurve(KeplerLightCurve):
         """
         De-trends a FlareLightCurve using ``K2SC``.
         Optionally saves the LightCurve in a fits file that can
-        be read as K2SC file. 
-        
+        be read as K2SC file.
+
         Parameters:
         ----------
         de_niter : int
@@ -234,7 +234,7 @@ class FlareLightCurve(KeplerLightCurve):
             If folder is empty, the fits file will be stored in the
             working directory.
         kwargs : dict
-            Keyword arguments to pass to k2sc 
+            Keyword arguments to pass to k2sc
 
         Returns
         --------
@@ -268,7 +268,7 @@ class FlareLightCurve(KeplerLightCurve):
                 LOG.error('Detrending failed because probably Cholesky '
                           'decomposition failed. Try again, you shall succeed.')
             new_lc.__class__ = FlareLightCurve
-            
+
             if save_k2sc == True:
                 new_lc.to_fits(path='{0}pony_k2sc_k2_llc_{1}-c{2:02d}_kepler_v2_lc.fits'.format(folder, new_lc.targetid, new_lc.campaign),
                                overwrite=True,
@@ -347,6 +347,7 @@ class FlareLightCurve(KeplerLightCurve):
                                          **kwargs)
             injs = fake_lc.fake_flares
             if inject_before_detrending == True:
+                print('\nDetrending fake LC:\n')
                 fake_lc = fake_lc.detrend()
             fake_lc = fake_lc.find_flares(fake=True)
             recs = fake_lc.flares
@@ -357,11 +358,14 @@ class FlareLightCurve(KeplerLightCurve):
                                                       ignore_index=True,)
 
             bar.update(i + 1)
+            time.sleep(5)
+            print('SLEEEEEEEEP')
+            combined_irr.to_csv('{}_it.csv'.format(i),index=False)
         bar.finish()
         return combined_irr, fake_lc
 
     def characterize_flares(self, inject_before_detrending=False, de_niter=3,
-                            complexity = 'simple_only', save_example=False, 
+                            complexity = 'simple_only', save_example=False,
                             folder='', **kwargs):
         """
         Add information about recovery probability and systematic energy
@@ -412,6 +416,7 @@ class FlareLightCurve(KeplerLightCurve):
                                              inject_before_detrending=inject_before_detrending,
                                              **kwargs)
                 f2 = f2.append(res, ignore_index=True)
+                print(f2)
             flc.flares = f2
             if save_example == True:
                 new_lc.to_fits(path='{0}pony_fake_k2_llc_{1}-c{2:02d}_kepler_v2_lc.fits'.format(folder, new_lc.targetid, new_lc.campaign),

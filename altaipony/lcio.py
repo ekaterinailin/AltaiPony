@@ -241,7 +241,7 @@ def from_fits_file(path):
     for k, v in keys.items():
         if v in hdu[1].header:
             keys[k] = hdu[1].header[v]
-        elif v.lower() in list(dr.names):
+        elif ((v.lower() in list(dr.names)) | (v in list(dr.names))) :
             keys[k] = dr[v]
         else:
             keys[k] = None
