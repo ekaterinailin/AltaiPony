@@ -1,6 +1,7 @@
 import os
 import inspect
 import logging
+import time
 import numpy as np
 
 import k2sc.core as k2sc_flag_values
@@ -55,7 +56,6 @@ def from_TargetPixel_source(target, **kwargs):
 
         lc = tpf.to_lightcurve()
         lc = from_KeplerLightCurve(lc, origin = 'TPF', **keys)
-
         return lc
 
 
@@ -280,11 +280,12 @@ def from_K2SC_source(target, campaign=None):
     else:
         keys = {'filetype' : 'Lightcurve',
                 'cadence' : 'long',
-                'campaign' : None,
+                'campaign' : campaign,
                 'month' : None,
-                'radius' : None,
+                'radius' : 1,
                 'targetlimit' : 1}
         path, campaign = download_kepler_products(target=target, **keys)
     if len(path) == 1:
         return from_K2SC_file(path[0], campaign=campaign[0])
-    return [from_K2SC_file(p, campaign=c) for p,c in zip(path, campaign)]
+    else:
+        return [from_K2SC_file(p, campaign=c) for p,c in zip(path, campaign)]
