@@ -270,10 +270,15 @@ class FlareLightCurve(KeplerLightCurve):
             new_lc.__class__ = FlareLightCurve
 
             if save_k2sc == True:
-                new_lc.to_fits(path='{0}pony_k2sc_k2_llc_{1}-c{2:02d}_kepler_v2_lc.fits'.format(folder, new_lc.targetid, new_lc.campaign),
+                path = '{0}pony_k2sc_k2_llc_{1}-c{2:02d}_kepler_v2_lc.fits'.format(folder,
+                                                                                   new_lc.targetid,
+                                                                                   new_lc.campaign)
+                new_lc.to_fits(path=path,
                                overwrite=True,
-                               flux=new_lc.detrended_flux, error=new_lc.detrended_flux_err, time=new_lc.time,
-                               trtime=new_lc.flux_trends, cadence=new_lc.cadenceno.astype(np.int32), x=new_lc.pos_corr1, y=new_lc.pos_corr2)
+                               flux=new_lc.detrended_flux, error=new_lc.detrended_flux_err,
+                               time=new_lc.time, raw_flux = new_lc.flux, trtime=new_lc.flux_trends, 
+                               cadence=new_lc.cadenceno.astype(np.int32), x=new_lc.pos_corr1,
+                               y=new_lc.pos_corr2)
             return new_lc
 
     def find_flares(self, minsep=3, fake=False):

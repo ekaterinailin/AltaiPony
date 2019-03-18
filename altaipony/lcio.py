@@ -215,7 +215,8 @@ def from_fits_file(path):
         targetid = hdu[1].header['TARGETID']
     else:
         targetid = int(path.split('-')[0][-9:])
-    keys = {  'time':'TIME',
+    keys = {    'flux':'RAW_FLUX',
+                'time':'TIME',
                 'detrended_flux':'FLUX',
                 'detrended_flux_err':'ERROR',
                 'cadenceno':'CADENCE',

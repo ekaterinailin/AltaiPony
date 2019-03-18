@@ -94,7 +94,7 @@ def find_flares(flc, minsep=3):
     lc = copy.deepcopy(flc)
     istart = np.array([], dtype='int')
     istop = np.array([], dtype='int')
-    
+
     if np.isnan(lc.detrended_flux).all():
         raise TypeError('Flare finding only works on de-trended light curves.')
 
@@ -125,7 +125,7 @@ def find_flares(flc, minsep=3):
         #stitch indices back into the original light curve
         istart = np.array(np.append(istart, istart_gap + le), dtype='int')
         istop = np.array(np.append(istop, istop_gap + le), dtype='int')
-        LOG.debug('INFO: Found {} candidate(s) in the ({},{}) gap.'
+        LOG.info('Found {} candidate(s) in the ({},{}) gap.'
                  .format(len(istart_gap), le, ri))
 
     if len(istart)>0:
@@ -162,12 +162,12 @@ def find_iterative_median(flc, n=50):
     -----------
     flc : FlareLightCurve
 
-    n : 5 or int
+    n : 50 or int
         maximum number of iterations
 
     Return
     -------
-    FlareLightCurve with the it_med attribute filled in.
+    FlareLightCurve with the it_med attribute set.
     """
 
     lc = copy.deepcopy(flc)
@@ -184,11 +184,12 @@ def find_iterative_median(flc, n=50):
         for i in range(n):
             flux[isflare] = med
             isflare_add = find_flares_in_cont_obs_period(flux, it_med,
-                                                         error, N3=1)
+                                                         error, N3=1) #N3=1 to get all outliers
             isflare = np.logical_or(isflare, isflare_add)
             med = np.nanmedian(flux[~isflare])
             it_med = np.nanmedian(flux[~isflare]) * np.ones_like(flux)
             if len(isflare_add)==0:
+                # there are no flare detections to add after running the finder
                 continue
         lc.it_med[le:ri] = it_med
     return lc
