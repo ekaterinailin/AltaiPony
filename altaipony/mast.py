@@ -92,7 +92,9 @@ def _query_kepler_products(target, radius=1):
 
     obsids = np.asarray(obs['obsid'])
     products = Observations.get_product_list(obs)
-    order = [np.where(products['parent_obsid'] == o)[0] for o in obsids]
+    res = np.array(list(map(lambda x: x[-4:], list(products['productFilename']))))
+    condition = ((products['parent_obsid'] == obsids) & (res == 'fits'))
+    order = [np.where(condition)[0] for o in obsids]
     order = [item for sublist in order for item in sublist]
     products = products[order]
     return products
@@ -143,19 +145,15 @@ def search_kepler_products(target, filetype='Lightcurve', cadence='long', quarte
         suffix = "{}".format(filetype)
     else:
         suffix = "{} Long".format(filetype)
-
     # If there is nothing in the table, quit now.
     if len(products) == 0:
         return products
 
-    # Identify the campaign or quarter by the description.
+    # Identify the campaign or quarter by the productFilename.
     if qoc is not None:
-        mask = np.zeros(np.shape(products)[0], dtype=bool)
-        for q in qoc:
-            mask |= np.array([desc.lower().replace('-', '').endswith('q{}'.format(q)) or
-                              'c{:02d}'.format(q) in desc.lower().replace('-', '') or
-                              'c{:03d}'.format(q) in desc.lower().replace('-', '')
-                              for desc in products['description']])
+        
+        res = np.array(list(map(lambda x: int(x.split('-c')[1][:2]), list(products['productFilename']))))
+        mask = np.where(res==qoc)[0]
     else:
         mask = np.ones(np.shape(products)[0], dtype=bool)
     # Allow only the correct fits or fits.gz type
@@ -179,7 +177,6 @@ def search_kepler_products(target, filetype='Lightcurve', cadence='long', quarte
         except:
             dates[idx] = 0
     products['dates'] = np.asarray(dates)
-
     # Limit to the correct number of hits based on ID. If there are multiple versions
     # of the same ID, this shouldn't count towards the limit.
     if targetlimit is not None:
@@ -245,6 +242,7 @@ def download_kepler_products(target, filetype='Target Pixel', cadence='long',
     -------
     path : str or list of strs
     """
+
     # Make sure astroquery uses the same level of verbosity
     logging.getLogger('astropy').setLevel(log.getEffectiveLevel())
 
