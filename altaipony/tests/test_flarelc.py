@@ -183,3 +183,33 @@ def test_append():
     assert flc.pixel_flux.shape[0] == 2000    
     assert flc.pixel_flux_err.shape[0] == 2000
     assert flc.it_med.size == 2000
+
+def test_inject_fake_flares():
+    flc = mock_flc(detrended=True)
+    np.random.seed(84712)
+    flc = flc.find_gaps()
+    fake_flc = flc.inject_fake_flares()
+
+    assert fake_flc.fake_flares.size == 20
+    assert fake_flc.fake_flares.columns.values.tolist() == ['amplitude', 'duration_d',
+                                                            'ed_inj', 'peak_time']
+    assert fake_flc.detrended_flux_err.all() >= 1e-10
+    assert fake_flc.detrended_flux.all() <= 1.
+    assert fake_flc.detrended_flux.shape == flc.detrended_flux.shape
+    flc = mock_flc(detrended=False)
+    np.random.seed(84712)
+    flc = flc.find_gaps()
+    fake_flc = flc.inject_fake_flares(inject_before_detrending=True)
+
+    assert fake_flc.fake_flares.size == 20
+    assert fake_flc.fake_flares.columns.values.tolist() == ['amplitude', 'duration_d',
+                                                            'ed_inj', 'peak_time']
+    assert fake_flc.flux_err.all() >= 1e-10
+    assert fake_flc.flux.all() <= 1.
+    assert fake_flc.flux.shape == flc.flux.shape
+
+
+
+def test_characterize_one_flare():
+    flc = mock_flc(detrended=True)
+    pass
