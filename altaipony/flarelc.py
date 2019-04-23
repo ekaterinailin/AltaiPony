@@ -371,8 +371,8 @@ class FlareLightCurve(KeplerLightCurve):
                                                       ignore_index=True,)
 
             bar.update(i + 1)
-            time.sleep(1)
-            combined_irr.to_csv('{}_it.csv'.format(iterations),index=False)
+            #time.sleep(1)
+            #combined_irr.to_csv('{}_it.csv'.format(iterations),index=False)
         bar.finish()
         return combined_irr, fake_lc
 
