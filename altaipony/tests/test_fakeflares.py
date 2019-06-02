@@ -3,22 +3,16 @@ import numpy as np
 import pandas as pd
 from inspect import signature
 
-from ..fakeflares import (inject_fake_flares,
-                          aflare,
+from ..fakeflares import (aflare,
                           generate_fake_flare_distribution,
                           merge_fake_and_recovered_events,
                           merge_complex_flares,
                           recovery_probability,
                           equivalent_duration_ratio,
-                          mod_random,
-                          characterize_one_flare,)
+                          mod_random,)
 
 
 from .test_flarelc import mock_flc
-
-def test_characterize_one_flare():
-    flc = mock_flc(detrended=True)
-    pass
 
 def test_resolve_complexity():
     pass

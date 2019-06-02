@@ -25,7 +25,7 @@ LOG = logging.getLogger(__name__)
 # *_archive : accept only EPIC IDs (not used yet)
 
 
-def from_TargetPixel_source(target, **kwargs):
+def from_TargetPixel_source(target, download_dir=None, **kwargs):
     """
     Accepts paths and EPIC IDs as targets. Either fetches a ``KeplerTargetPixelFile``
     from MAST via ID or directly from a path, then creates a lightcurve with
@@ -35,18 +35,19 @@ def from_TargetPixel_source(target, **kwargs):
     ------------
     target : str or int
         EPIC ID (e.g., 211119999) or path to zipped ``KeplerTargetPixelFile``
+    download_dir : str 
+        directory to store the file in
     kwargs : dict
         Keyword arguments to pass to `lightkurve.search_targetpixelfile()
         <http://docs.lightkurve.org/api/lightkurve.search.search_targetpixelfile.html#lightkurve.search.search_targetpixelfile>`_
     """
     tpf_list = search_targetpixelfile(target, **kwargs)
-
+    
     if len(tpf_list) > 1:
         LOG.error('Target data identifier must be unique. Provide campaign or cadence.')
         return
     else:
-        tpf = tpf_list.download()
-
+        tpf = tpf_list.download(download_dir=download_dir)
         keys = {'primary_header' : tpf.hdu[0].header,
                 'data_header' : tpf.hdu[1].header,
                 'pos_corr1' : tpf.pos_corr1,
