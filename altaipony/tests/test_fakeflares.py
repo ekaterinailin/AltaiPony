@@ -107,32 +107,32 @@ def test_generate_fake_flare_distribution():
     assert len(dur) == n
     assert len(ampl) == n
 
-def test_inject_fake_flares():
-    flc = mock_flc(detrended=True)
-    np.random.seed(84712)
-    flc = flc.find_gaps()
-    fake_flc = inject_fake_flares(flc)
-
-    assert fake_flc.fake_flares.size == 20
-
-    columns = set(fake_flc.fake_flares.columns.values.tolist())
-    test_columns = {'amplitude', 'duration_d', 'ed_inj', 'peak_time'}
-    assert len(columns & test_columns) == 4
-    assert fake_flc.detrended_flux_err.all() >= 1e-10
-    assert fake_flc.detrended_flux.all() <= 1.
-    assert fake_flc.detrended_flux.shape == flc.detrended_flux.shape
-    flc = mock_flc(detrended=False)
-    np.random.seed(84712)
-    flc = flc.find_gaps()
-    fake_flc = inject_fake_flares(flc, inject_before_detrending=True)
-
-    assert fake_flc.fake_flares.size == 20
-    columns = set(fake_flc.fake_flares.columns.values.tolist())
-    test_columns = {'amplitude', 'duration_d', 'ed_inj', 'peak_time'}
-    assert len(columns & test_columns) == 4
-    assert fake_flc.flux_err.all() >= 1e-10
-    assert fake_flc.flux.all() <= 1.
-    assert fake_flc.flux.shape == flc.flux.shape
+# def test_inject_fake_flares():
+#     flc = mock_flc(detrended=True)
+#     np.random.seed(84712)
+#     flc = flc.find_gaps()
+#     fake_flc = inject_fake_flares(flc)
+#
+#     assert fake_flc.fake_flares.size == 20
+#
+#     columns = set(fake_flc.fake_flares.columns.values.tolist())
+#     test_columns = {'amplitude', 'duration_d', 'ed_inj', 'peak_time'}
+#     assert len(columns & test_columns) == 4
+#     assert fake_flc.detrended_flux_err.all() >= 1e-10
+#     assert fake_flc.detrended_flux.all() <= 1.
+#     assert fake_flc.detrended_flux.shape == flc.detrended_flux.shape
+#     flc = mock_flc(detrended=False)
+#     np.random.seed(84712)
+#     flc = flc.find_gaps()
+#     fake_flc = inject_fake_flares(flc, inject_before_detrending=True)
+#
+#     assert fake_flc.fake_flares.size == 20
+#     columns = set(fake_flc.fake_flares.columns.values.tolist())
+#     test_columns = {'amplitude', 'duration_d', 'ed_inj', 'peak_time'}
+#     assert len(columns & test_columns) == 4
+#     assert fake_flc.flux_err.all() >= 1e-10
+#     assert fake_flc.flux.all() <= 1.
+#     assert fake_flc.flux.shape == flc.flux.shape
 
 def test_aflare_and_equivalent_duration():
 
