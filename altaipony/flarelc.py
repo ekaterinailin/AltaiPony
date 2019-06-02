@@ -163,9 +163,15 @@ class FlareLightCurve(KeplerLightCurve):
         copy_self.time = self.time[key]
         copy_self.flux = self.flux[key]
         copy_self.flux_err = self.flux_err[key]
+        if copy_self.cadenceno is not None:
+            copy_self.cadenceno = self.cadenceno[key]
         if copy_self.pos_corr1 is not None:
             copy_self.pos_corr1 = self.pos_corr1[key]
             copy_self.pos_corr2 = self.pos_corr2[key]
+        if copy_self.centroid_col is not None:
+            copy_self.centroid_col = self.centroid_col[key]
+        if copy_self.centroid_row is not None:
+            copy_self.centroid_row = self.centroid_row[key]
         if copy_self.detrended_flux is not None:
             copy_self.detrended_flux = self.detrended_flux[key]
             copy_self.detrended_flux_err = self.detrended_flux_err[key]
@@ -270,15 +276,7 @@ class FlareLightCurve(KeplerLightCurve):
             new_lc.__class__ = FlareLightCurve
 
             if save_k2sc == True:
-                path = '{0}pony_k2sc_k2_llc_{1}-c{2:02d}_kepler_v2_lc.fits'.format(folder,
-                                                                                   new_lc.targetid,
-                                                                                   new_lc.campaign)
-                new_lc.to_fits(path=path,
-                               overwrite=True,
-                               flux=new_lc.detrended_flux, error=new_lc.detrended_flux_err,
-                               time=new_lc.time, raw_flux = new_lc.flux, trtime=new_lc.flux_trends, 
-                               cadence=new_lc.cadenceno.astype(np.int32), x=new_lc.pos_corr1,
-                               y=new_lc.pos_corr2)
+                new_lc.save_to_file(folder)
             return new_lc
 
     def find_flares(self, minsep=3, fake=False):
@@ -421,13 +419,9 @@ class FlareLightCurve(KeplerLightCurve):
                                              inject_before_detrending=inject_before_detrending,
                                              **kwargs)
                 f2 = f2.append(res, ignore_index=True)
-                print(f2)
             flc.flares = f2
             if save_example == True:
-                new_lc.to_fits(path='{0}pony_fake_k2_llc_{1}-c{2:02d}_kepler_v2_lc.fits'.format(folder, new_lc.targetid, new_lc.campaign),
-                               overwrite=True,
-                               flux=new_lc.detrended_flux, error=new_lc.detrended_flux_err, time=new_lc.time,
-                               trtime=new_lc.flux_trends, cadence=new_lc.cadenceno.astype(np.int32), x=new_lc.pos_corr1, y=new_lc.pos_corr2)
+                flc.save_to_file(folder)
             return flc
         else:
             LOG.info('No flares to characterize.')
@@ -537,3 +531,24 @@ class FlareLightCurve(KeplerLightCurve):
             if hasattr(new_lc, 'pixel_flux_err'):
                 new_lc.pixel_flux_err = np.append(new_lc.pixel_flux_err, others[i].pixel_flux_err,axis=0)
         return new_lc
+
+    def save_to_file(self, folder):
+        '''Save FlareLightCurve to some folder.
+
+        Parameters:
+        ------------
+        folder : str
+            path to folder like "<folder_name>/"
+        '''
+        if self.quarter is not None:
+            path = '{0}pony_fake_kp_llc_{1}-c{2:02d}_kepler_v2_lc.fits'.format(folder, self.targetid, self.quarter)
+        elif self.campaign is not None:
+            path = '{0}pony_fake_k2_llc_{1}-c{2:02d}_kepler_v2_lc.fits'.format(folder, self.targetid, self.campaign)
+        else:
+            path = '{0}pony_fake_k2_llc_{1}-c00_kepler_v2_lc.fits'.format(folder, self.targetid)
+        self.to_fits(path=path,
+                    overwrite=True,
+                    campaign=self.campaign,
+                    detrended_flux=self.detrended_flux, detrended_flux_err=self.detrended_flux_err,
+                    time=self.time, trtime=self.flux_trends, cadence=self.cadenceno.astype(np.int32),
+                    x=self.pos_corr1, y=self.pos_corr2)

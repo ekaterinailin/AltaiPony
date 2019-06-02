@@ -1,9 +1,13 @@
 import os
 import pytest
 import pandas as pd
-from ..lcio import (from_TargetPixel_source, from_KeplerLightCurve_source,
-                   from_K2SC_source, from_K2SC_file, from_KeplerLightCurve)
-from .__init__ import test_ids, test_paths
+from ..lcio import (from_TargetPixel_source,
+                    from_KeplerLightCurve_source,
+                    from_K2SC_source,
+                    from_K2SC_file,
+                    from_KeplerLightCurve,
+                    from_KeplerLightCurve_file)
+from .__init__ import test_ids, test_paths, kepler_path
 
 
 campaign = 4
@@ -100,8 +104,8 @@ def test_from_K2SC_file():
         assert flc.time_format == None
         assert flc.time_scale == None
         assert flc.quarter == None
-        assert flc.ra == None
-        assert flc.dec == None
+        assert flc.ra == ra
+        assert flc.dec == dec
         assert flc.targetid == int(ID)
         assert flc.channel == None
 
@@ -109,3 +113,18 @@ def test_from_K2SC_file():
 def test_from_KeplerLightCurve():
     #is implicitly tested by test_from_K2SC_source and test_from_TargetPixel_source
     pass
+
+def test_from_KeplerLightCurve_file():
+    for flc in [from_KeplerLightCurve_file(kepler_path, "PDCSAP_FLUX"),
+                from_KeplerLightCurve_file(kepler_path, "SAP_FLUX")]:
+        assert flc.targetid == 10002792
+        assert flc.cadenceno.shape == flc.flux.shape
+        assert flc.cadenceno.shape == flc.flux_err.shape
+        assert flc.cadenceno.shape == flc.time.shape
+        assert flc.campaign is None
+        assert flc.quarter == 2
+        assert flc.channel == 63
+        assert flc.astropy_time.format == 'jd'
+        assert flc.flares.shape[1] == 9
+        assert flc.flares.shape[0] == 0
+        assert flc.it_med is None
