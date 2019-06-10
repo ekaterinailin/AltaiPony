@@ -33,6 +33,7 @@ def test_sample_flare_recovery():
     flc = mock_flc(detrended=True)
     data, fflc = flc.sample_flare_recovery()
     #make sure no flares are injected overlapping true flares
+    print(data.istart)
     assert data[(data.istart > 14) & (data.istart < 19)].shape[0] == 0
     #test if all injected event are covered in the merged flares:
     assert data.shape[0] + (data[data.complex > 1].complex -1).sum() == data.complex.sum()
@@ -191,8 +192,8 @@ def test_inject_fake_flares():
     fake_flc = flc.inject_fake_flares()
 
     assert fake_flc.fake_flares.size == 20
-    assert fake_flc.fake_flares.columns.values.tolist() == ['amplitude', 'duration_d',
-                                                            'ed_inj', 'peak_time']
+    assert (set(fake_flc.fake_flares.columns.values.tolist()) == 
+            {'amplitude', 'duration_d', 'ed_inj', 'peak_time'})
     assert fake_flc.detrended_flux_err.all() >= 1e-10
     assert fake_flc.detrended_flux.all() <= 1.
     assert fake_flc.detrended_flux.shape == flc.detrended_flux.shape
@@ -202,8 +203,8 @@ def test_inject_fake_flares():
     fake_flc = flc.inject_fake_flares(inject_before_detrending=True)
 
     assert fake_flc.fake_flares.size == 20
-    assert fake_flc.fake_flares.columns.values.tolist() == ['amplitude', 'duration_d',
-                                                            'ed_inj', 'peak_time']
+    assert (set(fake_flc.fake_flares.columns.values.tolist()) == 
+            {'amplitude', 'duration_d', 'ed_inj', 'peak_time'})
     assert fake_flc.flux_err.all() >= 1e-10
     assert fake_flc.flux.all() <= 1.
     assert fake_flc.flux.shape == flc.flux.shape
