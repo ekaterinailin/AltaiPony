@@ -9,8 +9,8 @@ from scipy.stats import binned_statistic
 LOG = logging.getLogger(__name__)
 
 
-def generate_fake_flare_distribution(nfake, ampl=[1e-4, 1e2], dur=[7e-3, 2],
-                                     rat=[1e-3,1e4], mode='loglog', **kwargs ):
+def generate_fake_flare_distribution(nfake, ampl=[1e-4, 5], dur=[7e-3, 0.25],
+                                     rat=[1e-3,1e4],mode="uniform", **kwargs ):
 
     '''
     Creates different distributions of fake flares to be injected into light curves.
@@ -45,65 +45,66 @@ def generate_fake_flare_distribution(nfake, ampl=[1e-4, 1e2], dur=[7e-3, 2],
 
         dur_fake =  generate_range(nfake, dur, **kwargs)
         ampl_fake = generate_range(nfake, ampl, **kwargs)
+        #print("Generated random distribution of" +str(len(dur_fake)) +" flares", )
 
-    elif mode=='uniform_ratio':
-        dur_fake =  generate_range(nfake, dur, **kwargs)
-        ampl_fake = generate_range(nfake, ampl, **kwargs)
-        rat_fake = ampl_fake/dur_fake
-        misfit = np.where(~((rat_fake < rat[1]) & (rat_fake > rat[0])))
+    #elif mode=='uniform_ratio':
+        #dur_fake =  generate_range(nfake, dur, **kwargs)
+        #ampl_fake = generate_range(nfake, ampl, **kwargs)
+        #rat_fake = ampl_fake/dur_fake
+        #misfit = np.where(~((rat_fake < rat[1]) & (rat_fake > rat[0])))
 
-        while len(misfit[0]) > 0:
-            dur_fake_mf =  generate_range(len(misfit[0]), dur, **kwargs)
-            ampl_fake_mf = generate_range(len(misfit[0]), ampl, **kwargs)
-            dur_fake[misfit] = dur_fake_mf
-            ampl_fake[misfit] = ampl_fake_mf
-            rat_fake = ampl_fake/dur_fake
-            misfit = np.where(~((rat_fake < rat[1]) & (rat_fake > rat[0])))
+        #while len(misfit[0]) > 0:
+            #dur_fake_mf =  generate_range(len(misfit[0]), dur, **kwargs)
+            #ampl_fake_mf = generate_range(len(misfit[0]), ampl, **kwargs)
+            #dur_fake[misfit] = dur_fake_mf
+            #ampl_fake[misfit] = ampl_fake_mf
+            #rat_fake = ampl_fake/dur_fake
+            #misfit = np.where(~((rat_fake < rat[1]) & (rat_fake > rat[0])))
             
-    elif mode=='hawley2014':
+    #elif mode=='hawley2014':
 
-        c_range = np.array([np.log10(5) - 6., np.log10(5) - 4.])                #estimated from Fig. 10 in Hawley et al. (2014)
-        alpha = 2                                                               #estimated from Fig. 10 in Hawley et al. (2014)
-        ampl_H14 = [np.log10(i) for i in ampl]
-        lnampl_fake = (mod_random(nfake, **kwargs) * (ampl_H14[1] - ampl_H14[0]) + ampl_H14[0])
-        rand = mod_random(nfake, **kwargs)
-        dur_max = (1./alpha) * (lnampl_fake - c_range[0])
-        dur_min = (1./alpha) * (lnampl_fake - c_range[1])
-        lndur_fake = np.array([rand[a] * (dur_max[a] - dur_min[a]) +
-                              dur_min[a]
-                              for a in range(nfake)])
-        ampl_fake = np.power(np.full(nfake,10), lnampl_fake)
-        dur_fake = np.power(np.full(nfake,10), lndur_fake)
+        #c_range = np.array([np.log10(5) - 6., np.log10(5) - 4.])                #estimated from Fig. 10 in Hawley et al. (2014)
+        #alpha = 2                                                               #estimated from Fig. 10 in Hawley et al. (2014)
+        #ampl_H14 = [np.log10(i) for i in ampl]
+        #lnampl_fake = (mod_random(nfake, **kwargs) * (ampl_H14[1] - ampl_H14[0]) + ampl_H14[0])
+        #rand = mod_random(nfake, **kwargs)
+        #dur_max = (1./alpha) * (lnampl_fake - c_range[0])
+        #dur_min = (1./alpha) * (lnampl_fake - c_range[1])
+        #lndur_fake = np.array([rand[a] * (dur_max[a] - dur_min[a]) +
+                              #dur_min[a]
+                              #for a in range(nfake)])
+        #ampl_fake = np.power(np.full(nfake,10), lnampl_fake)
+        #dur_fake = np.power(np.full(nfake,10), lndur_fake)
 
-    elif mode=='loglog':
-        def generate_loglog(dur, ampl, nfake):
+    #elif mode=='loglog':
+        #def generate_loglog(dur, ampl, nfake):
 
-            lnampl = [np.log10(i) for i in ampl]
-            lnampl_fake = generate_range(nfake, lnampl, **kwargs)
-            lndur = [np.log10(i) for i in dur]
-            lndur_fake = generate_range(nfake, lndur, **kwargs)
-            return lndur_fake, lnampl_fake
+            #lnampl = [np.log10(i) for i in ampl]
+            #lnampl_fake = generate_range(nfake, lnampl, **kwargs)
+            #lndur = [np.log10(i) for i in dur]
+            #lndur_fake = generate_range(nfake, lndur, **kwargs)
+            #return lndur_fake, lnampl_fake
 
-        lndur_fake, lnampl_fake = generate_loglog(dur, ampl, nfake)
-        rat_min, rat_max = [np.log10(i) for i in rat]
-        lnrat_fake = lnampl_fake-lndur_fake
-        misfit = np.where(~((lnrat_fake < rat_max) & (lnrat_fake > rat_min)))
-        wait = 0
+        #lndur_fake, lnampl_fake = generate_loglog(dur, ampl, nfake)
+        #rat_min, rat_max = [np.log10(i) for i in rat]
+        #lnrat_fake = lnampl_fake-lndur_fake
+        #misfit = np.where(~((lnrat_fake < rat_max) & (lnrat_fake > rat_min)))
+        #wait = 0
 
-        while len(misfit[0]) > 0:
-            wait+=1
-            lndur_misfit, lnampl_misfit = generate_loglog(dur, ampl, len(misfit[0]))
-            lndur_fake[misfit] = lndur_misfit
-            lnampl_fake[misfit] = lnampl_misfit
-            lnrat_fake = lnampl_fake-lndur_fake
-            misfit = np.where(~((lnrat_fake < rat_max) & (lnrat_fake > rat_min)))
-            if wait > 100:
-                LOG.exception('Generating fake flares takes too long.'
-                              'Reconsider dur_factor, ampl_factor, and ratio_factor.')
-                raise ValueError
+        #while len(misfit[0]) > 0:
+            #wait+=1
+            #lndur_misfit, lnampl_misfit = generate_loglog(dur, ampl, len(misfit[0]))
+            #lndur_fake[misfit] = lndur_misfit
+            #lnampl_fake[misfit] = lnampl_misfit
+            #lnrat_fake = lnampl_fake-lndur_fake
+            #misfit = np.where(~((lnrat_fake < rat_max) & (lnrat_fake > rat_min)))
+            #if wait > 100:
+                #LOG.exception('Generating fake flares takes too long.'
+                              #'Reconsider dur_factor, ampl_factor, and ratio_factor.')
+                #raise ValueError
 
-        ampl_fake = np.power(np.full(nfake,10), lnampl_fake)
-        dur_fake = np.power(np.full(nfake,10), lndur_fake)
+        #ampl_fake = np.power(np.full(nfake,10), lnampl_fake)
+        #dur_fake = np.power(np.full(nfake,10), lndur_fake)
 
     return dur_fake, ampl_fake
 
@@ -159,7 +160,7 @@ def aflare(t, tpeak, dur, ampl, upsample=False, uptime=10):
     _fr = [1.00000, 1.94053, -0.175084, -2.24588, -1.12498]
     _fd = [0.689008, -1.60053, 0.302963, -0.278318]
 
-    fwhm = dur/2. # crude approximation for a triangle shape, should be even less
+    fwhm = dur/2. # crude approximation for a triangle shape would be dur/2.
 
     if upsample:
         dt = np.nanmedian(np.diff(t))
@@ -227,165 +228,172 @@ def merge_fake_and_recovered_events(injs, recs):
     merged_all = merged_recovered.append(rest).drop('temp',axis=1)
     return merged_all
 
-def merge_complex_flares(data):
-    """
-    The injection procedure sometimes introduces complex flares. These are
-    recovered multiple times, according to the number of simple flare signatures
-    they consist of. Merge these by adopting common times, the maximum recovered
-    equivalent duration and respective error. Add injected equivalent durations.
+#def merge_complex_flares(data):
+    #"""
+    #The injection procedure sometimes introduces complex flares. These are
+    #recovered multiple times, according to the number of simple flare signatures
+    #they consist of. Merge these by adopting common times, the maximum recovered
+    #equivalent duration and respective error. Add injected equivalent durations.
 
-    Parameters
-    -----------
-    data : DataFrame
-        Columns: ['amplitude', 'cstart', 'cstop', 'duration_d', 'ed_inj', 'ed_rec',
-       'ed_rec_err', 'istart', 'istop', 'peak_time', 'tstart', 'tstop','ampl_rec']
+    #Parameters
+    #-----------
+    #data : DataFrame
+        #Columns: ['amplitude', 'cstart', 'cstop', 'duration_d', 'ed_inj', 'ed_rec',
+       #'ed_rec_err', 'istart', 'istop', 'peak_time', 'tstart', 'tstop','ampl_rec']
 
-    Return
-    -------
-    DataFrame with the same columns as the input but with complex flares merged
-    together. A new 'complex' column contains the number of simple flares
-    superimposed in a given event.
-    """
-    data = data.fillna(0)
-    size = len(data.cstart[data.cstart == 0])
-    maximum = data.cstop.max()+1e9
-    data.loc[data.cstart == 0.,'cstart'] = np.arange(maximum,maximum+3*size,3)
-    data.loc[data.cstop == 0.,'cstop'] = np.arange(maximum+1,maximum+3*size+1,3)
-    g = data.groupby(['cstart','cstop'])
-    data_wo_overlaps = pd.DataFrame(columns=np.append(data.columns.values,'complex'))
-    for (start, stop), d in g:
-        if d.shape[0] > 1:
-            row = {
-            'complex' : d.shape[0],
-            'peak_time' : d.peak_time[d.amplitude.idxmax()],
-            'amplitude' : d.amplitude.max(),
-            'cstart' : d.cstart.min(),
-            'cstop' : d.cstop.max(),
-            'duration_d' : d.duration_d.max(),
-            'ed_inj' : d.ed_inj.sum(),
-            'ed_rec' : d.ed_rec.max(),
-            'ed_rec_err' : d.ed_rec_err.max(),
-            'istart' : d.istart.min(),
-            'istop' : d.istop.max(),
-            'tstart' : d.tstart.min(),
-            'tstop' : d.tstop.max(),
-            'ampl_rec' : d.ampl_rec.max()}
-            e = pd.DataFrame(row, index=[0])
-        else:
-            x = d.to_dict()
-            x['complex'] = 1
-            e = pd.DataFrame(x)
-        data_wo_overlaps = data_wo_overlaps.append(e, ignore_index=True)
-    data_wo_overlaps.loc[data_wo_overlaps.cstart >= maximum,'cstart'] = np.zeros(size)
-    data_wo_overlaps.loc[data_wo_overlaps.cstop >= maximum,'cstop'] = np.zeros(size)
-    return data_wo_overlaps
+    #Return
+    #-------
+    #DataFrame with the same columns as the input but with complex flares merged
+    #together. A new 'complex' column contains the number of simple flares
+    #superimposed in a given event.
+    #"""
+    #data = data.fillna(0)
+    #size = len(data.cstart[data.cstart == 0])
+    #if size > 0:
+        #maximum = data.cstop.max()+1e9
+        #data.loc[data.cstart == 0.,'cstart'] = np.arange(maximum,maximum+3*size,3)
+        #data.loc[data.cstop == 0.,'cstop'] = np.arange(maximum+1,maximum+3*size+1,3)
+        #g = data.groupby(['cstart','cstop'])
+        #data_wo_overlaps = pd.DataFrame(columns=np.append(data.columns.values,'complex'))
+        #for (start, stop), d in g:
+            #if d.shape[0] > 1:
+                #row = {
+                #'complex' : d.shape[0],
+                #'peak_time' : d.peak_time[d.amplitude.idxmax()],
+                #'amplitude' : d.amplitude.max(),
+                #'cstart' : d.cstart.min(),
+                #'cstop' : d.cstop.max(),
+                #'duration_d' : d.duration_d.max(),
+                #'ed_inj' : d.ed_inj.sum(),
+                #'ed_rec' : d.ed_rec.max(),
+                #'ed_rec_err' : d.ed_rec_err.max(),
+                #'istart' : d.istart.min(),
+                #'istop' : d.istop.max(),
+                #'tstart' : d.tstart.min(),
+                #'tstop' : d.tstop.max(),
+                #'ampl_rec' : d.ampl_rec.max()}
+                #e = pd.DataFrame(row, index=[0])
+            #else:
+                #x = d.to_dict()
+                #x['complex'] = 1
+                #e = pd.DataFrame(x)
+            #data_wo_overlaps = data_wo_overlaps.append(e, ignore_index=True)
+        #data_wo_overlaps.loc[data_wo_overlaps.cstart >= maximum,'cstart'] = np.zeros(size)
+        #data_wo_overlaps.loc[data_wo_overlaps.cstop >= maximum,'cstop'] = np.zeros(size)
+        #return data_wo_overlaps
+    #else:
+        #data["complex"]=None
+        #return data
 
-def recovery_probability(data, bins=30, bintype='log', fixed_bins=False):
-    """
-    Calculate a look-up table that returns the recovery probability of a flare
-    with some true equivalent duration in seconds.
+#def recovery_probability(data, bins=30, bintype='log', fixed_bins=False):
+    #"""
+    #Calculate a look-up table that returns the recovery probability of a flare
+    #with some true equivalent duration in seconds.
 
-    Parameters
-    -----------
-    data : DataFrame
-        Table with columns that contain injected equivalent duration and info
-        whether this flare was recovered or not.
-    bins : 30 or int
-        Size of look-up table.
-    bintype : 'log' or 'lin'
+    #Parameters
+    #-----------
+    #data : DataFrame
+        #Table with columns that contain injected equivalent duration and info
+        #whether this flare was recovered or not.
+    #bins : 30 or int
+        #Size of look-up table.
+    #bintype : 'log' or 'lin'
 
-    fixed_bins : False or bool
+    #fixed_bins : False or bool
 
-    Return
-    ------
-    DataFrame that gives bin edges in equivalent duration and the recovery
-    probability in these bins.
-    """
-    data['rec'] = data.ed_rec.astype(bool).astype(float)
-    if fixed_bins == False:
-        num = min(int(np.rint(data.shape[0]/100)), bins + 1)
-    else:
-        num = bins + 1
-    if bintype == 'log':
-        bins = np.logspace(np.log10(data.ed_inj.min()*.99),
-                           np.log10(data.ed_inj.max()*1.01),
-                           num=num)
-    elif bintype == 'lin':
-        bins = np.linspace(data.ed_inj.min(), data.ed_inj.max(), num=num)
-    else:
-        LOG.error('Bintype not recongnised. Use log or lin.')
-    group = data.groupby(pd.cut(data.ed_inj,bins))
-    rec_prob = (pd.DataFrame({'min_ed_inj' : bins[:-1],
-                             'max_ed_inj' : bins[1:],
-                             'mid_ed_inj' : (bins[:-1]+bins[1:])/2.,
-                             'rec_prob' : group.rec.mean()})
-                             .reset_index()
-                             .drop('ed_inj',axis=1))
+    #Return
+    #------
+    #DataFrame that gives bin edges in equivalent duration and the recovery
+    #probability in these bins.
+    #"""
+    #data['rec'] = data.ed_rec.astype(bool).astype(float)
+    #if fixed_bins == False:
+        #num = min(int(np.rint(data.shape[0]/100)), bins + 1)
+    #else:
+        #num = bins + 1
+    #if bintype == 'log':
+        #bins = np.logspace(np.log10(data.ed_inj.min()*.99),
+                           #np.log10(data.ed_inj.max()*1.01),
+                           #num=num)
+    #elif bintype == 'lin':
+        #bins = np.linspace(data.ed_inj.min(), data.ed_inj.max(), num=num)
+    #else:
+        #LOG.error('Bintype not recongnised. Use log or lin.')
+    #group = data.groupby(pd.cut(data.ed_inj,bins))
+    #rec_prob = (pd.DataFrame({'min_ed_inj' : bins[:-1],
+                             #'max_ed_inj' : bins[1:],
+                             #'mid_ed_inj' : (bins[:-1]+bins[1:])/2.,
+                             #'rec_prob' : group.rec.mean()})
+                             #.reset_index()
+                             #.drop('ed_inj',axis=1))
 
-    return rec_prob
+    #return rec_prob
 
-def equivalent_duration_ratio(data, bins=30, bintype='log', fixed_bins=False):
-    """
-    Calculate a look-up table that returns the ratio of a flare's recovered
-    equivalent duration to the injected one.
+#def equivalent_duration_ratio(data, bins=30, bintype='log', fixed_bins=False):
+    #"""
+    #Calculate a look-up table that returns the ratio of a flare's recovered
+    #equivalent duration to the injected one.
 
-    Parameters
-    -----------
-    data : DataFrame
-        Table with columns that contain injected and recovered equivalent
-        durations of synthetic flares.
-    bins : 30 or int
-        Maximum size of look-up table.
-    bintype : 'log' or 'lin'
+    #Parameters
+    #-----------
+    #data : DataFrame
+        #Table with columns that contain injected and recovered equivalent
+        #durations of synthetic flares.
+    #bins : 30 or int
+        #Maximum size of look-up table.
+    #bintype : 'log' or 'lin'
 
-    fixed_bins : False or bool
+    #fixed_bins : False or bool
 
-    Return
-    ------
-    DataFrame that gives bin edges in equivalent duration and the ratio of
-    equivalent durations in these bins.
-    """
-    d = data[data.ed_rec>0]
-    d = d[['ed_inj','ed_rec']]
-    d['rel'] = (d.ed_rec/d.ed_inj).astype(float)
-    if fixed_bins == False:
-        num = min(int(np.rint(data.shape[0]/100)), bins + 1)
-    else:
-        num = bins + 1
+    #Return
+    #------
+    #DataFrame that gives bin edges in equivalent duration and the ratio of
+    #equivalent durations in these bins.
+    #"""
+    #d = data[data.ed_rec>0]
+    #d = d[['ed_inj','ed_rec']]
+    #d['rel'] = (d.ed_rec/d.ed_inj).astype(float)
+    #if fixed_bins == False:
+        #num = min(int(np.rint(data.shape[0]/100)), bins + 1)
+    #else:
+        #num = bins + 1
 
-    if bintype=='log':
-        bins = np.logspace(np.log10(d.ed_rec.min() * .99),
-                           np.log10(d.ed_rec.max() * 1.01),
-                           num=num)
-    elif bintype == 'lin':
-        bins = np.linspace(d.ed_rec.min(), d.ed_rec.max(), num=num)
-    group = d.groupby(pd.cut(d.ed_rec,bins))
-    ed_rat = (pd.DataFrame({'min_ed_rec' : bins[:-1],
-                             'max_ed_rec' : bins[1:],
-                             'mid_ed_rec' : (bins[:-1]+bins[1:])/2.,
-                             'rel_rec' : 1/group.rel.mean()})
-                             .reset_index()
-                             .drop('ed_rec',axis=1)
-                             .dropna(how='any'))
+    #if bintype=='log':
+        #bins = np.logspace(np.log10(d.ed_rec.min() * .99),
+                           #np.log10(d.ed_rec.max() * 1.01),
+                           #num=num)
+    #elif bintype == 'lin':
+        #bins = np.linspace(d.ed_rec.min(), d.ed_rec.max(), num=num)
+    #group = d.groupby(pd.cut(d.ed_rec,bins))
+    #ed_rat = (pd.DataFrame({'min_ed_rec' : bins[:-1],
+                             #'max_ed_rec' : bins[1:],
+                             #'mid_ed_rec' : (bins[:-1]+bins[1:])/2.,
+                             #'rel_rec' : 1/group.rel.mean()})
+                             #.reset_index()
+                             #.drop('ed_rec',axis=1)
+                             #.dropna(how='any'))
 
-    return ed_rat
+    #return ed_rat
 
 
-def resolve_complexity(data, complexity='all'):
-    """
-    Either deal with only simple or complex flares or ignore the difference and
-    just give the fraction of complex flares in the synthetic sample.
-    """
-    if complexity == 'simple_only':
-        data = data[data.complex == 1]
-        data.loc[:,'complex_fraction'] = 0.
-        return data
-    elif complexity == 'complex_only':
-        data = data[data.complex > 1]
-        data.loc[:,'complex_fraction'] = 0.
-        return data
-    elif complexity == 'all':
-        count_complex = data.complex.astype(float).sum()
-        size = data.shape[0]
-        data['complex_fraction'] = (count_complex-size)/size
-        return data
+#def resolve_complexity(data, complexity='all'):
+    #"""
+    #Either deal with only simple or complex flares or ignore the difference and
+    #just give the fraction of complex flares in the synthetic sample.
+    #"""
+    #if data.shape[0] == 0:
+        #data['complex_fraction'] = None
+        #return data
+    #elif complexity == 'simple_only':
+        #data = data[data.complex == 1]
+        #data.loc[:,'complex_fraction'] = 0.
+        #return data
+    #elif complexity == 'complex_only':
+        #data = data[data.complex > 1]
+        #data.loc[:,'complex_fraction'] = 0.
+        #return data
+    #elif complexity == 'all':
+        #count_complex = data.complex.astype(float).sum()
+        #size = data.shape[0]
+        #data['complex_fraction'] = (count_complex - size) / size
+        #return data

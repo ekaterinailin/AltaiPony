@@ -14,10 +14,10 @@ from astropy.io import fits
 
 from .altai import (find_flares, find_iterative_median,)
 from .fakeflares import (merge_fake_and_recovered_events,
-                         merge_complex_flares,
-                         resolve_complexity,
-                         recovery_probability,
-                         equivalent_duration_ratio,
+                         #merge_complex_flares,
+                         #resolve_complexity,
+                         #recovery_probability,
+                         #equivalent_duration_ratio,
                          generate_fake_flare_distribution,
                          mod_random,
                          aflare,
@@ -316,7 +316,7 @@ class FlareLightCurve(KeplerLightCurve):
 
         return lc
 
-    def sample_flare_recovery(self, iterations=20, inject_before_detrending=False,
+    def sample_flare_recovery(self, iterations=2000, inject_before_detrending=False,
                               max_sigma=3,**kwargs):
         """
         Runs a number of injection recovery cycles and characterizes the light
@@ -354,23 +354,28 @@ class FlareLightCurve(KeplerLightCurve):
         for i in range(iterations):
             fake_lc = copy.deepcopy(lc)
             fake_lc = fake_lc.inject_fake_flares(inject_before_detrending=inject_before_detrending,
-                                                mode='uniform_ratio',
                                                 **kwargs)
+           # fake_lc.save_to_file("more/before")
+           # print("saving before")
             injs = fake_lc.fake_flares
+           # print(injs)
             if inject_before_detrending == True:
+             #   print('\nDetrending fake LC:\n')
                 LOG.info('\nDetrending fake LC:\n')
+            #print(fake_lc.detrended_flux[:10] - fake_lc.flux[:10],fake_lc.pos_corr1[:10]) 
                 fake_lc = fake_lc.detrend(campaign=fake_lc.campaign, max_sigma=max_sigma)
             fake_lc = fake_lc.find_flares(fake=True)
             recs = fake_lc.flares
-
+          #  fake_lc.save_to_file("more/after")
+           # print("saving after ")
             injection_recovery_results = merge_fake_and_recovered_events(injs, recs)
-            irr_w_merged_complex_flares = merge_complex_flares(injection_recovery_results)
-            combined_irr = combined_irr.append(irr_w_merged_complex_flares,
+          #  irr_w_merged_complex_flares = merge_complex_flares(injection_recovery_results)
+            combined_irr = combined_irr.append(injection_recovery_results,
                                                       ignore_index=True,)
 
             bar.update(i + 1)
             #time.sleep(1)
-            #combined_irr.to_csv('{}_it.csv'.format(iterations),index=False)
+            combined_irr.to_csv('{}_it.csv'.format(iterations),index=False)
         bar.finish()
         return combined_irr, fake_lc
 
@@ -409,16 +414,25 @@ class FlareLightCurve(KeplerLightCurve):
             and `ed_rec_corr` columns.
         """
         flc = copy.deepcopy(self)
+        
         if ((flc.detrended_flux is None) & (inject_before_detrending==False)):
             LOG.error('Please de-trend light curve first or set '
                           'inject_before_detrending=True. The latter is advised.')
             raise AttributeError('detrended_flux attribute is missing.')
+        
         elif (np.isnan(flc.detrended_flux).all() & (inject_before_detrending==True)):
-            flc = flc.detrend(de_niter=de_niter)
+            flc = flc.detrend(de_niter=de_niter, max_sigma=3)
+            
             flc = flc.find_flares()
             flc = find_iterative_median(flc)
+            
+            #flc.flares = copy.deepcopy(flcs.flares)
+            #flc.it_med =  copy.deepcopy(flcs.it_med)
+           # print(flc.it_med,"...ITMED")
+            
         if flc.flares.shape[0]==0:
             flc = flc.find_flares()
+            
         if flc.flares.shape[0]>0:
             f2 = pd.DataFrame(columns=flc.flares.columns)
             for i,f in flc.flares.iterrows():
@@ -427,15 +441,18 @@ class FlareLightCurve(KeplerLightCurve):
                                              **kwargs)
                 f2 = f2.append(res, ignore_index=True)
             flc.flares = f2
+            
             if save_example == True:
                 flc.save_to_file(folder)
+                
             return flc
         else:
             LOG.info('No flares to characterize.')
+            
             return flc
 
     def characterize_one_flare(self, f, ampl_factor=[0.01,2.], dur_factor=[0.01,2.],
-                           iterations=200, complexity='simple_only',
+                           iterations=2000, complexity='simple_only',
                            ratio_factor=[0.5,2.], **kwargs):
         """
         Takes the data of a recovered flare and return the data with
@@ -505,11 +522,10 @@ class FlareLightCurve(KeplerLightCurve):
         for (i, op) in [(0,ge),(1,le)]:
             if op(dur[i],ampl[i]/rat[i]):
                 ampl[i] = rat[i]*dur[i]
-        data, g = flc.sample_flare_recovery(ampl=ampl, dur=dur, rat=rat,
-                                            iterations = iterations,
+        data, g = flc.sample_flare_recovery(iterations = iterations,#ampl=ampl, dur=dur, rat=rat,
                                             **kwargs)
 
-        data = resolve_complexity(data, complexity=complexity)
+       # data = resolve_complexity(data, complexity=complexity)
         if data[data.ed_rec>0].shape[0]==0:
             LOG.info('This is just an outlier. Synthetic injection yields no recoveries.\n')
             f2['ed_rec_corr'] = 0.
@@ -594,7 +610,7 @@ class FlareLightCurve(KeplerLightCurve):
         return flc
 
 
-    def inject_fake_flares(self, mode='loglog', gapwindow=0.1, fakefreq=.25,
+    def inject_fake_flares(self, gapwindow=0.1, fakefreq=.005,
                         inject_before_detrending=False, d=False, seed=0,
                         **kwargs):
 
@@ -613,7 +629,7 @@ class FlareLightCurve(KeplerLightCurve):
         gapwindow : 0.1 or float
 
         fakefreq : .25 or float
-            flares per day
+            flares per day, but at least one per continuous observation period will be injected
         inject_before_detrending : True or bool
             By default, flares are injected before the light curve is detrended.
         d :
@@ -648,27 +664,35 @@ class FlareLightCurve(KeplerLightCurve):
             x = time * 60.0 * 60.0 * 24.0
             integral = np.sum(np.diff(x) * flux[:-1])
             return integral
+        
+        
         fake_lc = copy.deepcopy(self)
         LOG.debug(str() + '{} FakeFlares started'.format(datetime.datetime.now()))
+        
         if inject_before_detrending == True:
             typ, typerr = 'flux', 'flux_err'
             LOG.debug('Injecting before detrending.')
+            
         elif inject_before_detrending == False:
             typ, typerr = 'detrended_flux', 'detrended_flux_err'
             LOG.debug('Injecting after detrending.')
+            
         fakeres = pd.DataFrame()
-        
+        print(fake_lc.flux[:6],fake_lc.it_med[:6])
         fake_lc.__dict__[typ] = fake_lc.__dict__[typ]
         fake_lc.__dict__[typerr] = fake_lc.__dict__[typerr]
-        nfakesum = int(np.rint(fakefreq * (fake_lc.time.max() - fake_lc.time.min())))
+        nfakesum = max(len(fake_lc.gaps), int(np.rint(fakefreq * (fake_lc.time.max() - fake_lc.time.min()))))
+        
+        fake_lc = find_iterative_median(fake_lc)
         t0_fake = np.zeros(nfakesum, dtype='float')
         ed_fake = np.zeros(nfakesum, dtype='float')
         dur_fake = np.zeros(nfakesum, dtype='float')
         ampl_fake = np.zeros(nfakesum, dtype='float')
         ckm = 0
+        
         for (le,ri) in fake_lc.gaps:
             gap_fake_lc = fake_lc[le:ri]
-            nfake = int(np.rint(fakefreq * (gap_fake_lc.time.max() - gap_fake_lc.time.min())))
+            nfake = max(1,int(np.rint(fakefreq * (gap_fake_lc.time.max() - gap_fake_lc.time.min()))))
             LOG.debug('Inject {} fake flares into a {} datapoint long array.'.format(nfake,ri-le))
 
             real_flares_in_gap = self.flares[(self.flares.istart >= le) & (self.flares.istop <= ri)]
@@ -678,7 +702,7 @@ class FlareLightCurve(KeplerLightCurve):
             mintime, maxtime = np.min(time), np.max(time)
             dtime = maxtime - mintime
             
-            distribution  = generate_fake_flare_distribution(nfake, mode=mode, d=d,
+            distribution  = generate_fake_flare_distribution(nfake, d=d,
                                                             seed=seed, **kwargs)
             dur_fake[ckm:ckm+nfake], ampl_fake[ckm:ckm+nfake] = distribution
             #loop over the numer of fake flares you want to generate
@@ -703,15 +727,19 @@ class FlareLightCurve(KeplerLightCurve):
                     t0_fake[k] = t0
                     fl_flux = aflare(time, t0, dur_fake[k], ampl_fake[k])
                     ed_fake[k] = _equivalent_duration(time, fl_flux)
+                    #re-define injected duration (not as multiple times FWHM):
+                    i_visible_flare = np.where(fl_flux > (np.median(error) / np.median(flux)))[0]
+                    dur_fake[k] = time[np.max(i_visible_flare)] - time[np.min(i_visible_flare)]
+                    # re-define injected duration
                 # inject flare in to light curve
-                fake_lc.__dict__[typ][le:ri] = fake_lc.__dict__[typ][le:ri] + fl_flux*fake_lc.it_med[le:ri]
+                fake_lc.__dict__[typ][le:ri] = fake_lc.__dict__[typ][le:ri] + fl_flux * fake_lc.it_med[le:ri]
             ckm += nfake
 
         #error minimum is a safety net for the spline function if mode=3
         fake_lc.__dict__[typerr] = max( 1e-10, np.nanmedian( pd.Series(fake_lc.__dict__[typ]).
                                                 rolling(3, center=True).
                                                 std() ) )*np.ones_like(fake_lc.__dict__[typ])
-
+        
         injected_events = {'duration_d' : dur_fake, 'amplitude' : ampl_fake,
                         'ed_inj' : ed_fake, 'peak_time' : t0_fake}
         fake_lc.fake_flares = fake_lc.fake_flares.append(pd.DataFrame(injected_events),
@@ -783,7 +811,7 @@ class FlareLightCurve(KeplerLightCurve):
             path = '{0}pony_fake_k2_llc_{1}-c00_kepler_v2_lc.fits'.format(folder, self.targetid)
         self.to_fits(path=path,
                     overwrite=True,
-                    campaign=self.campaign,
+                    campaign=self.campaign,flux=self.flux, it_med=self.it_med,
                     detrended_flux=self.detrended_flux, detrended_flux_err=self.detrended_flux_err,
                     time=self.time, trtime=self.flux_trends, cadence=self.cadenceno.astype(np.int32),
                     x=self.pos_corr1, y=self.pos_corr2)

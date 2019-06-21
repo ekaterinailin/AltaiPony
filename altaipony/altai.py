@@ -40,40 +40,40 @@ def find_flares_in_cont_obs_period(flux, median, error, N1=3, N2=3, N3=3):
         datapoints are flagged with 1 if they belong to a flare candidate
     '''
     isflare = np.zeros_like(flux, dtype='bool')
-    for i in range(2):    #1st round find large excursions that blow up sigma
-        sigma = np.nanstd(flux[~isflare])
-        T0 = flux - median # excursion should be positive #"N0"
-        T1 = np.abs(flux - median) / sigma #N1
-        T2 = np.abs(flux - median - error) / sigma #N2
-        # apply thresholds N0-N2:
-        LOG.debug('Factor above standard deviation: N1 = {},\n'
-                 'Factor above standard deviation + uncertainty N2 = {},\n'
-                 'Minimum number of consecutive data points for candidate N3 = {}'
-                 .format(N1,N2,N3))
-        pass_thresholds = np.where((T0 > 0) & (T1 > N1) & (T2 > N2))
-        #array of indices where thresholds are exceeded:
-        is_pass_thresholds = np.zeros_like(flux)
-        is_pass_thresholds[pass_thresholds] = 1
+   
+    sigma = error#np.nanstd(flux[~isflare])
+    T0 = flux - median # excursion should be positive #"N0"
+    T1 = np.abs(flux - median) / sigma #N1
+    T2 = np.abs(flux - median - error) / sigma #N2
+    # apply thresholds N0-N2:
+    LOG.debug('Factor above standard deviation: N1 = {},\n'
+                'Factor above standard deviation + uncertainty N2 = {},\n'
+                'Minimum number of consecutive data points for candidate N3 = {}'
+                .format(N1,N2,N3))
+    pass_thresholds = np.where((T0 > 0) & (T1 > N1) & (T2 > N2))
+    #array of indices where thresholds are exceeded:
+    is_pass_thresholds = np.zeros_like(flux)
+    is_pass_thresholds[pass_thresholds] = 1
 
-        # Need to find cumulative number of points that pass_thresholds
-        # Counted in reverse!
-        # Examples reverse_counts = [0 0 0 3 2 1 0 0 1 0 4 3 2 1 0 0 0 1 0 2 1 0]
-        #                 isflare = [0 0 0 1 1 1 0 0 0 0 1 1 1 1 0 0 0 0 0 0 0 0]
+    # Need to find cumulative number of points that pass_thresholds
+    # Counted in reverse!
+    # Examples reverse_counts = [0 0 0 3 2 1 0 0 1 0 4 3 2 1 0 0 0 1 0 2 1 0]
+    #                 isflare = [0 0 0 1 1 1 0 0 0 0 1 1 1 1 0 0 0 0 0 0 0 0]
 
-        reverse_counts = np.zeros_like(flux, dtype='int')
-        for k in range(2, len(flux)):
-            reverse_counts[-k] = (is_pass_thresholds[-k]
-                                 * (reverse_counts[-(k-1)]
-                                    + is_pass_thresholds[-k]))
+    reverse_counts = np.zeros_like(flux, dtype='int')
+    for k in range(2, len(flux)):
+        reverse_counts[-k] = (is_pass_thresholds[-k]
+                                * (reverse_counts[-(k-1)]
+                                + is_pass_thresholds[-k]))
 
-        # find flare start where values in reverse_counts switch from 0 to >=N3
-        istart_i = np.where((reverse_counts[1:] >= N3) &
-                            (reverse_counts[:-1] - reverse_counts[1:] < 0))[0] + 1
-        # use the value of reverse_counts to determine how many points away stop is
-        istop_i = istart_i + (reverse_counts[istart_i])
-        isflare = np.zeros_like(flux, dtype='bool')
-        for (l,r) in list(zip(istart_i,istop_i)):
-            isflare[l:r+1] = True
+    # find flare start where values in reverse_counts switch from 0 to >=N3
+    istart_i = np.where((reverse_counts[1:] >= N3) &
+                        (reverse_counts[:-1] - reverse_counts[1:] < 0))[0] + 1
+    # use the value of reverse_counts to determine how many points away stop is
+    istop_i = istart_i + (reverse_counts[istart_i])
+    isflare = np.zeros_like(flux, dtype='bool')
+    for (l,r) in list(zip(istart_i,istop_i)):
+        isflare[l:r+1] = True
     return isflare
 
 def find_flares(flc, minsep=3):
@@ -172,6 +172,7 @@ def find_iterative_median(flc, n=50):
 
     lc = copy.deepcopy(flc)
     lc.it_med = np.full_like(flc.detrended_flux, np.median(flc.detrended_flux))
+    print("initmed: ", lc.it_med[:4])
     if lc.gaps is None:
         lc = lc.find_gaps()
     for (le,ri) in lc.gaps:
@@ -224,7 +225,7 @@ def equivalent_duration(lc, start, stop, err=False):
 
     start, stop = int(start),int(stop)+1
     lct = lc[start:stop]
-    residual = lct.detrended_flux/np.nanmedian(lct.it_med)-1.
+    residual = lct.detrended_flux / np.nanmedian(lct.it_med)-1.
     x = lct.time * 60.0 * 60.0 * 24.0
     ed = np.sum(np.diff(x) * residual[:-1])
 
@@ -235,6 +236,7 @@ def equivalent_duration(lc, start, stop, err=False):
         return ed, ederr
     else:
         return ed
+
 
 def chi_square(residual, error):
     '''

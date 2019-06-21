@@ -31,12 +31,12 @@ def test_mark_flagged_flares():
 
 def test_sample_flare_recovery():
     flc = mock_flc(detrended=True)
-    data, fflc = flc.sample_flare_recovery()
+    data, fflc = flc.sample_flare_recovery(iterations=2)
     #make sure no flares are injected overlapping true flares
     print(data.istart)
     assert data[(data.istart > 14) & (data.istart < 19)].shape[0] == 0
     #test if all injected event are covered in the merged flares:
-    assert data.shape[0] + (data[data.complex > 1].complex -1).sum() == data.complex.sum()
+    assert data.shape[0] == 2
     assert fflc.gaps == [(0, 1000)]
     assert np.median(fflc.it_med) == pytest.approx(500.005274113832)
 
@@ -132,7 +132,7 @@ def test_detrend(**kwargs):
     try:
         flc = flc.detrend(de_niter=3,**kwargs)
         assert flc.detrended_flux.shape == flc.flux.shape
-        assert flc.pv[0] == pytest.approx(-4.52464711,rel=0.1)
+        assert flc.pv[0] == pytest.approx(-4.52464711, rel=0.1)
     except np.linalg.linalg.LinAlgError:
         warning.warn('Detrending of mock LC failed, this happens.')
         pass
@@ -190,8 +190,8 @@ def test_inject_fake_flares():
     np.random.seed(84712)
     flc = flc.find_gaps()
     fake_flc = flc.inject_fake_flares()
-
-    assert fake_flc.fake_flares.size == 20
+    # make sure you inject only one flare per LC
+    assert len(fake_flc.gaps) == fake_flc.fake_flares.shape[0]
     assert (set(fake_flc.fake_flares.columns.values.tolist()) == 
             {'amplitude', 'duration_d', 'ed_inj', 'peak_time'})
     assert fake_flc.detrended_flux_err.all() >= 1e-10
@@ -202,13 +202,13 @@ def test_inject_fake_flares():
     flc = flc.find_gaps()
     fake_flc = flc.inject_fake_flares(inject_before_detrending=True)
 
-    assert fake_flc.fake_flares.size == 20
+    # make sure you inject only one flare per LC
+    assert len(fake_flc.gaps) == fake_flc.fake_flares.shape[0]
     assert (set(fake_flc.fake_flares.columns.values.tolist()) == 
             {'amplitude', 'duration_d', 'ed_inj', 'peak_time'})
     assert fake_flc.flux_err.all() >= 1e-10
     assert fake_flc.flux.all() <= 1.
     assert fake_flc.flux.shape == flc.flux.shape
-
 
 
 def test_characterize_one_flare():
