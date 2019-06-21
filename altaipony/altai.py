@@ -172,7 +172,6 @@ def find_iterative_median(flc, n=50):
 
     lc = copy.deepcopy(flc)
     lc.it_med = np.full_like(flc.detrended_flux, np.median(flc.detrended_flux))
-    print("initmed: ", lc.it_med[:4])
     if lc.gaps is None:
         lc = lc.find_gaps()
     for (le,ri) in lc.gaps:

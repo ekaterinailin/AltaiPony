@@ -321,10 +321,11 @@ class FlareLightCurve(KeplerLightCurve):
         """
         Runs a number of injection recovery cycles and characterizes the light
         curve by recovery probability and equivalent duration underestimation.
+        Inject one flare per light curve.
 
         Parameters
         -----------
-        iterations : 20 or int
+        iterations : 2000 or int
             Number of injection/recovery cycles
         inject_before_detrending : False or bool
             If True, fake flare are injected directly into raw data.
@@ -356,198 +357,25 @@ class FlareLightCurve(KeplerLightCurve):
             fake_lc = fake_lc.inject_fake_flares(inject_before_detrending=inject_before_detrending,
                                                 **kwargs)
            # fake_lc.save_to_file("more/before")
-           # print("saving before")
+           # print("saved LC before detrending")
             injs = fake_lc.fake_flares
-           # print(injs)
             if inject_before_detrending == True:
-             #   print('\nDetrending fake LC:\n')
                 LOG.info('\nDetrending fake LC:\n')
-            #print(fake_lc.detrended_flux[:10] - fake_lc.flux[:10],fake_lc.pos_corr1[:10]) 
                 fake_lc = fake_lc.detrend(campaign=fake_lc.campaign, max_sigma=max_sigma)
             fake_lc = fake_lc.find_flares(fake=True)
             recs = fake_lc.flares
-          #  fake_lc.save_to_file("more/after")
-           # print("saving after ")
+           # fake_lc.save_to_file("more/after")
+           # print("saved LC after detrending")
             injection_recovery_results = merge_fake_and_recovered_events(injs, recs)
-          #  irr_w_merged_complex_flares = merge_complex_flares(injection_recovery_results)
             combined_irr = combined_irr.append(injection_recovery_results,
                                                       ignore_index=True,)
 
             bar.update(i + 1)
-            #time.sleep(1)
-            combined_irr.to_csv('{}_it.csv'.format(iterations),index=False)
+           # combined_irr.to_csv('{}_it.csv'.format(iterations),index=False)
         bar.finish()
         return combined_irr, fake_lc
 
-    def characterize_flares(self, inject_before_detrending=False, de_niter=3,
-                            complexity = 'simple_only', save_example=False,
-                            folder='', **kwargs):
-        """
-        Add information about recovery probability and systematic energy
-        correction for every flare in a light curve using injection/recovery
-        sampling of synthetic flares.
-
-        Parameters
-        -----------
-        inject_before_detrending : False or bool
-            If True, synthetic flares are injected before de-trending and the
-            light curve is de-trended after each iteration. This is computationally
-            intense.
-        complexity : 'simple_only' or str
-            If 'simple_only' is used, all superimposed flares will be ignored.
-            If 'complex_only' is used, all simple flares will be ignored.
-            If 'all' is used, all flares are used for characterization but the
-            fraction of complex flares is returned.
-        de_niter : 3 or int
-            Number of K2SC GP iterations, set to 3 to avoid unintenional computational
-            effort.
-        save_example : False or bool
-            If True, save a fits file with inject_fake_flares after de-trending from the
-            last iteration as an example.
-        kwargs : dict
-            Keyword arguments to pass to :py:func:`characterize_one_flare`.
-
-        Return
-        -------
-        FlareLightCurve
-            The flares attribute is modified, now containing `rec_prob`
-            and `ed_rec_corr` columns.
-        """
-        flc = copy.deepcopy(self)
-        
-        if ((flc.detrended_flux is None) & (inject_before_detrending==False)):
-            LOG.error('Please de-trend light curve first or set '
-                          'inject_before_detrending=True. The latter is advised.')
-            raise AttributeError('detrended_flux attribute is missing.')
-        
-        elif (np.isnan(flc.detrended_flux).all() & (inject_before_detrending==True)):
-            flc = flc.detrend(de_niter=de_niter, max_sigma=3)
-            
-            flc = flc.find_flares()
-            flc = find_iterative_median(flc)
-            
-            #flc.flares = copy.deepcopy(flcs.flares)
-            #flc.it_med =  copy.deepcopy(flcs.it_med)
-           # print(flc.it_med,"...ITMED")
-            
-        if flc.flares.shape[0]==0:
-            flc = flc.find_flares()
-            
-        if flc.flares.shape[0]>0:
-            f2 = pd.DataFrame(columns=flc.flares.columns)
-            for i,f in flc.flares.iterrows():
-                res, data, fake_lc = flc.characterize_one_flare(f, complexity=complexity,
-                                             inject_before_detrending=inject_before_detrending,
-                                             **kwargs)
-                f2 = f2.append(res, ignore_index=True)
-            flc.flares = f2
-            
-            if save_example == True:
-                flc.save_to_file(folder)
-                
-            return flc
-        else:
-            LOG.info('No flares to characterize.')
-            
-            return flc
-
-    def characterize_one_flare(self, f, ampl_factor=[0.01,2.], dur_factor=[0.01,2.],
-                           iterations=2000, complexity='simple_only',
-                           ratio_factor=[0.5,2.], **kwargs):
-        """
-        Takes the data of a recovered flare and return the data with
-        information about recovery probability and corrected equivalent
-        duration.
-
-        Parameters
-        -----------
-        f : Series
-            A row from the FlareLightCurve.flares DataFrame
-        dur_factor
-        ampl_factor
-        ratio_factor : 0.2 or float
-
-        iterations : 200 or int
-            Number of iterations for injection/recovery sampling.
-        complexity : 'simple_only' or str
-            If 'simple_only' is used, all superimposed flares will be ignored.
-            If 'complex_only' is used, all simple flares will be ignored.
-            If 'all' is used, all flares are used for characterization but the
-            fraction of complex flares is returned.
-        kwargs : dict
-            Keyword arguments to pass to sample_flare_recovery.
-
-        Return
-        -------
-        Same as f but with 'ed_rec_corr' and 'rec_prob' keys added.
-        """
-        
-        flc = copy.deepcopy(self)
-        for a in [ratio_factor, ampl_factor, dur_factor]:
-            if a[1] < 1.:
-                LOG.exception('All maximum factors must be >=1.')
-            elif a[0] >1.:
-                LOG.exception('All minimum factors must be <=1.')
-        def relr(x, ed_rat):
-            try:
-                note=''
-                erc = ed_rat.rel_rec[(x>ed_rat.min_ed_rec) & (x<=ed_rat.max_ed_rec)].iloc[0]
-                return erc, note
-            except IndexError:
-                LOG.info('Recovery probability may be too low to find enough injected'
-                        ' flares to calculate a corrected ED. Will return recovery '
-                        'probability for recovered ED instead of corrected ED.')
-                note = '(for uncorrected ED)'
-                return 0, note
-
-        def recr(x, rec_prob):
-            return rec_prob.rec_prob[(x>rec_prob.min_ed_inj) & (x<=rec_prob.max_ed_inj)].iloc[0]
-
-        f2 = copy.copy(f)
-
-        if f.ampl_rec < 0:
-            LOG.info('Amplitude is smaller than global iterative median (not '
-                    'necessarily the local). Recovery very unlikely.\n')
-            f2['ed_rec_corr'] = 0.
-            f2['rec_prob'] = 0.
-            return f2, [],[]
-
-        dur = (f.tstop - f.tstart) * np.array(dur_factor)
-        rat = f.ampl_rec / (f.tstop - f.tstart) * np.array(ratio_factor)
-        ampl = f.ampl_rec * np.array(ampl_factor)
-
-        # If the scale factor cuts out too much from the ampl-dur parameter space,
-        # shrink it accordingly:
-        from operator import le,ge
-        for (i, op) in [(0,ge),(1,le)]:
-            if op(dur[i],ampl[i]/rat[i]):
-                ampl[i] = rat[i]*dur[i]
-        data, g = flc.sample_flare_recovery(iterations = iterations,#ampl=ampl, dur=dur, rat=rat,
-                                            **kwargs)
-
-       # data = resolve_complexity(data, complexity=complexity)
-        if data[data.ed_rec>0].shape[0]==0:
-            LOG.info('This is just an outlier. Synthetic injection yields no recoveries.\n')
-            f2['ed_rec_corr'] = 0.
-            f2['rec_prob'] = 0.
-            return f2, data, g
-        else:
-            data = data[(data.ed_inj > 0.05*f.ed_rec) & (data.ed_inj < 20.*f.ed_rec)]
-            rec_prob = recovery_probability(data, bintype='lin')
-            ed_rat = equivalent_duration_ratio(data, bintype='lin')
-            erc, note = relr(f2.ed_rec, ed_rat)
-            if erc == 0:
-                rp = recr(f2.ed_rec, rec_prob)
-            else:
-                erc *= f2.ed_rec
-                rp = recr(erc, rec_prob)
-            LOG.info('Corrected ED = {}. Recovery probability {} = {}.\n'.format(erc, note, rp))
-            f2['ed_rec_corr'] = erc
-            f2['rec_prob'] = rp
-
-        return f2, data, g
-
-
+ 
     def mark_flagged_flares(self, explain=False):
         """
         Mark all flares that coincide with K2 flagged cadences.
@@ -678,7 +506,6 @@ class FlareLightCurve(KeplerLightCurve):
             LOG.debug('Injecting after detrending.')
             
         fakeres = pd.DataFrame()
-        print(fake_lc.flux[:6],fake_lc.it_med[:6])
         fake_lc.__dict__[typ] = fake_lc.__dict__[typ]
         fake_lc.__dict__[typerr] = fake_lc.__dict__[typerr]
         nfakesum = max(len(fake_lc.gaps), int(np.rint(fakefreq * (fake_lc.time.max() - fake_lc.time.min()))))
