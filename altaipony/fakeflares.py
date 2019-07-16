@@ -9,17 +9,13 @@ from scipy.stats import binned_statistic
 LOG = logging.getLogger(__name__)
 
 
-def generate_fake_flare_distribution(nfake, ampl=[1e-4, 5], dur=[7e-3, 0.25],
-                                     rat=[1e-3,1e4],mode="uniform", **kwargs ):
+def generate_fake_flare_distribution(nfake, ampl=[1e-4, 5], dur=[0.005, 0.012], mode="uniform", **kwargs ):
 
     '''
     Creates different distributions of fake flares to be injected into light curves.
 
     "uniform": Flares are distibuted evenly in duration and amplitude space.
-    "hawley2014": Flares are distributed in a strip around a power law with
-    exponent alpha, see Fig. 10 in Hawley et al. (2014).
-    "loglog":
-
+   
     Parameters
     -----------
     nfake: int
@@ -28,7 +24,7 @@ def generate_fake_flare_distribution(nfake, ampl=[1e-4, 5], dur=[7e-3, 0.25],
         Amplitude range in relative flux units.
     dur: [10, 2e4] or list of floats
         Duration range in days.
-    mode: 'loglog', 'hawley2014', 'uniform_ratio', or 'uniform'
+    mode: 'uniform'
         Distribution of fake flares in (duration, amplitude) space.
     kwargs : dict
         Keyword arguments to pass to mod_random

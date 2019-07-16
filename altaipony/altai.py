@@ -40,7 +40,7 @@ def find_flares_in_cont_obs_period(flux, median, error, N1=3, N2=3, N3=3):
         datapoints are flagged with 1 if they belong to a flare candidate
     '''
     isflare = np.zeros_like(flux, dtype='bool')
-   
+    
     sigma = error#np.nanstd(flux[~isflare])
     T0 = flux - median # excursion should be positive #"N0"
     T1 = np.abs(flux - median) / sigma #N1
@@ -74,6 +74,7 @@ def find_flares_in_cont_obs_period(flux, median, error, N1=3, N2=3, N3=3):
     isflare = np.zeros_like(flux, dtype='bool')
     for (l,r) in list(zip(istart_i,istop_i)):
         isflare[l:r+1] = True
+    
     return isflare
 
 def find_flares(flc, minsep=3):
@@ -108,7 +109,6 @@ def find_flares(flc, minsep=3):
 
         # now pick out final flare candidate indices
         candidates = np.where( isflare > 0)[0]
-
         if (len(candidates) < 1):#no candidates = no indices
             LOG.debug('INFO: No candidates were found in the ({},{}) gap.'
                      .format(le,ri))
@@ -184,7 +184,7 @@ def find_iterative_median(flc, n=50):
         for i in range(n):
             flux[isflare] = med
             isflare_add = find_flares_in_cont_obs_period(flux, it_med,
-                                                         error, N3=1) #N3=1 to get all outliers
+                                                         error, N3=1) 
             isflare = np.logical_or(isflare, isflare_add)
             med = np.nanmedian(flux[~isflare])
             it_med = np.nanmedian(flux[~isflare]) * np.ones_like(flux)
@@ -202,6 +202,46 @@ def equivalent_duration(lc, start, stop, err=False):
     calculated as the area under the residual (flux-flux_median).
     Use only on de-trended light curves!
     Returns also the uncertainty on ED following Davenport (2016)
+
+    Parameters
+    --------------
+    start : int
+        start time index of a flare event
+    stop : int
+        end time index of a flare event
+    lc : FlareLightCurve
+
+    err: False or bool
+        If True will compute uncertainty on ED
+
+    Return
+    --------------
+    ed : float
+        equivalent duration in seconds
+    ederr : float
+        uncertainty in seconds
+    '''
+
+    start, stop = int(start),int(stop)+1
+    lct = lc[start:stop]
+    residual = lct.detrended_flux / np.nanmedian(lct.it_med)-1.
+    x = lct.time * 60.0 * 60.0 * 24.0
+    ed = np.sum(np.diff(x) * residual[:-1])
+
+    if err == True:
+        flare_chisq = chi_square(residual[:-1],
+                                 lct.detrended_flux_err[:-1]/np.nanmedian(lct.it_med))
+        ederr = np.sqrt(ed**2 / (stop-1-start) / flare_chisq)
+        return ed, ederr
+    else:
+        return ed
+    
+def fwhm(lc, start, stop, err=False):
+
+    '''
+    Returns the FWHM in s for a flare
+    found within indices [start, stop],
+    calculated as the 
 
     Parameters
     --------------

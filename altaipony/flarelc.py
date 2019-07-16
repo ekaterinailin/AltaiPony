@@ -226,7 +226,7 @@ class FlareLightCurve(KeplerLightCurve):
 
         return lc
 
-    def detrend(self, save_k2sc=False, folder='', de_niter=3, **kwargs):
+    def detrend(self, save_k2sc=False, folder='', de_niter=30, max_sigma=3, **kwargs):
         """
         De-trends a FlareLightCurve using ``K2SC``.
         Optionally saves the LightCurve in a fits file that can
@@ -265,7 +265,7 @@ class FlareLightCurve(KeplerLightCurve):
             #K2SC MAGIC
             new_lc.__class__ = k2sc_lc
             try:
-                new_lc.k2sc(de_niter=de_niter, **kwargs)
+                new_lc.k2sc(de_niter=de_niter, max_sigma=max_sigma, **kwargs)
                 new_lc.detrended_flux = (new_lc.corr_flux - new_lc.tr_time
                                       + np.nanmedian(new_lc.tr_time))
                 new_lc.detrended_flux_err = copy.copy(new_lc.flux_err) # does k2sc share their uncertainties somewhere?
@@ -342,7 +342,11 @@ class FlareLightCurve(KeplerLightCurve):
         fake_lc : FlareLightCurve
             Light curve with the last iteration of synthetic flares injected.
         """
+        injrecstr = {True : "before", False : "after"} # define string to identify fake flare analysis by file name
+        
         lc = copy.deepcopy(self)
+        if inject_before_detrending == True:
+            lc = lc.detrend()
         lc = lc.find_gaps()
         lc = find_iterative_median(lc)
         columns =  ['istart', 'istop', 'cstart', 'cstop', 'tstart', 'tstop',
@@ -356,22 +360,22 @@ class FlareLightCurve(KeplerLightCurve):
             fake_lc = copy.deepcopy(lc)
             fake_lc = fake_lc.inject_fake_flares(inject_before_detrending=inject_before_detrending,
                                                 **kwargs)
-           # fake_lc.save_to_file("more/before")
-           # print("saved LC before detrending")
+            fake_lc.save_to_file("more/before")
+            print("saved LC before detrending")
             injs = fake_lc.fake_flares
             if inject_before_detrending == True:
                 LOG.info('\nDetrending fake LC:\n')
-                fake_lc = fake_lc.detrend(campaign=fake_lc.campaign, max_sigma=max_sigma)
+                fake_lc = fake_lc.detrend(max_sigma=max_sigma)
             fake_lc = fake_lc.find_flares(fake=True)
             recs = fake_lc.flares
-           # fake_lc.save_to_file("more/after")
-           # print("saved LC after detrending")
+            fake_lc.save_to_file("more/after")
+            print("saved LC after detrending")
             injection_recovery_results = merge_fake_and_recovered_events(injs, recs)
             combined_irr = combined_irr.append(injection_recovery_results,
                                                       ignore_index=True,)
 
             bar.update(i + 1)
-           # combined_irr.to_csv('{}_it.csv'.format(iterations),index=False)
+            combined_irr.to_csv('{}_{}_{}.csv'.format(iterations, lc.targetid, injrecstr[inject_before_detrending]),index=False)
         bar.finish()
         return combined_irr, fake_lc
 
@@ -561,7 +565,6 @@ class FlareLightCurve(KeplerLightCurve):
                 # inject flare in to light curve
                 fake_lc.__dict__[typ][le:ri] = fake_lc.__dict__[typ][le:ri] + fl_flux * fake_lc.it_med[le:ri]
             ckm += nfake
-
         #error minimum is a safety net for the spline function if mode=3
         fake_lc.__dict__[typerr] = max( 1e-10, np.nanmedian( pd.Series(fake_lc.__dict__[typ]).
                                                 rolling(3, center=True).
@@ -638,7 +641,7 @@ class FlareLightCurve(KeplerLightCurve):
             path = '{0}pony_fake_k2_llc_{1}-c00_kepler_v2_lc.fits'.format(folder, self.targetid)
         self.to_fits(path=path,
                     overwrite=True,
-                    campaign=self.campaign,flux=self.flux, it_med=self.it_med,
-                    detrended_flux=self.detrended_flux, detrended_flux_err=self.detrended_flux_err,
-                    time=self.time, trtime=self.flux_trends, cadence=self.cadenceno.astype(np.int32),
+                    campaign=self.campaign,flux=self.flux, error=self.flux_err, it_med=self.it_med, quality=self.quality,
+                    detrended_flux=self.detrended_flux, detrended_flux_err=self.detrended_flux_err, 
+                    time=self.time, trtime=self.flux_trends, cadence=self.cadenceno.astype(np.int32), mission=self.mission,
                     x=self.pos_corr1, y=self.pos_corr2)
