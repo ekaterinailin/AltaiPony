@@ -84,10 +84,10 @@ def test_generate_fake_flare_distribution():
     assert len(dur) == n
     assert len(ampl) == n
 
-    dur, ampl = generate_fake_flare_distribution(n, mode='uniform')
-    assert (dur <= 2e4/60/24).all()
-    assert (dur >= 10./60/24).all()
-    assert (ampl <= 1e2).all()
+    dur, ampl = generate_fake_flare_distribution(n, ampl=[1e-4, 5], dur=[0.005, 0.012],  mode='uniform')
+    assert (dur <= 0.012).all()
+    assert (dur >= 0.0045).all()
+    assert (ampl <= 5).all()
     assert (ampl >= 1e-4).all()
     assert len(dur) == n
     assert len(ampl) == n

@@ -317,7 +317,7 @@ class FlareLightCurve(KeplerLightCurve):
         return lc
 
     def sample_flare_recovery(self, iterations=2000, inject_before_detrending=False,
-                              max_sigma=3,**kwargs):
+                              max_sigma=3, save_lc_to_file=False, folder="", **kwargs):
         """
         Runs a number of injection recovery cycles and characterizes the light
         curve by recovery probability and equivalent duration underestimation.
@@ -360,16 +360,23 @@ class FlareLightCurve(KeplerLightCurve):
             fake_lc = copy.deepcopy(lc)
             fake_lc = fake_lc.inject_fake_flares(inject_before_detrending=inject_before_detrending,
                                                 **kwargs)
-            fake_lc.save_to_file("more/before")
-            print("saved LC before detrending")
+            if save_lc_to_file == True:
+                fake_lc.save_to_file("{}before".format(folder))
+                print("saved EPIC {} LC before detrending".format(self.targetit))
+                
             injs = fake_lc.fake_flares
+            
             if inject_before_detrending == True:
                 LOG.info('\nDetrending fake LC:\n')
                 fake_lc = fake_lc.detrend(max_sigma=max_sigma)
+                
             fake_lc = fake_lc.find_flares(fake=True)
             recs = fake_lc.flares
-            fake_lc.save_to_file("more/after")
-            print("saved LC after detrending")
+            
+            if save_lc_to_file == True:
+                fake_lc.save_to_file("{}after".format(folder))
+                print("saved EPIC {} LC after detrending".format(self.targetit))
+                
             injection_recovery_results = merge_fake_and_recovered_events(injs, recs)
             combined_irr = combined_irr.append(injection_recovery_results,
                                                       ignore_index=True,)
