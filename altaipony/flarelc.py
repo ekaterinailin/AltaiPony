@@ -382,7 +382,7 @@ class FlareLightCurve(KeplerLightCurve):
                                                       ignore_index=True,)
 
             bar.update(i + 1)
-            combined_irr.to_csv('{}_{}_{}.csv'.format(iterations, lc.targetid, injrecstr[inject_before_detrending]),index=False)
+            combined_irr.to_csv('{}_TIC{}_inj_{}_sector{}.csv'.format(iterations, lc.targetid, injrecstr[inject_before_detrending], lc.campaign),index=False)
         bar.finish()
         return combined_irr, fake_lc
 
@@ -567,7 +567,10 @@ class FlareLightCurve(KeplerLightCurve):
                     ed_fake[k] = _equivalent_duration(time, fl_flux)
                     #re-define injected duration (not as multiple times FWHM):
                     i_visible_flare = np.where(fl_flux > (np.median(error) / np.median(flux)))[0]
-                    dur_fake[k] = time[np.max(i_visible_flare)] - time[np.min(i_visible_flare)]
+                    #try:
+                        #dur_fake[k] = time[np.max(i_visible_flare)] - time[np.min(i_visible_flare)]
+                    #except:
+                        #dur_fake[k] = 0
                     # re-define injected duration
                 # inject flare in to light curve
                 fake_lc.__dict__[typ][le:ri] = fake_lc.__dict__[typ][le:ri] + fl_flux * fake_lc.it_med[le:ri]
