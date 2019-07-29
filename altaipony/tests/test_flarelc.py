@@ -123,7 +123,7 @@ def test_invalid_lightcurve():
     assert err_string == err.value.args[0]
 
 def test_find_gaps():
-    lc = from_K2SC_file(test_paths[0])
+    lc = from_K2SC_file(test_paths[0], add_TPF=False)
     lc = lc.find_gaps()
     assert lc.gaps == [(0, 2505), (2505, 3293)] #[(0, 2582), (2582, 3424)]
 

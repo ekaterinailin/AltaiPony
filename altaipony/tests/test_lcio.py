@@ -79,7 +79,8 @@ def test_from_K2SC_source():
     when calling an EPIC ID or local path.
     '''
     for (ID, path, ra, dec, channel) in iterator:
-        for target in [path, ID]:
+        for target in [ID, path]:
+            print("TARGET", target, "\n")
             flc = from_K2SC_source(target)
             FlareLightCurve_testhelper(flc, ID, ra, dec, channel)
             assert flc.detrended_flux_err.shape[0] == flc.detrended_flux.shape[0]
@@ -95,10 +96,10 @@ def test_from_K2SC_file():
     when calling a local path.
     '''
     for (ID, path, ra, dec, channel) in iterator:
-        flc = from_K2SC_file(path)
+        flc = from_K2SC_file(path, ID)
         FlareLightCurve_testhelper(flc, ID, ra, dec, channel)
     for (ID, path, ra, dec, channel) in iterator:
-        flc = from_K2SC_file(path, add_TPF=False)
+        flc = from_K2SC_file(path, targetid=ID, add_TPF=False)
         assert flc.time.shape == flc.flux.shape
         assert flc.time.shape == flc.flux_err.shape
         assert flc.time_format == None

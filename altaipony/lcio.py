@@ -133,7 +133,7 @@ def from_KeplerLightCurve(lc, origin='KLC', **kwargs):
     return flc
 
 
-def from_K2SC_file(path, add_TPF=True, **kwargs):
+def from_K2SC_file(path, targetid=None, add_TPF=True, **kwargs):
     """
     Read in a K2SC de-trended light curve and convert it to a ``FlareLightCurve``.
 
@@ -156,16 +156,18 @@ def from_K2SC_file(path, add_TPF=True, **kwargs):
     hdu = fitsopen(path)
     dr = hdu[1].data
 
-    targetid = int(path.split('-')[0][-9:])
+   
 
     if add_TPF == True:
-
+        if targetid==None:
+            raise ValueError("Please pass a target ID.")
         tpf_list = search_targetpixelfile(targetid, **kwargs)
         #raw flux,campaign
         if len(tpf_list) > 1:
             LOG.error('Target data identifier must be unique. Provide campaign or cadence.')
             return
         else:
+            print("TPFLIST\n",tpf_list)
             ktpf = tpf_list.download()
             klc = ktpf.to_lightcurve()
             #Only use those cadences that are present in all TPF, KLC, and K2SC LC:
@@ -252,7 +254,7 @@ def from_K2SC_source(target, campaign=None):
 
     if os.path.exists(str(target)) or str(target).startswith('http'):
 
-        LOG.warning('Warning: from_archive() is not intended to accept a '
+        LOG.warning('Warning: from_K2SC_source() is not intended to accept a '
                     'direct path, use from_K2SC_File(path) instead.'
                     'Now using from_K2SC_File({})'.format(target))
         path = [target]
@@ -267,6 +269,6 @@ def from_K2SC_source(target, campaign=None):
                 'targetlimit' : 1}
         path, campaign = download_kepler_products(target=target, **keys)
     if len(path) == 1:
-        return from_K2SC_file(path[0], campaign=campaign[0])
+        return from_K2SC_file(path[0], targetid=target, campaign=campaign[0])
     else:
-        return [from_K2SC_file(p, campaign=c) for p,c in zip(path, campaign)]
+        return [from_K2SC_file(p, targetid=target, campaign=c) for p,c in zip(path, campaign)]
