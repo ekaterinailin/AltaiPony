@@ -4,6 +4,7 @@ import numpy as np
 import logging
 import copy
 from lightkurve import KeplerLightCurve
+from .utils import sigma_clip
 
 LOG = logging.getLogger(__name__)
 
@@ -152,7 +153,50 @@ def find_flares(flc, minsep=3):
     return lc
 
 
-def find_iterative_median(flc, n=50):
+#def find_iterative_median(flc, n=50):
+
+    #"""
+    #Find the iterative median value for a continuous observation period using
+    #flare finding to identify outliers.
+
+    #Parameters
+    #-----------
+    #flc : FlareLightCurve
+
+    #n : 50 or int
+        #maximum number of iterations
+
+    #Return
+    #-------
+    #FlareLightCurve with the it_med attribute set.
+    #"""
+
+    #lc = copy.deepcopy(flc)
+    #lc.it_med = np.full_like(flc.detrended_flux, np.median(flc.detrended_flux))
+    #if lc.gaps is None:
+        #lc = lc.find_gaps()
+    #for (le,ri) in lc.gaps:
+        #error = flc.detrended_flux_err[le:ri]
+        #flux = flc.detrended_flux[le:ri]
+        #med = np.nanmedian(flux)
+        #it_med = np.nanmedian(flux) * np.ones_like(flux)
+        #isflare = np.zeros_like(flux, dtype=bool)
+        ##find a median that is not skewed by outliers
+        #for i in range(n):
+            #flux[isflare] = med
+            #isflare_add = find_flares_in_cont_obs_period(flux, it_med,
+                                                         #error, N3=1) 
+            #isflare = np.logical_or(isflare, isflare_add)
+            #med = np.nanmedian(flux[~isflare])
+            #it_med = np.nanmedian(flux[~isflare]) * np.ones_like(flux)
+            #if len(isflare_add)==0:
+                ## there are no flare detections to add after running the finder
+                #continue
+        #lc.it_med[le:ri] = it_med
+    #return lc
+
+
+def find_iterative_median(flc, n=10):
 
     """
     Find the iterative median value for a continuous observation period using
@@ -175,23 +219,11 @@ def find_iterative_median(flc, n=50):
     if lc.gaps is None:
         lc = lc.find_gaps()
     for (le,ri) in lc.gaps:
-        error = flc.detrended_flux_err[le:ri]
         flux = flc.detrended_flux[le:ri]
-        med = np.nanmedian(flux)
-        it_med = np.nanmedian(flux) * np.ones_like(flux)
-        isflare = np.zeros_like(flux, dtype=bool)
-        #find a median that is not skewed by actual flares
-        for i in range(n):
-            flux[isflare] = med
-            isflare_add = find_flares_in_cont_obs_period(flux, it_med,
-                                                         error, N3=1) 
-            isflare = np.logical_or(isflare, isflare_add)
-            med = np.nanmedian(flux[~isflare])
-            it_med = np.nanmedian(flux[~isflare]) * np.ones_like(flux)
-            if len(isflare_add)==0:
-                # there are no flare detections to add after running the finder
-                continue
-        lc.it_med[le:ri] = it_med
+        #find a median that is not skewed by outliers
+        good = sigma_clip(flux)
+        goodflux = flux[good]
+        lc.it_med[le:ri] = np.nanmedian(goodflux)
     return lc
 
 def equivalent_duration(lc, start, stop, err=False):
