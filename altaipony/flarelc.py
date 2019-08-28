@@ -12,12 +12,8 @@ from lightkurve.utils import KeplerQualityFlags
 
 from astropy.io import fits
 
-from .altai import (find_flares, find_iterative_median,)
+from .altai import (find_flares, find_iterative_median, ModelLC)
 from .fakeflares import (merge_fake_and_recovered_events,
-                         #merge_complex_flares,
-                         #resolve_complexity,
-                         #recovery_probability,
-                         #equivalent_duration_ratio,
                          generate_fake_flare_distribution,
                          mod_random,
                          aflare,
@@ -259,7 +255,7 @@ class FlareLightCurve(KeplerLightCurve):
             raise ValueError(err_str)
 
         else:
-            new_lc = copy.copy(self)
+            new_lc = copy.deepcopy(self)
             new_lc.keplerid = self.targetid
 
             #K2SC MAGIC
@@ -283,6 +279,15 @@ class FlareLightCurve(KeplerLightCurve):
             if save_k2sc == True:
                 new_lc.save_to_file(folder)
             return new_lc
+        
+    def detrend_appaloosa(self, mode="savgol", minsep=3, gapwindow=0.1, **kwargs):
+        """From original Apppaloosa (Davenport 2016).
+        If the light curve comes from original Kepler or 
+        TESS mission, use this function.
+        """
+        flc = copy.deepcopy(self)
+        flc = ModelLC(flc, gapwindow=gapwindow, minsep=minsep, mode=mode, **kwargs)
+        return flc
 
     def find_flares(self, minsep=3, fake=False):
 

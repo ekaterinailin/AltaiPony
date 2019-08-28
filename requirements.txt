@@ -2,5 +2,6 @@ lightkurve>=1.0b21
 numpy>=1.15.1
 pandas>=0.22
 progressbar2
+gatspy
 git+https://github.com/OxES/k2sc.git
 

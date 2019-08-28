@@ -4,7 +4,12 @@ import numpy as np
 import logging
 import copy
 from lightkurve import KeplerLightCurve
+
+from scipy.signal import savgol_filter
+
 from .utils import sigma_clip
+from .fakeflares import aflare
+from .detrend import MultiBoxcar
 
 LOG = logging.getLogger(__name__)
 
@@ -105,7 +110,9 @@ def find_flares(flc, minsep=3):
         error = lc.detrended_flux_err[le:ri]
         flux = lc.detrended_flux[le:ri]
         median = lc.it_med[le:ri]
+        time = lc.time[le:ri]
         # run final flare-find on DATA - MODEL
+
         isflare = find_flares_in_cont_obs_period(flux, median, error)
 
         # now pick out final flare candidate indices
@@ -153,47 +160,62 @@ def find_flares(flc, minsep=3):
     return lc
 
 
-#def find_iterative_median(flc, n=50):
+def ModelLC(flc, mode='savgol', **kwargs):
 
-    #"""
-    #Find the iterative median value for a continuous observation period using
-    #flare finding to identify outliers.
-
-    #Parameters
-    #-----------
-    #flc : FlareLightCurve
-
-    #n : 50 or int
-        #maximum number of iterations
-
-    #Return
-    #-------
-    #FlareLightCurve with the it_med attribute set.
-    #"""
-
-    #lc = copy.deepcopy(flc)
-    #lc.it_med = np.full_like(flc.detrended_flux, np.median(flc.detrended_flux))
-    #if lc.gaps is None:
-        #lc = lc.find_gaps()
-    #for (le,ri) in lc.gaps:
-        #error = flc.detrended_flux_err[le:ri]
-        #flux = flc.detrended_flux[le:ri]
-        #med = np.nanmedian(flux)
-        #it_med = np.nanmedian(flux) * np.ones_like(flux)
-        #isflare = np.zeros_like(flux, dtype=bool)
-        ##find a median that is not skewed by outliers
-        #for i in range(n):
-            #flux[isflare] = med
-            #isflare_add = find_flares_in_cont_obs_period(flux, it_med,
-                                                         #error, N3=1) 
-            #isflare = np.logical_or(isflare, isflare_add)
-            #med = np.nanmedian(flux[~isflare])
-            #it_med = np.nanmedian(flux[~isflare]) * np.ones_like(flux)
-            #if len(isflare_add)==0:
-                ## there are no flare detections to add after running the finder
-                #continue
-        #lc.it_med[le:ri] = it_med
-    #return lc
+    '''Construct a model light curve.
+    From original Apppaloosa (Davenport 2016).
+    
+    Parameters:
+    ------------
+    lc : FlareLightCurve
+    mode : 'savgol' or str
+        Defines the method used to construct model light curve
+    '''
+    lc = copy.deepcopy(flc)
+    lc.detrended_flux = np.full_like(lc.flux, np.nan)
+    lc.flux_model = np.full_like(lc.flux, np.nan)
+    lc.detrended_flux_err = lc.flux_err
+    if lc.gaps is None:
+        lc = lc.find_gaps()
+        
+    for (le,ri) in lc.gaps:
+        
+        ok = np.where(sigma_clip(lc.flux[le:ri]))[0] + le
+        outliers = list(set(list(range(le, ri))) - set(ok))
+        time = lc.time[ok]
+        flux = lc.flux[ok]
+        error = lc.flux_err[ok]
+        
+        
+        if (mode == 'savgol'):
+            # fit data with a SAVGOL filter
+            dt = np.nanmedian(time[1:] - time[0:-1])
+            Nsmo = np.floor(0.2 / dt)
+            if Nsmo % 2 == 0:
+                Nsmo = Nsmo + 1
+            flux_model_i = savgol_filter(flux, Nsmo, 2, mode='nearest')
+            flux_diff = flux - flux_model_i + np.nanmean(flux_model_i)
+            lc.detrended_flux[ok] = flux_diff
+            lc.flux_model[ok] = flux_model_i
+            
+            a = np.isnan(lc.detrended_flux[le:ri]).astype(int)
+            sta, fin = list(np.where(np.diff(a)==1)[0]), list(np.where(np.diff(a)==-1)[0])
+            
+            # Treat outliers at end and start of time series:
+            if len(sta) > len(fin):
+                fin.append(ri-le-1)
+            elif len(sta) < len(fin):
+                sta = [sta[0]] + sta
+            flux_model_j = []
+            for i,j in list(zip(sta,fin)):
+                if j+2 > ri-le-1: #treat end of time series
+                    k = i
+                else:
+                    k = j + 2
+                flux_model_j.append([np.mean(lc.flux_model[le:ri][[i,k]])] * (j - i))
+            flux_model_j = [x for sublist in flux_model_j for x in sublist]
+            lc.detrended_flux[outliers] = lc.flux[outliers] - flux_model_j + np.nanmean(flux_model_i)
+    return lc
 
 
 def find_iterative_median(flc, n=10):
