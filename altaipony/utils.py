@@ -1,4 +1,7 @@
+import logging
 import numpy as np
+
+LOG = logging.getLogger(__name__)
 
 def k2sc_quality_cuts(data):
     """
@@ -41,8 +44,12 @@ def medsig(a):
     return med, sig
 
 
-def sigma_clip(a, max_iter=10, max_sigma=5, separate_masks=False, mexc=None):
-    """Iterative sigma-clipping routine that separates not finite points, and down- and upwards outliers.
+def sigma_clip(a, max_iter=10, max_sigma=5, 
+               separate_masks=False, mexc=None,
+               debug=False):
+    """Iterative sigma-clipping routine that 
+    separates not finite points, and down-
+    and upwards outliers.
     """
     
     # perform sigma-clipping on finite points only, or custom indices given by mexc
@@ -63,10 +70,10 @@ def sigma_clip(a, max_iter=10, max_sigma=5, separate_masks=False, mexc=None):
         mlow[mexc]  = a[mexc] - med > -max_sigma*sig #indices of okay values below median
         i += 1
         mask = mexc & mhigh & mlow
-        print("iteration {} at normalized median flux{:.5f} \pm {:.5f}".format(i, med, sig))
-        print("upper mask size before expansion = ", mhigh.shape)
+        LOG.debug("iteration {} at normalized median flux {:.5f} \pm {:.5f}".format(i, med, sig))
+        LOG.debug("upper mask size before expansion = ", mhigh.shape[0])
         mhigh = expand_mask(mhigh)
-        print("upper mask size after expansion = ", mhigh.shape, "\n")
+        LOG.debug("upper mask size after expansion = ", mhigh.shape[0], "\n")
     if separate_masks:
         return mlow, mhigh
     else:
