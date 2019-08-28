@@ -181,7 +181,8 @@ def detrend_savgol(lc):
     lc = lc[np.where(~np.isnan(lc.flux))]
     lc.detrended_flux = np.full_like(lc.flux, np.nan)
     lc.flux_model = np.full_like(lc.flux, np.nan)
-    lc.detrended_flux_err = lc.flux_err 
+    lc.detrended_flux_err = lc.flux_err
+    
     if lc.gaps is None:
         lc = lc.find_gaps()
         
@@ -189,11 +190,15 @@ def detrend_savgol(lc):
         
         ok = np.where(sigma_clip(lc.flux[le:ri]))[0] + le
         outliers = list(set(list(range(le, ri))) - set(ok))
+        
         time = lc.time[ok]
         flux = lc.flux[ok]
         error = lc.flux_err[ok]
         
+        # ----------------------------------
+        # Main detrending happens here:
         
+        # This is from Appaloosa: 
         dt = np.nanmedian(time[1:] - time[0:-1])
         Nsmo = np.floor(0.2 / dt)
         if Nsmo % 2 == 0:
@@ -202,7 +207,8 @@ def detrend_savgol(lc):
         flux_diff = flux - flux_model_i + np.nanmean(flux_model_i)
         lc.detrended_flux[ok] = flux_diff
         lc.flux_model[ok] = flux_model_i
-
+        
+        # Find out where outlier begin and end:
         a = np.isnan(lc.detrended_flux[le:ri]).astype(int)
         sta, fin = list(np.where(np.diff(a)==1)[0]), list(np.where(np.diff(a)==-1)[0])
 
@@ -211,6 +217,10 @@ def detrend_savgol(lc):
             fin.append(ri-le-1)
         elif len(sta) < len(fin):
             sta = [sta[0]] + sta
+        
+        # Compute flux model as the mean value between 
+        # start and end of flare, that is, we interpolate 
+        # linearly.
         flux_model_j = []
         for i,j in list(zip(sta,fin)):
             if j+2 > ri-le-1: #treat end of time series
@@ -219,7 +229,11 @@ def detrend_savgol(lc):
                 k = j + 2
             flux_model_j.append([np.mean(lc.flux_model[le:ri][[i,k]])] * (j - i))
         flux_model_j = [x for sublist in flux_model_j for x in sublist]
+        
         lc.detrended_flux[outliers] = lc.flux[outliers] - flux_model_j + np.nanmean(flux_model_i)
+        
+        # End of main de-trending.
+        # --------------------------------------------------
         
     lc = lc[np.where(~np.isnan(lc.detrended_flux) &
                      ~np.isnan(lc.detrended_flux_err) &
