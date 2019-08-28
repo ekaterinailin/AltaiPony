@@ -12,7 +12,7 @@ from lightkurve.utils import KeplerQualityFlags
 
 from astropy.io import fits
 
-from .altai import (find_flares, find_iterative_median, ModelLC)
+from .altai import (find_flares, find_iterative_median, detrend_savgol)
 from .fakeflares import (merge_fake_and_recovered_events,
                          generate_fake_flare_distribution,
                          mod_random,
@@ -222,7 +222,9 @@ class FlareLightCurve(KeplerLightCurve):
 
         return lc
 
-    def detrend(self, save_k2sc=False, folder='', de_niter=30, max_sigma=3, **kwargs):
+    def detrend(self, mode, save=False,
+                folder='', de_niter=30, max_sigma=3, 
+                **kwargs):
         """
         De-trends a FlareLightCurve using ``K2SC``.
         Optionally saves the LightCurve in a fits file that can
@@ -230,11 +232,13 @@ class FlareLightCurve(KeplerLightCurve):
 
         Parameters:
         ----------
+        mode : str
+            "k2sc" or "savgol"
         de_niter : int
             Differential Evolution global optimizer parameter. K2SC
             default is 150, here set to 3 as a safety net to avoid
             unintenional computational effort.
-        save_k2sc : False or bool
+        save : False or bool
             If True, the light curve is saved as a fits file to a
             given folder.
         folder : str
@@ -247,47 +251,52 @@ class FlareLightCurve(KeplerLightCurve):
         --------
         FlareLightCurve
         """
-        #make sure there is no detrended_flux already
-        if self.origin != 'TPF':
-            err_str = ('Only KeplerTargetPixelFile derived FlareLightCurves can be'
-                      ' passed to detrend().')
+        
+        if mode == "savgol":
+        
+            new_lc = copy.deepcopy(self)
+            return detrend_savgol(new_lc)
+        
+        elif mode == "k2sc":
+                
+            #make sure there is no detrended_flux already
+            if self.origin != 'TPF':
+                err_str = ('Only KeplerTargetPixelFile derived FlareLightCurves can be'
+                          ' passed to K2SC de-trending.')
+                LOG.exception(err_str)
+                raise ValueError(err_str)
+
+            else:
+                new_lc = copy.deepcopy(self)
+                new_lc.keplerid = self.targetid
+
+                #K2SC MAGIC
+                new_lc.__class__ = k2sc_lc
+                try:
+                    new_lc.k2sc(de_niter=de_niter, max_sigma=max_sigma, **kwargs)
+                    new_lc.detrended_flux = (new_lc.corr_flux - new_lc.tr_time
+                                          + np.nanmedian(new_lc.tr_time))
+                    new_lc.detrended_flux_err = copy.copy(new_lc.flux_err) # does k2sc share their uncertainties somewhere?
+                    new_lc.flux_trends = new_lc.tr_time
+                    if new_lc.detrended_flux.shape != self.flux.shape:
+                        LOG.error('De-detrending messed up the flux arrays.')
+                    else:
+                        LOG.info('De-trending successfully completed.')
+
+                except np.linalg.linalg.LinAlgError:
+                    LOG.error('Detrending failed because probably Cholesky '
+                              'decomposition failed. Try again, you shall succeed.')
+                new_lc.__class__ = FlareLightCurve
+
+                if save == True:
+                    new_lc.save_to_file(folder)
+                return new_lc
+        else:
+            err_str = ('\nDe-trending mode {} does not exist. Pass "k2sc" (K2 LCs)'
+                       ' or "savgol" (Kepler, TESS).')
             LOG.exception(err_str)
             raise ValueError(err_str)
 
-        else:
-            new_lc = copy.deepcopy(self)
-            new_lc.keplerid = self.targetid
-
-            #K2SC MAGIC
-            new_lc.__class__ = k2sc_lc
-            try:
-                new_lc.k2sc(de_niter=de_niter, max_sigma=max_sigma, **kwargs)
-                new_lc.detrended_flux = (new_lc.corr_flux - new_lc.tr_time
-                                      + np.nanmedian(new_lc.tr_time))
-                new_lc.detrended_flux_err = copy.copy(new_lc.flux_err) # does k2sc share their uncertainties somewhere?
-                new_lc.flux_trends = new_lc.tr_time
-                if new_lc.detrended_flux.shape != self.flux.shape:
-                    LOG.error('De-detrending messed up the flux arrays.')
-                else:
-                    LOG.info('De-trending successfully completed.')
-
-            except np.linalg.linalg.LinAlgError:
-                LOG.error('Detrending failed because probably Cholesky '
-                          'decomposition failed. Try again, you shall succeed.')
-            new_lc.__class__ = FlareLightCurve
-
-            if save_k2sc == True:
-                new_lc.save_to_file(folder)
-            return new_lc
-        
-    def detrend_appaloosa(self, mode="savgol", minsep=3, gapwindow=0.1, **kwargs):
-        """From original Apppaloosa (Davenport 2016).
-        If the light curve comes from original Kepler or 
-        TESS mission, use this function.
-        """
-        flc = copy.deepcopy(self)
-        flc = ModelLC(flc, gapwindow=gapwindow, minsep=minsep, mode=mode, **kwargs)
-        return flc
 
     def find_flares(self, minsep=3, fake=False):
 
@@ -387,7 +396,7 @@ class FlareLightCurve(KeplerLightCurve):
                                                       ignore_index=True,)
 
             bar.update(i + 1)
-            combined_irr.to_csv('{}_TIC{}_inj_{}_sector{}.csv'.format(iterations, lc.targetid, injrecstr[inject_before_detrending], lc.campaign),index=False)
+            combined_irr.to_csv('{}_{}_inj_{}_{}.csv'.format(iterations, lc.targetid, injrecstr[inject_before_detrending], lc.campaign),index=False)
         bar.finish()
         return combined_irr, fake_lc
 
@@ -576,7 +585,6 @@ class FlareLightCurve(KeplerLightCurve):
                         #dur_fake[k] = time[np.max(i_visible_flare)] - time[np.min(i_visible_flare)]
                     #except:
                         #dur_fake[k] = 0
-                    # re-define injected duration
                 # inject flare in to light curve
                 fake_lc.__dict__[typ][le:ri] = fake_lc.__dict__[typ][le:ri] + fl_flux * fake_lc.it_med[le:ri]
             ckm += nfake
@@ -640,20 +648,23 @@ class FlareLightCurve(KeplerLightCurve):
                 new_lc.pixel_flux_err = np.append(new_lc.pixel_flux_err, others[i].pixel_flux_err,axis=0)
         return new_lc
 
-    def save_to_file(self, folder):
+    def save_to_file(self, folder, mode):
         '''Save FlareLightCurve to some folder.
 
         Parameters:
         ------------
         folder : str
             path to folder like "<folder_name>/"
+        mode : str
+            "k2sc" or "savgol" or else for different
+            de-trending method.
         '''
         if self.quarter is not None:
-            path = '{0}pony_fake_kp_llc_{1}-c{2:02d}_kepler_v2_lc.fits'.format(folder, self.targetid, self.quarter)
+            path = '{0}{3}pony_fake_kp_llc_{1}-c{2:02d}_kepler_v2_lc.fits'.format(folder, self.targetid, self.quarter, mode)
         elif self.campaign is not None:
-            path = '{0}pony_fake_k2_llc_{1}-c{2:02d}_kepler_v2_lc.fits'.format(folder, self.targetid, self.campaign)
+            path = '{0}{3}pony_fake_k2_llc_{1}-c{2:02d}_kepler_v2_lc.fits'.format(folder, self.targetid, self.campaign, mode)
         else:
-            path = '{0}pony_fake_k2_llc_{1}-c00_kepler_v2_lc.fits'.format(folder, self.targetid)
+            path = '{0}{2}pony_fake_k2_llc_{1}-c00_kepler_v2_lc.fits'.format(folder, self.targetid, mode)
         self.to_fits(path=path,
                     overwrite=True,
                     campaign=self.campaign,flux=self.flux, error=self.flux_err, it_med=self.it_med, quality=self.quality,
