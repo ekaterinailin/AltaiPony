@@ -7,7 +7,7 @@
 Find and analyse flares in K2 light curves
 ======================================================
 
-**AltaiPony** replaces the original Appaloosa_. **AltaiPony** finds flares in Kepler and K2 photometry. It is optimised to work with K2SC de-trended light curves but fetches ``KeplerTargetPixelFiles`` for ancillary data or if you want to remove systematic and periodic variability (vulgo *de-trending*) yourself. You can use most functionalities from lightkurve_'s ``KeplerLightCurve`` class. **AltaiPony** also runs **k2sc** for de-trending and flare characterization. Shortcut to the core class  here_.
+**AltaiPony** replaces the original Appaloosa_. **AltaiPony** finds flares in Kepler, K2, and TESS photometry. You can create a ``FlareLlightCurve`` from any of these. K2 light curves are best de-trended using **k2sc**, for TESS and Kepler we employ a Savitzky-Golay filter. You can use most functionalities from lightkurve_'s ``KeplerLightCurve`` and ``TessLightCurve`` classes. **AltaiPony** can be used to inject and recover synthetic flare signatures. Shortcut to the core class is here_.
 
 .. _user-docs:
 
