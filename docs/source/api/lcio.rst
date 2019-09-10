@@ -18,6 +18,7 @@ You can also fetch some remote file, de-trend it, store it as an AltaiPony light
 >>> dflc = flc.detrend("savgol")
 >>> dflc.to_fits("ponylc.fits")
 >>> ...
+>>> from altaipony.lcio import from_path
 >>> rflc = from_path("ponylc.fits", mode="AltaiPony", mission="TESS")
 
 .. module:: altaipony.lcio

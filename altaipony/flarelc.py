@@ -311,7 +311,7 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
                 new_lc.__class__ = FlareLightCurve
 
                 if save == True:
-                    new_lc.save_to_file(folder)
+                    new_lc.to_fits(folder)
                 return new_lc
         else:
             err_str = ('\nDe-trending mode {} does not exist. Pass "k2sc" (K2 LCs)'
@@ -397,7 +397,7 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
             fake_lc = fake_lc.inject_fake_flares(inject_before_detrending=inject_before_detrending,
                                                 **kwargs)
             if save_lc_to_file == True:
-                fake_lc.save_to_file("{}before".format(folder))
+                fake_lc.to_fits("{}before".format(folder))
                 print("saved EPIC {} LC before detrending".format(self.targetit))
                 
             injs = fake_lc.fake_flares
@@ -410,7 +410,7 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
             recs = fake_lc.flares
             
             if save_lc_to_file == True:
-                fake_lc.save_to_file("{}after".format(folder))
+                fake_lc.to_fits("{}after".format(folder))
                 print("saved EPIC {} LC after detrending".format(self.targetit))
                 
             injection_recovery_results = merge_fake_and_recovered_events(injs, recs)
@@ -553,8 +553,8 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
             LOG.debug('Injecting after detrending.')
             
         fakeres = pd.DataFrame()
-        fake_lc.__dict__[typ] = fake_lc.__dict__[typ]
-        fake_lc.__dict__[typerr] = fake_lc.__dict__[typerr]
+        #fake_lc.__dict__[typ] = fake_lc.__dict__[typ]
+        #fake_lc.__dict__[typerr] = fake_lc.__dict__[typerr]
         nfakesum = max(len(fake_lc.gaps), int(np.rint(fakefreq * (fake_lc.time.max() - fake_lc.time.min()))))
         
         fake_lc = find_iterative_median(fake_lc)
@@ -563,7 +563,6 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
         dur_fake = np.zeros(nfakesum, dtype='float')
         ampl_fake = np.zeros(nfakesum, dtype='float')
         ckm = 0
-        
         for (le,ri) in fake_lc.gaps:
             gap_fake_lc = fake_lc[le:ri]
             nfake = max(1,int(np.rint(fakefreq * (gap_fake_lc.time.max() - gap_fake_lc.time.min()))))

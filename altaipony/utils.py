@@ -44,7 +44,7 @@ def medsig(a):
     return med, sig
 
 
-def sigma_clip(a, max_iter=10, max_sigma=5, 
+def sigma_clip(a, max_iter=10, max_sigma=3, 
                separate_masks=False, mexc=None,
                debug=False):
     """Iterative sigma-clipping routine that 
@@ -54,7 +54,6 @@ def sigma_clip(a, max_iter=10, max_sigma=5,
     
     # perform sigma-clipping on finite points only, or custom indices given by mexc
     mexc  = isfinite(a) if mexc is None else isfinite(a) & mexc
-    
     #init different masks for up- and downward outliers
     mhigh = ones_like(mexc)
     mlow  = ones_like(mexc)
