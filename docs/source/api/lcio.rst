@@ -1,7 +1,18 @@
 Finding Data
 =====
 
-There are several ways to create a ``FlareLightCurve`` in **AltaiPony**. All you need is your target's EPIC ID (and campaign). If you want to use de-trended K2SC light curves from archive or your computer, use ``from_K2SC_source`` or ``from_K2SC_file``. If you want to do the de-trending with **AltaiPony**, use ``from_TargetPixel_source``. You can also fetch ``KeplerLightCurve`` files. Their use in **AltaiPony** is limited for K2 light curves because sophisticated de-trending and quiescent flux modeling is needed (such as K2SC) to obtain reliable flare candidates:
+There are several ways to create a ``FlareLightCurve`` in **AltaiPony**. For a quickstart, all you need is your target's TOC, EPIC or KIC (and campaign/quarter/sector). Local TESS, Kepler and K2 light curves can be read with ``from_path``, but you can can also query MAST with ``fom_mast``. You can read in a light curve directly or convert a target pixel file. The latter is required if you want to use **k2sc** for de-trending. Familiary with lightkurve_ is advantageous.
+
+Fetch a TESS light curve from MAST:
+
+>>> from altaipony.lcio import from_mast
+flc = from_mast("TIC 358108509", mode="LC", mission="TESS", sector=1)
+
+Or a K2 target pixel file, and convert it to a ``FlareLightCurve`` using some extra arguments like ``flux_type``, ``cadence``, and ``aperture_mask`` :
+
+>>> flc = from_mast("EPIC 211119999", mode="TPF", mission="K2", c=4,
+                     flux_type="PDCSAP_FLUX", cadence="long", 
+                     aperture_mask="default")
 
 .. module:: altaipony.lcio
 
@@ -10,5 +21,7 @@ There are several ways to create a ``FlareLightCurve`` in **AltaiPony**. All you
    :no-inherited-members:
    :no-inheritance-diagram:
 
+
+.. _lightkurve: https://github.com/KeplerGO/lightkurve
  
    
