@@ -1,18 +1,9 @@
 '''
 Use this file to keep various detrending methods
-
 '''
+
 import numpy as np
-#from pandas import rolling_median #, rolling_mean, rolling_std, rolling_skew
 import pandas as pd
-#from scipy.optimize import curve_fit
-#from gatspy.periodic import LombScargleFast
-#from gatspy.periodic import SuperSmoother
-# import pywt
-#from scipy import signal
-#import matplotlib.pyplot as plt
-
-
 
 def MultiBoxcar(time, flux, error, numpass=3, kernel=2.0,
                 sigclip=3, pcentclip=5, returnindx=False,

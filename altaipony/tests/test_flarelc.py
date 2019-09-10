@@ -1,13 +1,15 @@
 import numpy as np
 import pytest
-from astropy.io.fits.hdu.hdulist import fitsopen
+
+#from astropy.io.fits.hdu.hdulist import fitsopen
 from inspect import currentframe, getframeinfo
 
 from ..flarelc import FlareLightCurve
-from ..lcio import from_K2SC_file
+from ..altai import find_iterative_median
+from ..lcio import from_path
 
 from .. import PACKAGEDIR
-from . import test_ids, test_paths
+from . import test_ids, test_paths, pathkepler, pathAltaiPony
 
 def test_get_saturation():
     flc = mock_flc(detrended=True)
@@ -41,13 +43,13 @@ def test_sample_flare_recovery():
     assert np.median(fflc.it_med) == pytest.approx(500.005274113832)
 
 
-def test_characterize_flares():
-    # flc = mock_flc(detrended=True)
-    # lc = flc.characterize_flares(iterations=1, d=True, fakefreq=1.2, seed=781)
-    # assert lc.flares.loc[0, 'rec_prob'] == pytest.approx(0.66666666666)
-    # assert lc.flares.loc[0, 'ed_rec'] == pytest.approx(3455.887599271639)
-    # assert lc.flares.loc[0, 'ed_rec_corr'] == pytest.approx(6524.739276618502)
-    pass
+def test_to_fits():
+    flc = from_path(pathkepler, mode="LC", mission="Kepler")
+    flc = flc.detrend("savgol")
+    flc.to_fits(pathAltaiPony)
+    flc = flc.find_flares()
+    flc.to_fits(pathAltaiPony)
+    flc = from_path(pathAltaiPony, mode="AltaiPony", mission="Kepler")
 
 def test_repr():
     pass
@@ -123,9 +125,15 @@ def test_invalid_lightcurve():
     assert err_string == err.value.args[0]
 
 def test_find_gaps():
-    lc = from_K2SC_file(test_paths[0], add_TPF=False)
-    lc = lc.find_gaps()
-    assert lc.gaps == [(0, 2505), (2505, 3293)] #[(0, 2582), (2582, 3424)]
+    flux = np.random.rand(1000)
+    time = np.linspace(0,30,1000)
+    flux[20:200] = np.nan
+    time = time[np.where(~np.isnan(flux))]
+    flux = flux[np.where(~np.isnan(flux))]
+    flc = FlareLightCurve(time=time, flux=flux)
+
+    flc = flc.find_gaps()
+    assert flc.gaps == [(0, 20), (20, 820)]
 
 def test_detrend(**kwargs):
     
@@ -162,16 +170,6 @@ def test_detrend(**kwargs):
         assert daplc.flux.max() > daplc.detrended_flux.max() # flare sits on a LC part above quiescent level
         assert (aplc.flux_err == daplc.detrended_flux_err).all() # uncertainties are simply kept
 
-
-def test_detrend_IO():
-    #the mock_flc needs ra, dec, mission, and channel only for k2sc detrending!
-    test_detrend(save=True, folder='{}/tests/testfiles/'.format(PACKAGEDIR))
-    flc = fitsopen('{}/tests/testfiles/pony_k2sc_k2_llc_800000000-c05_kepler_v2_lc.fits'.format(PACKAGEDIR))
-    flc = flc[1].data
-    mockflc = mock_flc()
-    print (flc['TRTIME']-mockflc.flux)
-    assert (flc['TIME'] == mockflc.time).all()
-    assert (flc['CADENCE'] == mockflc.cadenceno).all()
 
 def test_detrend_fails():
     """If detrend fails, an error is raised with given string."""

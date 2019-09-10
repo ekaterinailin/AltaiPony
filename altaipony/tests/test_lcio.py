@@ -1,131 +1,85 @@
-import os
 import pytest
-import pandas as pd
-from ..lcio import (from_TargetPixel_source,
-                    from_KeplerLightCurve_source,
-                    from_K2SC_source,
-                    from_K2SC_file,
-                    from_KeplerLightCurve,
-                    from_KeplerLightCurve_file)
-from .__init__ import test_ids, test_paths, kepler_path
+
+import numpy as np
+
+from ..lcio import from_path, from_mast, _from_path_AltaiPony
+from . import pathkepler, pathk2LC, pathk2TPF, pathtess, pathAltaiPony
 
 
-campaign = 4
-ra = [56.90868, 57.10626, 55.967295]
-dec = [24.891865, 22.211572, 24.841616]
-channel = [52, 47, 52]
-iterator = list(zip(test_ids, test_paths, ra, dec, channel))
 
+@pytest.mark.parametrize("path,mode,ID,mission,campaign,quarter,sector",
+                         [(pathkepler,"LC", 10002792, "Kepler", None, 2, None ),
+                          (pathk2LC,"LC", 211117077, "K2", 4, None, None ),
+                          (pathk2TPF,"TPF", 210994964, "K2", 4, None, None ),
+                          (pathtess,"LC", 358108509, "TESS", None, None, None)
+                          ])
 
-def FlareLightCurve_testhelper(flc, ID, ra, dec, channel, from_tpf = False):
-    """
-    Test that reading in a FlareLightCurve does not kill or change any
-    KeplerLightCurve attributes.
-
-    Parameters
-    -----------
-    flc : FlareLightCurve
-        lightcurve of target with given ID
-    ID :
-        EPIC ID
-    ra : float
-        RA
-    dec : float
-        declination
-    channel : int
-        channel on the CCD detector
-    from_tpf : False or bool
-        if light curve is created from a processed ``K2SC`` file one cadence is
-        thrown out from the resulting ``FlareLightCurve``.
-    """
-    assert flc.time.shape == flc.flux.shape
-    assert flc.time.shape == flc.flux_err.shape
-
+def test_from_path(path, mode, ID, mission, campaign, quarter, sector):
+    
+    flc = from_path(path, mode=mode, mission=mission)
+    assert flc.targetid == ID
+    assert flc.mission == mission
+    assert flc.flux.shape[0] == flc.time.shape[0]
     assert flc.campaign == campaign
-    #Wait until Nick's bugfix #325 is an official version feature
-    #assert flc.quality_bitmask == 'default'
-    assert flc.time_format == 'bkjd'
-    assert flc.time_scale == 'tdb'
-    assert flc.quarter == None
-    assert flc.ra == ra
-    assert flc.dec == dec
-    assert flc.targetid == int(ID)
-    assert flc.channel == channel
+    assert flc.quarter == quarter
+    assert flc.sector == sector
+    assert (np.isnan(flc.flux) == False).all()
+    assert (np.isnan(flc.time) == False).all()
+    assert np.isnan(flc.detrended_flux).all()
+    assert (~np.isnan(flc.flux_err)).all()
+    assert flc.flares.shape[0] == 0
+    flct = flc[10:20]
+    assert flct.flux.shape[0] == flct.time.shape[0]
+    assert flct.flux.shape[0] == flct.flux_err.shape[0]
+    assert flct.flux.shape[0] == flct.detrended_flux_err.shape[0]
+    assert flct.flux.shape[0] == 10
+    
+    
+def test__from_path_AltaiPony():
+    path = "altaipony/examples/pony010002792-2009259160929_llc_test_from_path_AltaiPony.fits"
+    flc = from_path(pathkepler, mode="LC", mission="Kepler")
+    flc.to_fits(path)
+    rflc = _from_path_AltaiPony(path)
+    assert rflc.channel == flc.channel
+    assert rflc.quarter == flc.quarter
+    assert rflc.ra == flc.ra
+    assert rflc.dec == flc.dec
+    assert rflc.time_scale == flc.time_scale
+    assert rflc.time_format == flc.time_format
+    assert rflc.mission == "Kepler"
+    kws = ['time', 'flux', 'flux_err', 'centroid_col',
+           'centroid_row', 'quality', 'cadenceno',
+           'detrended_flux', 'detrended_flux_err',]
+    assert (len(rflc.flux) == np.array([len(getattr(rflc,x)) for x in kws])).all()
+    assert rflc.targetid == 10002792
+    assert rflc.origin == "KLC"
+    assert np.isnan(rflc.detrended_flux).all()
+    assert np.isnan(rflc.detrended_flux_err).all()
+    
+    
 
-
-def test_from_TargetPixel_source():
-    '''
-    Test if a ``FlareLightCurve`` is created from a ``TargetPixelFile`` properly
-    when calling an EPIC ID.
-    '''
-    #Can we load a path, too? ->later
-    for (ID, path, ra, dec, channel) in iterator:
-        flc = from_TargetPixel_source(ID)
-        FlareLightCurve_testhelper(flc, ID, ra, dec, channel, from_tpf=True)
-
-def test_from_KeplerLightCurve_source():
-    '''
-    Test if a ``FlareLightCurve`` is created from a ``KeplerLightCurve`` properly
-    when calling an EPIC ID.
-    '''
-    #Can we load a path, too? -> later
-    for (ID, path, ra, dec, channel) in iterator:
-        flc = from_KeplerLightCurve_source(ID)
-        FlareLightCurve_testhelper(flc, ID, ra, dec, channel)
-
-def test_from_K2SC_source():
-    '''
-    Test if a ``FlareLightCurve`` is created from a ``K2SC`` file properly
-    when calling an EPIC ID or local path.
-    '''
-    for (ID, path, ra, dec, channel) in iterator:
-        for target in [ID, path]:
-            print("TARGET", target, "\n")
-            flc = from_K2SC_source(target)
-            FlareLightCurve_testhelper(flc, ID, ra, dec, channel)
-            assert flc.detrended_flux_err.shape[0] == flc.detrended_flux.shape[0]
-            assert flc.flares.empty
-            assert flc.gaps == None
-        #also test if a local path throws warning
-        #test if a list of IDs is correctly resolved - must return a list of FlareLightCurves
-        #also test if a list of paths is correctly resolved - must return a list of FlareLightCurves
-
-def test_from_K2SC_file():
-    '''
-    Test if a ``FlareLightCurve`` is created from a ``K2SC`` file properly
-    when calling a local path.
-    '''
-    for (ID, path, ra, dec, channel) in iterator:
-        flc = from_K2SC_file(path, ID)
-        FlareLightCurve_testhelper(flc, ID, ra, dec, channel)
-    for (ID, path, ra, dec, channel) in iterator:
-        flc = from_K2SC_file(path, targetid=ID, add_TPF=False)
-        assert flc.time.shape == flc.flux.shape
-        assert flc.time.shape == flc.flux_err.shape
-        assert flc.time_format == None
-        assert flc.time_scale == None
-        assert flc.quarter == None
-        assert flc.ra == ra
-        assert flc.dec == dec
-        assert flc.targetid == int(ID)
-        assert flc.channel == None
-
-
-def test_from_KeplerLightCurve():
-    #is implicitly tested by test_from_K2SC_source and test_from_TargetPixel_source
-    pass
-
-def test_from_KeplerLightCurve_file():
-    for flc in [from_KeplerLightCurve_file(kepler_path, "PDCSAP_FLUX"),
-                from_KeplerLightCurve_file(kepler_path, "SAP_FLUX")]:
-        assert flc.targetid == 10002792
-        assert flc.cadenceno.shape == flc.flux.shape
-        assert flc.cadenceno.shape == flc.flux_err.shape
-        assert flc.cadenceno.shape == flc.time.shape
-        assert flc.campaign is None
-        assert flc.quarter == 2
-        assert flc.channel == 63
-        assert flc.astropy_time.format == 'jd'
-        assert flc.flares.shape[1] == 9
-        assert flc.flares.shape[0] == 0
-        assert flc.it_med is None
+@pytest.mark.parametrize("ID,mission,c,mode,cadence,sector,campaign,quarter",
+                         [(395130640,"TESS", 11,"LC", "short", 11, None, None ),
+                          (211119999, "K2", 4, "LC", "long", None, 4, None),
+                          (211119999, "K2", 4, "TPF", "long", None, 4, None),
+                          (9726699, "Kepler", 6, "LC", "long", None, None, 6)
+                          ])
+def test_from_mast(ID, mission, c, mode, cadence, sector, campaign, quarter):
+    flc = from_mast(ID, mission, c, mode=mode, cadence=cadence)
+    assert flc.targetid == ID
+    assert flc.mission == mission
+    assert flc.flux.shape[0] == flc.time.shape[0]
+    assert flc.campaign == campaign
+    assert flc.quarter == quarter
+    assert flc.sector == sector
+    assert (np.isnan(flc.flux) == False).all()
+    assert (np.isnan(flc.time) == False).all()
+    assert np.isnan(flc.detrended_flux).all()
+    assert (~np.isnan(flc.flux_err)).all()
+    assert flc.flares.shape[0] == 0
+    flct = flc[10:20]
+    assert flct.flux.shape[0] == flct.time.shape[0]
+    assert flct.flux.shape[0] == flct.flux_err.shape[0]
+    assert flct.flux.shape[0] == flct.detrended_flux_err.shape[0]
+    assert flct.flux.shape[0] == 10
+    

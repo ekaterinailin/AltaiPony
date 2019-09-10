@@ -7,7 +7,7 @@ import progressbar
 import datetime
 
 from k2sc.standalone import k2sc_lc
-from lightkurve import KeplerLightCurve, KeplerTargetPixelFile
+from lightkurve import KeplerLightCurve, KeplerTargetPixelFile, TessLightCurve
 from lightkurve.utils import KeplerQualityFlags
 
 from astropy.io import fits
@@ -22,7 +22,7 @@ from .fakeflares import (merge_fake_and_recovered_events,
 import time
 LOG = logging.getLogger(__name__)
 
-class FlareLightCurve(KeplerLightCurve):
+class FlareLightCurve(KeplerLightCurve, TessLightCurve):
     """
     Flare light curve class that unifies properties of ``K2SC``-de-trended and
     Kepler's ``lightkurve.KeplerLightCurve``.
@@ -63,8 +63,10 @@ class FlareLightCurve(KeplerLightCurve):
         K2 campaign number.
     quarter : int
         Kepler Quarter number.
+    sector : int
+        TESS sector number
     mission : string
-        Mission identifier, e.g., 'K2' or 'Kepler'.
+        Mission identifier, e.g., 'TESS', 'K2' or 'Kepler'.
     cadenceno : array-like
         Cadence number - unique identifier.
     targetid : int
@@ -98,21 +100,37 @@ class FlareLightCurve(KeplerLightCurve):
 
     """
     def __init__(self, time=None, flux=None, flux_err=None, time_format=None,
-                 time_scale=None, time_unit = None, centroid_col=None,
+                 time_scale=None, time_unit=None, centroid_col=None,
                  centroid_row=None, quality=None, quality_bitmask=None,
-                 channel=None, campaign=None, quarter=None, mission=None,
+                 channel=None, campaign=None, quarter=None, sector=None, mission=None,
                  cadenceno=None, targetid=None, ra=None, dec=None, label=None,
                  meta={}, detrended_flux=None, detrended_flux_err=None,
                  flux_trends=None, gaps=None, flares=None, flux_unit = None,
                  primary_header=None, data_header=None, pos_corr1=None,
                  pos_corr2=None, origin='FLC', fake_flares=None, it_med=None,
-                 pixel_flux=None, pixel_flux_err=None, pipeline_mask=None):
+                 pixel_flux=None, pixel_flux_err=None, pipeline_mask=None,
+                 camera=None, ccd=None):
 
-        super(FlareLightCurve, self).__init__(time=time, flux=flux, flux_err=flux_err, time_format=time_format, time_scale=time_scale,
-                                              centroid_col=centroid_col, centroid_row=centroid_row, quality=quality,
-                                              quality_bitmask=quality_bitmask, channel=channel, campaign=campaign, quarter=quarter,
-                                              mission=mission, cadenceno=cadenceno, targetid=targetid, ra=ra, dec=dec, label=label,
-                                              meta=meta)
+        if mission == 'TESS':
+                TessLightCurve.__init__(self, time=time, flux=flux, flux_err=flux_err,
+                                        time_format=time_format, time_scale=time_scale,
+                                        centroid_col=centroid_col, centroid_row=centroid_row,
+                                        quality=quality, quality_bitmask=quality_bitmask,
+                                        camera=camera, cadenceno=cadenceno, targetid=targetid,
+                                        ra=ra, dec=dec, label=label, meta=meta, sector=sector,
+                                        )
+                self.mission = mission
+                self.campaign = None
+                self.quarter = None
+        else:
+                KeplerLightCurve.__init__(self, time=time, flux=flux, flux_err=flux_err,
+                                          time_format=time_format, time_scale=time_scale,
+                                          centroid_col=centroid_col, centroid_row=centroid_row,
+                                          quality=quality, quality_bitmask=quality_bitmask,
+                                          channel=channel, campaign=campaign, quarter=quarter,
+                                          mission=mission, cadenceno=cadenceno, targetid=targetid,
+                                          ra=ra, dec=dec, label=label, meta=meta)
+        
         self.flux_unit = flux_unit
         self.time_unit = time_unit
         self.gaps = gaps
@@ -128,6 +146,8 @@ class FlareLightCurve(KeplerLightCurve):
         self.pixel_flux_err = pixel_flux_err
         self.pipeline_mask = pipeline_mask
         self.it_med = it_med
+
+        
 
         columns = ['istart', 'istop', 'cstart', 'cstop', 'tstart',
                    'tstop', 'ed_rec', 'ed_rec_err', 'ampl_rec']
@@ -184,6 +204,8 @@ class FlareLightCurve(KeplerLightCurve):
             copy_self.pixel_flux = self.pixel_flux[key]
         if copy_self.pixel_flux_err is not None:
             copy_self.pixel_flux_err = self.pixel_flux_err[key]
+        if copy_self.quality is not None:
+            copy_self.quality = self.quality[key]
         return copy_self
 
     def find_gaps(self, maxgap=0.09, minspan=10):
@@ -293,7 +315,7 @@ class FlareLightCurve(KeplerLightCurve):
                 return new_lc
         else:
             err_str = ('\nDe-trending mode {} does not exist. Pass "k2sc" (K2 LCs)'
-                       ' or "savgol" (Kepler, TESS).')
+                       ' or "savgol" (Kepler, TESS).'.format(mode))
             LOG.exception(err_str)
             raise ValueError(err_str)
 
@@ -648,26 +670,43 @@ class FlareLightCurve(KeplerLightCurve):
                 new_lc.pixel_flux_err = np.append(new_lc.pixel_flux_err, others[i].pixel_flux_err,axis=0)
         return new_lc
 
-    def save_to_file(self, folder, mode):
-        '''Save FlareLightCurve to some folder.
+
+    def to_fits(self, path):
+        """Write FlareLightCurve to a .fits
+        file. Read it in again using from_path().
 
         Parameters:
         ------------
-        folder : str
-            path to folder like "<folder_name>/"
-        mode : str
-            "k2sc" or "savgol" or else for different
-            de-trending method.
-        '''
-        if self.quarter is not None:
-            path = '{0}{3}pony_fake_kp_llc_{1}-c{2:02d}_kepler_v2_lc.fits'.format(folder, self.targetid, self.quarter, mode)
-        elif self.campaign is not None:
-            path = '{0}{3}pony_fake_k2_llc_{1}-c{2:02d}_kepler_v2_lc.fits'.format(folder, self.targetid, self.campaign, mode)
-        else:
-            path = '{0}{2}pony_fake_k2_llc_{1}-c00_kepler_v2_lc.fits'.format(folder, self.targetid, mode)
-        self.to_fits(path=path,
-                    overwrite=True,
-                    campaign=self.campaign,flux=self.flux, error=self.flux_err, it_med=self.it_med, quality=self.quality,
-                    detrended_flux=self.detrended_flux, detrended_flux_err=self.detrended_flux_err, 
-                    time=self.time, trtime=self.flux_trends, cadence=self.cadenceno.astype(np.int32), mission=self.mission,
-                    x=self.pos_corr1, y=self.pos_corr2)
+        path : str
+            Path to location.
+        """
+        flc = copy.deepcopy(self)
+        bintab = [] # list for main table
+        hdr = fits.Header() # empty header
+        vals = flc.__dict__ # all attributes from light curve
+
+        # Place attributes into header or main table depending on dtype:
+        for key, val in vals.items():
+            if type(val)==np.ndarray:
+                bintab.append(fits.Column(name=key, format='E', array=val))
+            elif (type(val) == str) | (type(val) == int) | (type(val) == float):
+                hdr[key] = val
+            elif type(val) == dict:
+                for k, v in val:
+                    LOG.debug("Extra column {} defined in header.".format(k))
+                    hdr[k] = v
+            else:
+                LOG.debug(" was not written to .fits file.".format(key))
+                
+        # Define columns
+        cols = fits.ColDefs(bintab)
+
+        # Define header and binary table
+        hdu = fits.BinTableHDU.from_columns(cols)
+        primary_hdu = fits.PrimaryHDU(header=hdr)
+
+        # Stick header and main table together
+        hdul = fits.HDUList([primary_hdu, hdu])
+        hdul.writeto(path, overwrite=True)
+
+

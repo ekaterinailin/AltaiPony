@@ -188,8 +188,9 @@ def detrend_savgol(lc):
         
     for (le,ri) in lc.gaps:
         
+        # Do the iterative sigma clipping
         ok = np.where(sigma_clip(lc.flux[le:ri]))[0] + le
-        outliers = list(set(list(range(le, ri))) - set(ok))
+        outliers = list(set(list(range(le, ri))) - set(ok)) # inverse of ok
         
         time = lc.time[ok]
         flux = lc.flux[ok]

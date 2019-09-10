@@ -1,125 +1,218 @@
-import os
-import inspect
+from warnings import warn
 import logging
-import time
+
 import numpy as np
+import astropy.units as u
 
-import k2sc.core as k2sc_flag_values
+from astropy.io import fits
 
-from astropy import units as u
-from astropy.io.fits.hdu.hdulist import fitsopen
+from altaipony.flarelc import FlareLightCurve
 
-from lightkurve import KeplerLightCurveFile
-from lightkurve import search_targetpixelfile, search_lightcurvefile
-
-from .flarelc import FlareLightCurve
-from .mast import download_kepler_products
-from .utils import k2sc_quality_cuts
-
+from lightkurve import (search_lightcurvefile,
+                        search_targetpixelfile,
+                        KeplerLightCurveFile,
+                        TessLightCurveFile,
+                        KeplerTargetPixelFile,
+                        TessTargetPixelFile)
+                        
 LOG = logging.getLogger(__name__)
 
-# Naming convention:
-# from_* : IO method for some data type (TPF, KLC, K2SC)
-# *_source : accept both EPIC IDs and paths
-# *_file : accept only local paths
-# *_archive : accept only EPIC IDs (not used yet)
+# ----------------------------------------------------------
+# Read in data from MAST, either as LC (TESS, Kepler, K2) or TPF (K2)
+# No reading in of Kepler or TESS TPFs as de-trending is not implemented for them.
 
-
-def from_TargetPixel_source(target, download_dir=None, **kwargs):
-    """
-    Accepts paths and EPIC IDs as targets. Either fetches a ``KeplerTargetPixelFile``
-    from MAST via ID or directly from a path, then creates a lightcurve with
-    default Kepler/K2 pixel mask.
-
-    Parameters
-    ------------
-    target : str or int
-        EPIC ID (e.g., 211119999) or path to zipped ``KeplerTargetPixelFile``
-    download_dir : str 
-        directory to store the file in
-    kwargs : dict
-        Keyword arguments to pass to `lightkurve.search_targetpixelfile()
-        <http://docs.lightkurve.org/api/lightkurve.search.search_targetpixelfile.html#lightkurve.search.search_targetpixelfile>`_
-    """
-    tpf_list = search_targetpixelfile(target, **kwargs)
+def from_mast(targetid, mission, c, mode="LC", **kwargs):
+    """Download light curve derived from
+    TPF or LC directly from MAST using the
+    great search functionality in lightkurve,
+    and construct a FlareLightCurve.
     
-    if len(tpf_list) > 1:
-        LOG.error('Target data identifier must be unique. Provide campaign or cadence.')
-        return
-    else:
-        tpf = tpf_list.download(download_dir=download_dir)
-        keys = {'primary_header' : tpf.hdu[0].header,
-                'data_header' : tpf.hdu[1].header,
-                'pos_corr1' : tpf.pos_corr1,
-                'pos_corr2' : tpf.pos_corr2,
-                'pixel_flux' : tpf.flux,
-                'pixel_flux_err' : tpf.flux_err,}
-
-        lc = tpf.to_lightcurve()
-        lc = from_KeplerLightCurve(lc, origin = 'TPF', **keys)
-        return lc
-
-
-def from_KeplerLightCurve_source(target, lctype='SAP_FLUX',**kwargs):
-    """
-    Accepts paths and EPIC IDs as targets. Either fetches a ``KeplerLightCurveFile``
-    from MAST via ID or directly from a path, then creates a ``FlareLightCurve``
-    preserving all data from ``KeplerLightCurve``.
-
-    Parameters
+    Parameters:
     ------------
-    target : str or int
-        EPIC ID (e.g., 211119999) or path to zipped ``KeplerLightCurveFile``
-    lctype: 'SAP_FLUX' or 'PDCSAP_FLUX'
-        takes in either raw or *PDC* flux, default is 'SAP_FLUX' because it seems
-        to work best with the K2SC detrending pipeline
+    targetid : str or int
+        TIC, EPIC or KIC ID
+    mission : str
+        "Kepler", "K2", or TESS"
+    c : int
+        quarter, campaign, or sector
+    mode : str
+        "TPF" or "LC", default is "LC"
     kwargs : dict
-        Keyword arguments to pass to `lightkurve.search_lightcurvefile()
-        <http://docs.lightkurve.org/api/lightkurve.search.search_lightcurvefile.html>`_
-
-    Returns
+        Keyword arguments to pass to _from_mast_<mission>()
+        functions, like cadence ("short" or "long").
+        
+    Return:
     --------
     FlareLightCurve
     """
+    
+    if mission=="K2":
+        if mode == "LC":
+            warn("\nYou cannot do K2SC de-trending on a light curve only." 
+                 "Pass mode='TPF' to be able to run FLC.detrend('k2sc') later.")
+        return _from_mast_K2(targetid, mode, c, **kwargs)
+    
+    elif mission == "Kepler":
+        return _from_mast_Kepler(targetid, c, **kwargs)
+    
+    elif mission == "TESS":
+        return _from_mast_TESS(targetid, c, **kwargs)
+    
+    return
 
-    lcf_list = search_lightcurvefile(target, **kwargs)
-    if len(lcf_list) > 1:
-        LOG.error('Target data identifier must be unique. Provide campaign or cadence.')
-        return
-    else:
-        lcf = lcf_list.download()
-        lc = lcf.get_lightcurve(lctype)
-        flc = from_KeplerLightCurve(lc, origin='KLC')
-        LOG.warning('Using from_KeplerLightCurve_source limits AltaiPony\'s functionality'
-                    ' to lightkurve\'s K2SFF de-trending, and flare finding. better '
-                    'use from_TargetPixel_source or from_K2SC_source.')
+
+def _from_mast_K2(targetid, mode, c, flux_type="PDCSAP_FLUX",
+                  cadence="long", aperture_mask="default"):
+    
+    if mode == "TPF":
+        
+        tpffilelist = search_targetpixelfile(targetid, mission="K2",
+                                             campaign=c, cadence=cadence)
+        tpf = tpffilelist.download()
+        
+        if aperture_mask == "default":
+            aperture_mask = tpf.pipeline_mask
+            
+        lc = tpf.to_lightcurve(aperture_mask=aperture_mask)
+        
+        flc = _convert_TPF_to_FLC(tpf, lc)
+        
+        return flc
+    
+    elif mode == "LC":
+        
+        flcfilelist = search_lightcurvefile(targetid, mission="K2",
+                                            campaign=c, cadence=cadence)
+        flcfile = flcfilelist.download()
+        lc = flcfile.get_lightcurve(flux_type)
+        flc = _convert_LC_to_FLC(lc, origin="KLC")
         return flc
 
 
-def from_KeplerLightCurve(lc, origin='KLC', **kwargs):
-    """
-    Convert a ``KeplerLightCurve`` to a ``FlareLightCurve``. Just get all
-    ``KeplerLightCurve`` attributes and pass them to the ``FlareLightCurve``.
+def _from_mast_Kepler(targetid, c, flux_type="PDCSAP_FLUX", cadence="long"):
+    flcfilelist = search_lightcurvefile(targetid, mission="Kepler",
+                                        quarter=c, cadence=cadence)
+    flcfile = flcfilelist.download()
+    lc = flcfile.get_lightcurve(flux_type)
 
-    Parameters
+    flc = _convert_LC_to_FLC(lc, origin="KLC")
+    return flc
+
+
+def _from_mast_TESS(targetid, c, flux_type="PDCSAP_FLUX", cadence="long"):
+    flcfilelist = search_lightcurvefile(targetid, mission="TESS",
+                                        sector=c, cadence=cadence)
+    flcfile = flcfilelist.download()
+    lc = flcfile.get_lightcurve(flux_type)
+    flc = _convert_LC_to_FLC(lc, origin="TLC", sector=c)    
+    return flc
+
+
+# ----------------------------------------------------------
+
+
+# ----------------------------------------------------------
+# Read in local TPF (Kepler, K2, TESS) or LC (Kepler, K2, TESS, AltaiPony)
+
+def from_path(path, mode, mission):
+    """Construct a FlareLightCurve from
+    a local LC or TPF file. Also loads
+    AltaiPony-detrended light curves.
+    
+    Parameters:
     -------------
-    lc: KeplerLightCurve
-
-    origin : 'KLC' or str
-        Indicates the origin of the FlareLightCurve, can take 'FLC, 'KLC', 'TPF'
-        and 'K2SC'.
-    kwargs: dict
-        Keyword arguments to pass to FlareLightCurve.
-
-    Returns
-    -----------
-    FlareLightCurve
+    path : str
+        Path to local file.
+    mode : str
+        "LC", "TPF", "AltaiPony"
+   mission : str
+        "Kepler", "K2", "TESS"
     """
+    if mode == "LC":
+        return _from_path_LC(path, mission)
+    elif mode == "TPF":
+        return _from_path_TPF(path, mission)
+    elif mode == "AltaiPony":
+        return _from_path_AltaiPony(path)
+    else:
+        raise KeyError("Invalid mode. Pass 'LC', 'TPF', or 'AltaiPony'.")
+    return
+
+def _from_path_LC(path, mission, flux_type="PDCSAP_FLUX"):
+    
+    origins = {"Kepler":"KLC", "K2":"KLC","TESS":"TLC"}
+    
+    if ((mission == "Kepler") | (mission == "K2")):
+        lcf = KeplerLightCurveFile(path)
+    elif mission == "TESS":
+        lcf = TessLightCurveFile(path)
+        
+    else:
+        raise KeyError("Invalid mission. Pass 'Kepler', 'K2', or 'TESS'.")
+        
+    lc = lcf.get_lightcurve(flux_type)
+    flc = _convert_LC_to_FLC(lc, origin=origins[mission])
+    return flc
+
+
+def _from_path_TPF(path, mission, aperture_mask="default"):
+    
+    origins = {"Kepler":"KLC", "K2":"KLC","TESS":"TLC"}
+    
+    if ((mission == "Kepler") | (mission == "K2")):
+        tpf = KeplerTargetPixelFile(path)
+        
+    elif mission == "TESS":
+        tpf = TessTargetPixelFile(path)
+        
+    if aperture_mask == "default":
+            aperture_mask = tpf.pipeline_mask
+
+    lc = tpf.to_lightcurve(aperture_mask=aperture_mask)
+    
+    flc = _convert_TPF_to_FLC(tpf, lc)
+    
+    return flc
+    
+    
+def _from_path_AltaiPony(path):
+    
+    rhdul =  fits.open(path)
+    attrs = dict()
+    for k, v in rhdul[0].header.items():
+        if str.lower(k) not in ['simple', 'bitpix', 'naxis', 'extend']:
+            attrs[str.lower(k)] = v
+    
+    for k in ['time', 'flux', 'flux_err', 'centroid_col',
+              'centroid_row', 'quality', 'cadenceno',
+              'detrended_flux', 'detrended_flux_err',
+              'quality_bitmask']:
+        try:
+            attrs[k] = rhdul[1].data[k]
+        except KeyError:
+            LOG.info("Warning: Keyword {} not in file.".format(k))
+            continue   
+            
+    return FlareLightCurve(**attrs)
+
+# ----------------------------------------------------------
+
+# ----------------------------------------------------------
+# Internal type conversion functions
+
+def _convert_TPF_to_FLC(tpf, lc):
+    keys = {'primary_header' : tpf.hdu[0].header,
+            'data_header' : tpf.hdu[1].header,
+            'pos_corr1' : tpf.pos_corr1,
+            'pos_corr2' : tpf.pos_corr2,
+            'pixel_flux' : tpf.flux,
+            'pixel_flux_err' : tpf.flux_err,}
+
     attributes = lc.__dict__
     z = attributes.copy()
-    z.update(kwargs)
-    flc = FlareLightCurve(time_unit=u.day, origin=origin,
-                           flux_unit = u.electron/u.s, **z)
+    z.update(keys)
+    flc = FlareLightCurve(time_unit=u.day, origin="TPF",
+                          flux_unit = u.electron/u.s, **z)
     if flc.pos_corr1 is None:
         flc.pos_corr1 = flc.centroid_col
     if flc.pos_corr2 is None:
@@ -128,147 +221,19 @@ def from_KeplerLightCurve(lc, origin='KLC', **kwargs):
               np.isfinite(flc.flux) &
               np.isfinite(flc.pos_corr1) &
               np.isfinite(flc.pos_corr2) &
+              np.isfinite(flc.cadenceno) ]
+    return flc
+
+
+def _convert_LC_to_FLC(lc, origin=None, **kwargs):
+    attributes = lc.__dict__
+    attributes.update(kwargs)
+    flc = FlareLightCurve(time_unit=u.day, origin=origin,
+                           flux_unit = u.electron/u.s, **attributes)
+    flc = flc[np.isfinite(flc.time) &
+              np.isfinite(flc.flux) &
               np.isfinite(flc.cadenceno)]
-
     return flc
 
+# ----------------------------------------------------------
 
-def from_K2SC_file(path, targetid=None, add_TPF=True, **kwargs):
-    """
-    Read in a K2SC de-trended light curve and convert it to a ``FlareLightCurve``.
-
-    Parameters
-    ------------
-    path : str
-        path to light curve
-    add_TPF : True or bool
-        Default fetches TPF for additional info. Required for
-        K2SC de-trending.
-    kwargs : dict
-        Keyword arguments to pass to :func:lightkurve.search_targetpixelfile
-
-    Returns
-    --------
-    FlareLightCurve
-
-    """
-
-    hdu = fitsopen(path)
-    dr = hdu[1].data
-
-   
-
-    if add_TPF == True:
-        if targetid==None:
-            raise ValueError("Please pass a target ID.")
-        tpf_list = search_targetpixelfile(targetid, **kwargs)
-        #raw flux,campaign
-        if len(tpf_list) > 1:
-            LOG.error('Target data identifier must be unique. Provide campaign or cadence.')
-            return
-        else:
-            print("TPFLIST\n",tpf_list)
-            ktpf = tpf_list.download()
-            klc = ktpf.to_lightcurve()
-            #Only use those cadences that are present in all TPF, KLC, and K2SC LC:
-            values, counts = np.unique(np.concatenate((klc.cadenceno, dr['CADENCE'], ktpf.cadenceno)),
-                                       return_counts=True)
-            cadences = values[ np.where( counts == 3 ) ] #you could check if counts can be 4 or more and throw an exception in that case
-            #note that order of cadences is irrelevant for the following to be right
-            dr = dr[ np.isin( dr['CADENCE '], cadences) ]
-            klc = klc[ np.isin( klc.cadenceno, cadences) ]
-            ktpf = ktpf[ np.isin( ktpf.cadenceno, cadences)]
-
-            flc = FlareLightCurve(time=dr['TIME'], flux=klc.flux, detrended_flux=dr['FLUX'],
-                                  detrended_flux_err=dr['ERROR'], cadenceno=dr['CADENCE'],
-                                  flux_trends = dr['TRTIME'], targetid=targetid,
-                                  campaign=klc.campaign, centroid_col=klc.centroid_col,
-                                  centroid_row=klc.centroid_row,time_format=klc.time_format,
-                                  time_scale=klc.time_scale, ra=klc.ra, dec=klc.dec,
-                                  channel=klc.channel, time_unit=u.day, mission="K2",
-                                  flux_unit = u.electron/u.s, origin='K2SC',
-                                  pos_corr1=dr['X'], pos_corr2=dr['Y'], quality=klc.quality,
-                                  pixel_flux=ktpf.flux, pixel_flux_err=ktpf.flux_err,
-                                  quality_bitmask=ktpf.quality_bitmask,
-                                  pipeline_mask=ktpf.pipeline_mask )
-    elif add_TPF == False:
-        flc = FlareLightCurve(time=dr['TIME'], flux=None, detrended_flux=dr['FLUX'],
-                              detrended_flux_err=dr['ERROR'], cadenceno=dr['CADENCE'],
-                              flux_trends=dr['TRTIME'], targetid=targetid,
-                              campaign=None, centroid_col=dr["X"],
-                              centroid_row=dr['Y'], time_format=None, mission="K2",
-                              time_scale=None, ra=hdu[1].header['RA_OBJ'], dec=hdu[1].header['DEC_OBJ'],
-                              channel=None, time_unit=u.day,
-                              flux_unit=u.electron / u.s, origin='K2SC',
-                              pos_corr1=dr['X'], pos_corr2=dr['Y'], quality=dr.quality,
-                              pixel_flux=None, pixel_flux_err=None,
-                              quality_bitmask=None,
-                              pipeline_mask=None)
-
-    hdu.close()
-    del dr
-
-    flc = flc[(np.isfinite(flc.detrended_flux)) &
-              (np.isfinite(flc.detrended_flux_err))]
-    return flc
-
-
-def from_KeplerLightCurve_file(path, flux_type, **kwargs):
-    '''Read in a Kepler light curve file as
-    FlareLightCurve.
-
-    Parameters:
-    -----------
-    path : str
-        path to file
-    flux_type: str
-        PDCSAP_FLUX or SAP_FLUX
-    kwargs : dict
-        keyword arguments to pass to func:from_KeplerLightCurve
-    Return:
-    -------
-    FlareLightCurve
-    '''
-    klcf = KeplerLightCurveFile(path)
-    klc = klcf.get_lightcurve(flux_type)
-    return from_KeplerLightCurve(klc, **kwargs)
-
-
-
-def from_K2SC_source(target, campaign=None):
-    """
-    Read in a K2SC de-trended light curve and convert it to a ``FlareLightCurve``.
-
-    Parameters
-    ------------
-    target : str
-        ID or path to K2SC light curve-
-    campaign : None or int
-        K2 Campaign number.
-
-    Returns
-    --------
-    FlareLightCurve
-
-    """
-
-    if os.path.exists(str(target)) or str(target).startswith('http'):
-
-        LOG.warning('Warning: from_K2SC_source() is not intended to accept a '
-                    'direct path, use from_K2SC_File(path) instead.'
-                    'Now using from_K2SC_File({})'.format(target))
-        path = [target]
-        campaign = [campaign]
-
-    else:
-        keys = {'filetype' : 'Lightcurve',
-                'cadence' : 'long',
-                'campaign' : campaign,
-                'month' : None,
-                'radius' : 1,
-                'targetlimit' : 1}
-        path, campaign = download_kepler_products(target=target, **keys)
-    if len(path) == 1:
-        return from_K2SC_file(path[0], targetid=target, campaign=campaign[0])
-    else:
-        return [from_K2SC_file(p, targetid=target, campaign=c) for p,c in zip(path, campaign)]
