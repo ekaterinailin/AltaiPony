@@ -295,7 +295,7 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
                 #K2SC MAGIC
                 new_lc.__class__ = k2sc_lc
                 try:
-                    new_lc.k2sc(de_niter=de_niter, max_sigma=max_sigma, **kwargs)
+                    new_lc.k2sc(de_niter=de_niter, max_sigma=3, **kwargs)
                     new_lc.detrended_flux = (new_lc.corr_flux - new_lc.tr_time
                                           + np.nanmedian(new_lc.tr_time))
                     new_lc.detrended_flux_err = copy.copy(new_lc.flux_err) # does k2sc share their uncertainties somewhere?
@@ -353,7 +353,7 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
         return lc
 
     def sample_flare_recovery(self, iterations=2000, inject_before_detrending=False,
-                              max_sigma=3, save_lc_to_file=False, folder="", **kwargs):
+                              mode=None, save_lc_to_file=False, folder="", **kwargs):
         """
         Runs a number of injection recovery cycles and characterizes the light
         curve by recovery probability and equivalent duration underestimation.
@@ -365,8 +365,8 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
             Number of injection/recovery cycles
         inject_before_detrending : False or bool
             If True, fake flare are injected directly into raw data.
-        max_sigma : int
-            sigma clipping threshold for outliers to pass to GP detrending
+        mode : str
+            "savgol" or "k2sc". Required if ``inject_before_detrending`` is True.
         kwargs : dict
             Keyword arguments to pass to inject_fake_flares
 
@@ -382,7 +382,7 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
         
         lc = copy.deepcopy(self)
         if inject_before_detrending == True:
-            lc = lc.detrend()
+            lc = lc.detrend(mode)
         lc = lc.find_gaps()
         lc = find_iterative_median(lc)
         columns =  ['istart', 'istop', 'cstart', 'cstop', 'tstart', 'tstop',
@@ -404,7 +404,7 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
             
             if inject_before_detrending == True:
                 LOG.info('\nDetrending fake LC:\n')
-                fake_lc = fake_lc.detrend(max_sigma=max_sigma)
+                fake_lc = fake_lc.detrend(mode)
                 
             fake_lc = fake_lc.find_flares(fake=True)
             recs = fake_lc.flares
