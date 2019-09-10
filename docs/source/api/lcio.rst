@@ -6,13 +6,19 @@ There are several ways to create a ``FlareLightCurve`` in **AltaiPony**. For a q
 Fetch a TESS light curve from MAST:
 
 >>> from altaipony.lcio import from_mast
-flc = from_mast("TIC 358108509", mode="LC", mission="TESS", sector=1)
+>>> flc = from_mast("TIC 358108509", mode="LC", mission="TESS", sector=1)
 
 Or a K2 target pixel file, and convert it to a ``FlareLightCurve`` using some extra arguments like ``flux_type``, ``cadence``, and ``aperture_mask`` :
 
->>> flc = from_mast("EPIC 211119999", mode="TPF", mission="K2", c=4,
-                     flux_type="PDCSAP_FLUX", cadence="long", 
-                     aperture_mask="default")
+>>> flc = from_mast("EPIC 211119999", mode="TPF", mission="K2", c=4, flux_type="PDCSAP_FLUX", cadence="long", aperture_mask="default")
+
+You can also fetch some remote file, de-trend it, store it as an AltaiPony light curve, and read it back in again, like so:
+
+>>> flc = from_mast("TIC 358108509", mode="LC", mission="TESS", sector=1)
+>>> dflc = flc.detrend("savgol")
+>>> dflc.to_fits("ponylc.fits")
+>>> ...
+>>> rflc = from_path("ponylc.fits", mode="AltaiPony", mission="TESS")
 
 .. module:: altaipony.lcio
 

@@ -1,4 +1,4 @@
-from warnings import warn
+import warnings
 import logging
 
 import numpy as np
@@ -48,7 +48,7 @@ def from_mast(targetid, mission, c, mode="LC", **kwargs):
     
     if mission=="K2":
         if mode == "LC":
-            warn("\nYou cannot do K2SC de-trending on a light curve only." 
+            warnings.warn("\nYou cannot do K2SC de-trending on a light curve only." 
                  "Pass mode='TPF' to be able to run FLC.detrend('k2sc') later.")
         return _from_mast_K2(targetid, mode, c, **kwargs)
     
