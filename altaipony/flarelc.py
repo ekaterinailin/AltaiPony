@@ -18,6 +18,7 @@ from .fakeflares import (merge_fake_and_recovered_events,
                          mod_random,
                          aflare,
                          )
+from .injrecanalysis import wrap_characterization_of_flares
 
 import time
 LOG = logging.getLogger(__name__)
@@ -267,7 +268,7 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
             If folder is empty, the fits file will be stored in the
             working directory.
         kwargs : dict
-            Keyword arguments to pass to k2sc
+            Keyword arguments to pass to k2sc or detrend_savgol
 
         Returns
         --------
@@ -277,7 +278,10 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
         if mode == "savgol":
         
             new_lc = copy.deepcopy(self)
-            return detrend_savgol(new_lc)
+            new_lc =  detrend_savgol(new_lc, **kwargs)
+            if save == True:
+                new_lc.to_fits(folder)
+            return new_lc
         
         elif mode == "k2sc":
                 
@@ -353,7 +357,8 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
         return lc
 
     def sample_flare_recovery(self, iterations=2000, inject_before_detrending=False,
-                              mode=None, save_lc_to_file=False, folder="", **kwargs):
+                              mode=None, save_lc_to_file=False, folder="", 
+                              fakefreq=0.05, save=False, path=None, **kwargs):
         """
         Runs a number of injection recovery cycles and characterizes the light
         curve by recovery probability and equivalent duration underestimation.
@@ -367,6 +372,8 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
             If True, fake flare are injected directly into raw data.
         mode : str
             "savgol" or "k2sc". Required if ``inject_before_detrending`` is True.
+        fakefreq : 0.05 or float
+            number of flares per day, but at least one per continuous observation period will be injected
         kwargs : dict
             Keyword arguments to pass to inject_fake_flares
 
@@ -395,7 +402,8 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
         for i in range(iterations):
             fake_lc = copy.deepcopy(lc)
             fake_lc = fake_lc.inject_fake_flares(inject_before_detrending=inject_before_detrending,
-                                                **kwargs)
+                                                 fakefreq=fakefreq,
+                                                 **kwargs)
             if save_lc_to_file == True:
                 fake_lc.to_fits("{}before".format(folder))
                 print("saved EPIC {} LC before detrending".format(self.targetit))
@@ -418,9 +426,13 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
                                                       ignore_index=True,)
 
             bar.update(i + 1)
-            combined_irr.to_csv('{}_{}_inj_{}_{}.csv'.format(iterations, lc.targetid, injrecstr[inject_before_detrending], lc.campaign),index=False)
+            if save == True:
+                if path is None:
+                    path = '{}_{}_inj_{}_{}.csv'.format(iterations, lc.targetid, injrecstr[inject_before_detrending], lc.campaign)
+                combined_irr.to_csv(path, index=False)
+        lc.fake_flares = combined_irr
         bar.finish()
-        return combined_irr, fake_lc
+        return lc, fake_lc
 
  
     def mark_flagged_flares(self, explain=False):
@@ -503,7 +515,7 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
             injection mode
         gapwindow : 0.1 or float
 
-        fakefreq : .25 or float
+        fakefreq : .005 or float
             flares per day, but at least one per continuous observation period will be injected
         inject_before_detrending : True or bool
             By default, flares are injected before the light curve is detrended.
@@ -669,6 +681,18 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
                 new_lc.pixel_flux_err = np.append(new_lc.pixel_flux_err, others[i].pixel_flux_err,axis=0)
         return new_lc
 
+    def characterize_flares(self, ampl_bins=80, dur_bins=160):
+        """Use results from injection recovery to determine
+        corrected flare characteristics.
+        
+        """
+        flc = copy.deepcopy(self)
+        flares = wrap_characterization_of_flares(flc.fake_flares, flc.flares,
+                                                 ampl_bins=ampl_bins,
+                                                 dur_bins=dur_bins)
+        flc.flares = flares
+        return flc
+    
 
     def to_fits(self, path):
         """Write FlareLightCurve to a .fits

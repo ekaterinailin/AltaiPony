@@ -72,15 +72,15 @@ def sigma_clip(a, max_iter=10, max_sigma=3,
         LOG.debug("iteration {} at normalized median flux {:.5f} \pm {:.5f}".format(i, med, sig))
         LOG.debug("upper mask size before expansion = ", mhigh.shape[0])
         mhigh = expand_mask(mhigh)
-        LOG.debug("upper mask size after expansion = ", mhigh.shape[0], "\n")
+        LOG.debug("upper mask size after expansion = ", mhigh.shape[0], "\n Should be the same as before.")
     if separate_masks:
         return mlow, mhigh
     else:
         return mlow & mhigh
 
-def expand_mask(a, divval=3):
+def expand_mask(a, divval=1):
     """Expand the mask if multiple outliers occur in a row."""
-    i,j,k = 0, 0, 0
+    i, j, k = 0, 0, 0
     while i<len(a):
         v=a[i]
         
@@ -97,8 +97,8 @@ def expand_mask(a, divval=3):
             i += 1
         
         elif (v==1) & (j==1):
-            if k >= 3:
-                addto = int(rint(sqrt(k/divval)))
+            if k >= 2:
+                addto = int(rint(3 * sqrt(k/divval)))
                 a[i - k - addto : i - k] = 0
                 a[i : i + addto] = 0
                 i += addto
@@ -106,5 +106,5 @@ def expand_mask(a, divval=3):
                 i += 1
             j = 0
             k = 0
-                  
+                 
     return a
