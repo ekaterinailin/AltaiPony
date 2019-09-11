@@ -33,9 +33,9 @@ def test_mark_flagged_flares():
 
 def test_sample_flare_recovery():
     flc = mock_flc(detrended=True)
-    data, fflc = flc.sample_flare_recovery(iterations=2)
+    flc, fflc = flc.sample_flare_recovery(iterations=2)
     #make sure no flares are injected overlapping true flares
-    print(data.istart)
+    data = flc.fake_flares
     assert data[(data.istart > 14) & (data.istart < 19)].shape[0] == 0
     #test if all injected event are covered in the merged flares:
     assert data.shape[0] == 2

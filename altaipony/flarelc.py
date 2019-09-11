@@ -391,6 +391,7 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
         if inject_before_detrending == True:
             lc = lc.detrend(mode)
         lc = lc.find_gaps()
+        lc = lc.find_flares()
         lc = find_iterative_median(lc)
         columns =  ['istart', 'istop', 'cstart', 'cstop', 'tstart', 'tstop',
                     'ed_rec', 'ed_rec_err', 'duration_d', 'amplitude', 'ed_inj',
