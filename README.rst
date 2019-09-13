@@ -24,50 +24,32 @@
 AltaiPony
 =========
 
-An improved and lean version of Appaloosa_ w/o extensive I/O, but with de-trending but using ``K2SC`` and ``lightkurve``.
+De-trend light curves from Kepler, K2, and TESS missions, and search them for flares. Inject and recover synthetic flares to account for de-trending and noise loss in flare energy and determine energy-dependent recovery probability for every flare candidate. Uses the ``K2SC`` and ``lightkurve`` under the cover, as well as ``pandas``, ``numpy``, ``pytest``, ``astropy`` and more.
+
 Find the documentation at altaipony.readthedocs.io_
 
 Installation
 ^^^^^^^^^^^^^
+
+You need to install a fork of ``K2SC`` first, then clone this repository and install the package:
+
 ::
-    
+    git clone https://github.com/ekaterinailin/k2sc.git
+    cd k2sc
+    python3 setup.py install
+    cd ..
     git clone https://github.com/ekaterinailin/AltaiPony.git
     cd AltaiPony
     python3 setup.py install
 
 
+
 Getting Started
 ^^^^^^^^^^^^^^^^
 
-See this notebook_ for an easy introduction.
-
-Structure 
-^^^^^^^^^^
-
-``flarelc.py``
-
-Contains the core class - ``FlareLightCurve``. Flare finding, characterization and many utils, such as finding gaps are implemented as methods.
-
-``lcio.py`` and ``mast.py``
-
-Everything related to reading in ``KeplerTargetPixelFiles``, ``KeplerLightCurveFiles``, and ``K2SC`` light curves is dealt with here. All these data formats can be fetched from MAST. 
-
-``altai.py``
-
-All the core flare finding functions live here.
-
-``fakeflares.py``
-
-Includes:
-
-- semi-empirical flare model
-- injection/recovery procedure for synthetic flares.
-- flare characterization functions that use the results from injection/recovery
-
-``utils.py``
-
-Internal helper function dump.
+See this notebook_ for an easy introduction, also docs_.
 
 .. _Appaloosa: https://github.com/jradavenport/appaloosa/
 .. _altaipony.readthedocs.io: https://altaipony.readthedocs.io/en/latest/
 .. _notebook: https://github.com/ekaterinailin/AltaiPony/blob/master/notebooks/Getting_Started.ipynb
+.. _docs: https://altaipony.readthedocs.io/en/latest/
