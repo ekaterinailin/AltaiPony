@@ -33,15 +33,13 @@ Installation
 
 You need to install a fork of ``K2SC`` first, then clone this repository and install the package:
 
-::
-    git clone https://github.com/ekaterinailin/k2sc.git
-    cd k2sc
-    python3 setup.py install
-    cd ..
-    git clone https://github.com/ekaterinailin/AltaiPony.git
-    cd AltaiPony
-    python3 setup.py install
-
+>>> git clone https://github.com/ekaterinailin/k2sc.git
+>>> cd k2sc
+>>> python3 setup.py install
+>>> cd ..
+>>> git clone https://github.com/ekaterinailin/AltaiPony.git
+>>> cd AltaiPony
+>>> python3 setup.py install
 
 
 Getting Started
