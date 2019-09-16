@@ -62,13 +62,14 @@ def from_mast(targetid, mission, c, mode="LC", **kwargs):
 
 
 def _from_mast_K2(targetid, mode, c, flux_type="PDCSAP_FLUX",
-                  cadence="long", aperture_mask="default"):
+                  cadence="long", aperture_mask="default",
+                  download_dir=None):
     
     if mode == "TPF":
         
         tpffilelist = search_targetpixelfile(targetid, mission="K2",
                                              campaign=c, cadence=cadence)
-        tpf = tpffilelist.download()
+        tpf = tpffilelist.download(download_dir=download_dir)
         
         if aperture_mask == "default":
             aperture_mask = tpf.pipeline_mask
@@ -83,26 +84,28 @@ def _from_mast_K2(targetid, mode, c, flux_type="PDCSAP_FLUX",
         
         flcfilelist = search_lightcurvefile(targetid, mission="K2",
                                             campaign=c, cadence=cadence)
-        flcfile = flcfilelist.download()
+        flcfile = flcfilelist.download(download_dir=download_dir)
         lc = flcfile.get_lightcurve(flux_type)
         flc = _convert_LC_to_FLC(lc, origin="KLC")
         return flc
 
 
-def _from_mast_Kepler(targetid, c, flux_type="PDCSAP_FLUX", cadence="long"):
+def _from_mast_Kepler(targetid, c, flux_type="PDCSAP_FLUX", cadence="long",
+                      download_dir=None):
     flcfilelist = search_lightcurvefile(targetid, mission="Kepler",
                                         quarter=c, cadence=cadence)
-    flcfile = flcfilelist.download()
+    flcfile = flcfilelist.download(download_dir=download_dir)
     lc = flcfile.get_lightcurve(flux_type)
 
     flc = _convert_LC_to_FLC(lc, origin="KLC")
     return flc
 
 
-def _from_mast_TESS(targetid, c, flux_type="PDCSAP_FLUX", cadence="long"):
+def _from_mast_TESS(targetid, c, flux_type="PDCSAP_FLUX", cadence="long",
+                    download_dir=None):
     flcfilelist = search_lightcurvefile(targetid, mission="TESS",
                                         sector=c, cadence=cadence)
-    flcfile = flcfilelist.download()
+    flcfile = flcfilelist.download(download_dir=download_dir)
     lc = flcfile.get_lightcurve(flux_type)
     flc = _convert_LC_to_FLC(lc, origin="TLC", sector=c)    
     return flc
