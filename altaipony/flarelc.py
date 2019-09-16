@@ -246,7 +246,7 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
         return lc
 
     def detrend(self, mode, save=False,
-                folder='', de_niter=30, max_sigma=3, 
+                path='detrended_lc.fits', de_niter=30, max_sigma=3, 
                 **kwargs):
         """
         De-trends a FlareLightCurve using ``K2SC``.
@@ -259,13 +259,17 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
             "k2sc" or "savgol"
         de_niter : int
             Differential Evolution global optimizer parameter. K2SC
-            default is 150, here set to 3 as a safety net to avoid
+            default is 150, here set to 30 as a safety net to avoid
             unintenional computational effort.
+        max_sigma: int
+            Default is 3, value is passed to iterative sigma clipping
+            in K2SC
         save : False or bool
             If True, the light curve is saved as a fits file to a
             given folder.
-        folder : str
-            If folder is empty, the fits file will be stored in the
+        path : str
+            Path to resulting fits file. 
+            As a default, the fits file will be stored in the
             working directory.
         kwargs : dict
             Keyword arguments to pass to k2sc or detrend_savgol
@@ -299,7 +303,7 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
                 #K2SC MAGIC
                 new_lc.__class__ = k2sc_lc
                 try:
-                    new_lc.k2sc(de_niter=de_niter, max_sigma=3, **kwargs)
+                    new_lc.k2sc(de_niter=de_niter, max_sigma=max_sigma, **kwargs)
                     new_lc.detrended_flux = (new_lc.corr_flux - new_lc.tr_time
                                           + np.nanmedian(new_lc.tr_time))
                     new_lc.detrended_flux_err = copy.copy(new_lc.flux_err) # does k2sc share their uncertainties somewhere?
@@ -313,9 +317,8 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
                     LOG.error('Detrending failed because probably Cholesky '
                               'decomposition failed. Try again, you shall succeed.')
                 new_lc.__class__ = FlareLightCurve
-
                 if save == True:
-                    new_lc.to_fits(folder)
+                    new_lc.to_fits(path)
                 return new_lc
         else:
             err_str = ('\nDe-trending mode {} does not exist. Pass "k2sc" (K2 LCs)'
@@ -712,7 +715,12 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
         # Place attributes into header or main table depending on dtype:
         for key, val in vals.items():
             if type(val)==np.ndarray:
-                bintab.append(fits.Column(name=key, format='E', array=val))
+                print(len(val.shape), val.shape)
+                if len(val.shape) == 1:
+                    print("append {}".format(val))
+                    bintab.append(fits.Column(name=key, format='E', array=val))
+                else:
+                    LOG.warning("Did not save {} because fits files only accept 1D arrays.".format(key))
             elif (type(val) == str) | (type(val) == int) | (type(val) == float):
                 hdr[key] = val
             elif type(val) == dict:
@@ -720,7 +728,7 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
                     LOG.debug("Extra column {} defined in header.".format(k))
                     hdr[k] = v
             else:
-                LOG.debug(" was not written to .fits file.".format(key))
+                LOG.debug("{} was not written to .fits file.".format(key))
                 
         # Define columns
         cols = fits.ColDefs(bintab)

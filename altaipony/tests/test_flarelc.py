@@ -9,7 +9,7 @@ from ..altai import find_iterative_median
 from ..lcio import from_path
 
 from .. import PACKAGEDIR
-from . import test_ids, test_paths, pathkepler, pathAltaiPony
+from . import test_ids, test_paths, pathkepler, pathAltaiPony, pathk2TPF
 
 def test_get_saturation():
     flc = mock_flc(detrended=True)
@@ -44,12 +44,21 @@ def test_sample_flare_recovery():
 
 
 def test_to_fits():
+    # with light curve only:
     flc = from_path(pathkepler, mode="LC", mission="Kepler")
     flc = flc.detrend("savgol")
     flc.to_fits(pathAltaiPony)
     flc = flc.find_flares()
     flc.to_fits(pathAltaiPony)
     flc = from_path(pathAltaiPony, mode="AltaiPony", mission="Kepler")
+    
+    # with TPF component which needs to be thrown away
+    flc = from_path(pathk2TPF, mode="TPF", mission="K2")
+    flc = flc.detrend("k2sc", de_niter=3)
+    flc.to_fits(pathAltaiPony)
+    flc = flc.find_flares()
+    flc.to_fits(pathAltaiPony)
+    flc = from_path(pathAltaiPony, mode="AltaiPony", mission="K2")
 
 def test_repr():
     pass

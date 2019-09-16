@@ -35,6 +35,7 @@ The first matrix can be used to map each flare candidate's recovered equivalent 
 
 The results from this mapping are stored in the ``flares`` attribute, which now contains the following additional columns in the table:
 
+
 * ``dur``: ``= tstop - tstart``
 
 
@@ -46,6 +47,8 @@ The results from this mapping are stored in the ``flares`` attribute, which now 
 
 
 As in ``ed_ratio`` but with amplitude:
+
+
 * ``amplitude_ratio``
 * ``amplitude_ratio_count``
 * ``amplitude_ratio_std``
@@ -54,16 +57,22 @@ As in ``ed_ratio`` but with amplitude:
 
 
 As in ``amplitude_ratio`` but with duration in days:
+
+
 * ``duration_ratio``
 * ``duration_ratio_count``
 * ``duration_ratio_std``
 * ``duration_corr``
 * ``duration_corr_err``
 
+
 As in the columns but now for recovery probability:
+
+
 * ``recovery_probability``: float between 0 and 1
-* ``recovery_probability_count``:
-* ``recovery_probability_std``:
+* ``recovery_probability_count``
+* ``recovery_probability_std``
+
 
 "Properties" always refers to amplitude and duration.
 
@@ -71,6 +80,7 @@ As in the columns but now for recovery probability:
 .. rubric:: Footnotes
 
 .. [1] At the moment this is not a very meaningful quantity because the decay of the flare goes on to infitiny! We may define full width at 1% of the fluxe or something as an approximation but that is for later and I am getting distracted. But we need it to map between injected and recovered flares, that is why it's hanging around in that table.
+
 
 .. _DataFrame: https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.html
 .. _here: https://altaipony.readthedocs.io/en/latest/api/altai.html
