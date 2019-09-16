@@ -1,7 +1,7 @@
 Finding Data
 =====
 
-There are several ways to create a ``FlareLightCurve`` in **AltaiPony**. For a quickstart, all you need is your target's TOC, EPIC or KIC (and campaign/quarter/sector). Local TESS, Kepler and K2 light curves can be read with ``from_path``, but you can can also query MAST with ``fom_mast``. You can read in a light curve directly or convert a target pixel file. The latter is required if you want to use **k2sc** for de-trending. Familiary with lightkurve_ is advantageous.
+There are several ways to create a ``FlareLightCurve`` in **AltaiPony**. For a quickstart, all you need is your target's TOC, EPIC or KIC (and campaign, quarter, or sector). Local TESS, Kepler and K2 light curves can be read with ``from_path``, but you can can also query MAST with ``fom_mast``. You can read in a light curve directly or convert a target pixel file. The latter is required if you want to use **k2sc** for de-trending. Familiarity with lightkurve_ is advantageous in any case.
 
 Fetch a TESS light curve from MAST:
 
