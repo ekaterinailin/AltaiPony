@@ -225,22 +225,27 @@ def detrend_savgol(lc):
             fin.append(ri-le-1)
         elif len(sta) < len(fin):
             sta = [0] + sta
-            
+        elif ((len(sta) == len(fin)) & (len(sta)!=0)):
+            if (sta[0] > fin[0]): # outliers on both ends
+                sta = [0] + sta
+                fin.append(ri-le-1)
         # Compute flux model as the mean value between 
         # start and end of flare, that is, we interpolate 
         # linearly.
         flux_model_j = []
         
         for i,j in list(zip(sta,fin)):
-            
+            d = 0
             if j+2 > ri-le-1: #treat end of time series
                 k = i
             elif i == 0:
-                
+                i = 0
+                d = 1
                 k = j + 2
+                
             else:
                 k = j + 2
-            flux_model_j.append([np.mean(lc.flux_model[le:ri][[i,k]])] * (j - i))
+            flux_model_j.append([np.mean(lc.flux_model[le:ri][[i,k]])] * (j - i + d))
         flux_model_j = [x for sublist in flux_model_j for x in sublist]
         lc.detrended_flux[outliers] = lc.flux[outliers] - flux_model_j + np.nanmean(flux_model_i)
         

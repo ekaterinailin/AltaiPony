@@ -110,7 +110,7 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
                  primary_header=None, data_header=None, pos_corr1=None,
                  pos_corr2=None, origin='FLC', fake_flares=None, it_med=None,
                  pixel_flux=None, pixel_flux_err=None, pipeline_mask=None,
-                 camera=None, ccd=None):
+                 camera=None, ccd=None, saturation=None):
 
         if mission == 'TESS':
                 TessLightCurve.__init__(self, time=time, flux=flux, flux_err=flux_err,
@@ -147,6 +147,7 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
         self.pixel_flux_err = pixel_flux_err
         self.pipeline_mask = pipeline_mask
         self.it_med = it_med
+        self.saturation = saturation
 
         
 
@@ -154,14 +155,19 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
                    'tstop', 'ed_rec', 'ed_rec_err', 'ampl_rec']
 
         if detrended_flux is None:
-            self.detrended_flux = np.full_like(flux, np.nan)
+            self.detrended_flux = np.full_like(time, np.nan)
         else:
             self.detrended_flux = detrended_flux
 
         if detrended_flux_err is None:
-            self.detrended_flux_err = np.full_like(flux, np.nan)
+            self.detrended_flux_err = np.full_like(time, np.nan)
         else:
             self.detrended_flux_err = detrended_flux_err
+        
+        if saturation is None:
+            self.saturation = np.full_like(time, np.nan)
+        else:
+            self.saturation = saturation
 
         if flares is None:
             self.flares = pd.DataFrame(columns=columns)
@@ -207,6 +213,8 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
             copy_self.pixel_flux_err = self.pixel_flux_err[key]
         if copy_self.quality is not None:
             copy_self.quality = self.quality[key]
+        if copy_self.saturation is not None:
+            copy_self.saturation = self.saturation[key]
         return copy_self
 
     def find_gaps(self, maxgap=0.09, minspan=10):
@@ -284,7 +292,7 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
             new_lc = copy.deepcopy(self)
             new_lc =  detrend_savgol(new_lc, **kwargs)
             if save == True:
-                new_lc.to_fits(folder)
+                new_lc.to_fits(path)
             return new_lc
         
         elif mode == "k2sc":
@@ -484,19 +492,20 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
         """
         flc = copy.copy(self)
 
-        def sat(flares, flc=flc):
+        def sat(flares, flc=flc, well_depth = 10093, return_level=False):
             pfl = flc.pixel_flux[flares.istart:flares.istop]
             flare_aperture_pfl = pfl[:,flc.pipeline_mask]
-            saturation_level = np.nanmean(flare_aperture_pfl,axis=1)/well_depth
+            saturation_level = np.nanmean(flare_aperture_pfl, axis=1) / well_depth
             if return_level == False:
                 return np.any(saturation_level > factor)
             else:
                 return np.nanmax(saturation_level)
 
-        well_depth = 10093
+        
         colname = 'saturation_f{}'.format(factor)
         if flc.flares.shape[0] > 0:#do not attempt if no flares are detected
-            flc.flares[colname] = flc.flares.apply(sat, axis=1)
+            flc.flares[colname] = flc.flares.apply(sat, axis=1,
+                                                   return_level=return_level)
 
         return flc
 
@@ -715,9 +724,7 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
         # Place attributes into header or main table depending on dtype:
         for key, val in vals.items():
             if type(val)==np.ndarray:
-                print(len(val.shape), val.shape)
                 if len(val.shape) == 1:
-                    print("append {}".format(val))
                     bintab.append(fits.Column(name=key, format='E', array=val))
                 else:
                     LOG.warning("Did not save {} because fits files only accept 1D arrays.".format(key))

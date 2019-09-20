@@ -184,7 +184,7 @@ def _from_path_AltaiPony(path):
     attrs = dict()
     for k, v in rhdul[0].header.items():
         if str.lower(k) not in ['simple', 'bitpix', 'naxis', 'extend']:
-            if str.lower(k) == "keplerid":
+            if str.lower(k) == "keplerid": #rename keplerid if it appears
                 k = "targetid"
             attrs[str.lower(k)] = v
     
