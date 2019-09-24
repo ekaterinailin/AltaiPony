@@ -27,7 +27,6 @@ def test_find_flares():
      """
 
      flc = mock_flc(detrended=False)
-     flc = flc.find_gaps()
      with pytest.raises(TypeError):
          #raises error bc find_flares only works on detrended_flux
          find_flares(flc)

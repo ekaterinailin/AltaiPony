@@ -212,6 +212,7 @@ def test_find_flares():
     assert flc.flares['cstart'][0] == 15
     assert flc.flares['tstart'][0] == pytest.approx(0.3125, rel=1e-4)
     assert flc.flares['tstop'][0] == pytest.approx(0.395833, rel=1e-4)
+    assert flc.flares['total_n_valid_data_points'][0] == 1000
     
 def test_append():
     flc1 = mock_flc(detrended=True)

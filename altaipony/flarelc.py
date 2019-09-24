@@ -152,7 +152,8 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
         
 
         columns = ['istart', 'istop', 'cstart', 'cstop', 'tstart',
-                   'tstop', 'ed_rec', 'ed_rec_err', 'ampl_rec']
+                   'tstop', 'ed_rec', 'ed_rec_err', 'ampl_rec', 
+                   'total_n_valid_data_points']
 
         if detrended_flux is None:
             self.detrended_flux = np.full_like(time, np.nan)

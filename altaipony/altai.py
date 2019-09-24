@@ -159,7 +159,8 @@ def find_flares(flc, minsep=3):
                                       'cstart' : cstart,
                                       'cstop' : cstop,
                                       'tstart' : tstart,
-                                      'tstop' : tstop,}),
+                                      'tstop' : tstop,
+                                      'total_n_valid_data_points': lc.flux.shape[0]}),
                                       ignore_index=True)
 
     return lc
