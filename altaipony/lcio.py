@@ -193,7 +193,7 @@ def _from_path_AltaiPony(path):
               'detrended_flux', 'detrended_flux_err',
               'quality_bitmask']:
         try:
-            attrs[k] = rhdul[1].data[k]
+            attrs[k] = rhdul[1].data[k].byteswap().newbyteorder()
         except KeyError:
             LOG.info("Warning: Keyword {} not in file.".format(k))
             continue   
