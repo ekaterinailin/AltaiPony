@@ -13,13 +13,55 @@ from . import test_ids, test_paths, pathkepler, pathAltaiPony, pathk2TPF
 
 def test_get_saturation():
     flc = mock_flc(detrended=True)
+    flc.pixel_flux[30,:] = 1e6 # add a saturated point
+    
+    # Find saturation overall
+    r1 = flc.get_saturation()
+    assert r1.saturation[30] == True
+    assert r1.saturation.shape[0] == flc.flux.shape[0]
+    assert (r1.saturation[:30] == False).all()
+    assert (r1.saturation[31:] == False).all()
+    
+    
+    # Find saturation with level
+    r1 = flc.get_saturation(return_level=True)
+    assert r1.saturation[30] == 1e6 / 10093
+    assert r1.saturation.shape[0] == flc.flux.shape[0]
+    assert (r1.saturation[:30] == pytest.approx(500 / 10093, rel=1e-4)) # the LC has some noise added per default, so only approximate results
+    assert (r1.saturation[31:] == pytest.approx(500 / 10093, rel=1e-4)) # the LC has some noise added per default, so only approximate results
+    
+    # Find saturation with flares
     flc = flc.find_flares()
+    
+    #... without saturation attribute present
     r1 = flc.get_saturation()
     assert r1.flares.saturation_f10.iloc[0] == False
     r2 = flc.get_saturation(return_level=True)
     assert r2.flares.saturation_f10.iloc[0] == pytest.approx(0.0495,1e-2)
     r3 = flc.get_saturation(factor=1e-2)
     assert r3.flares['saturation_f0.01'].iloc[0] == True
+    
+    #... with saturation attribute present
+    
+    
+    # .. that is given as a boolean array
+    flc.saturation = np.full(flc.flux.shape[0], True)
+    r4 = flc.get_saturation()
+    assert r4.flares.saturation_f10.iloc[0] == True
+    r2 = flc.get_saturation(return_level=True)
+    assert r2.flares.saturation_f10.iloc[0] == True # throws a warning, too, test that later
+    r3 = flc.get_saturation(factor=1e-2)
+    assert r3.flares['saturation_f0.01'].iloc[0] == True # throws a warning, too, test that later
+    
+    # .. that is given as an array of floats
+    flc.saturation = np.full(flc.flux.shape[0], 5.0)
+    r4 = flc.get_saturation()
+    assert r4.flares.saturation_f10.iloc[0] == False
+    r2 = flc.get_saturation(return_level=True)
+    assert r2.flares.saturation_f10.iloc[0] == 5 
+    r3 = flc.get_saturation(factor=1e-2)
+    assert r3.flares['saturation_f0.01'].iloc[0] == True 
+
 
 def test_mark_flagged_flares():
     flc = mock_flc(detrended=True)

@@ -492,21 +492,55 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
         FlareLightCurve with modified 'flares' attribute.
         """
         flc = copy.copy(self)
+        well_depth = 10093
 
-        def sat(flares, flc=flc, well_depth = 10093, return_level=False):
+        def sat(flares, flc=flc, well_depth=10093, return_level=False):
             pfl = flc.pixel_flux[flares.istart:flares.istop]
             flare_aperture_pfl = pfl[:,flc.pipeline_mask]
+            return sat_level(flare_aperture_pfl, well_depth, return_level)
+            
+        def sat_level(flare_aperture_pfl, well_depth, return_level):
             saturation_level = np.nanmean(flare_aperture_pfl, axis=1) / well_depth
             if return_level == False:
                 return np.any(saturation_level > factor)
             else:
                 return np.nanmax(saturation_level)
-
         
         colname = 'saturation_f{}'.format(factor)
-        if flc.flares.shape[0] > 0:#do not attempt if no flares are detected
-            flc.flares[colname] = flc.flares.apply(sat, axis=1,
-                                                   return_level=return_level)
+        
+        if np.isnan(flc.saturation).all():
+            
+            if flc.flares.shape[0] > 0:#do not attempt if no flares are detected
+                flc.flares[colname] = flc.flares.apply(sat, axis=1,
+                                                    return_level=return_level)
+                
+            elif flc.flares.shape[0] == 0: # calculate saturation for all times
+                flare_aperture_pfl = flc.pixel_flux[:,flc.pipeline_mask]
+                saturation_level = np.nanmean(flare_aperture_pfl, axis=1) / well_depth
+                if return_level == False:
+                    flc.saturation = saturation_level > factor
+                else:
+                    flc.saturation = saturation_level
+                                           
+
+        else:
+             if flc.flares.shape[0] > 0:#do not attempt if no flares are detected
+                 if isinstance(flc.saturation[0], np.bool_):
+                     if return_level == False:
+                        flc.flares[colname] = flc.flares.apply(lambda x: (flc.saturation[x.istart: x.istop] == True).any(),
+                                                        axis=1)
+                     elif return_level == True:
+                         LOG.info("Warning: Saturation is given as boolean flag. \n Choose return_level=False.")
+                         return flc.get_saturation(factor=factor, return_level=False)
+                    
+                 elif isinstance(flc.saturation[0], np.float_):
+                     if return_level == False:
+                        flc.flares[colname] = flc.flares.apply(lambda x: (flc.saturation[x.istart: x.istop] > factor).any(),
+                                                        axis=1)
+                     elif return_level == True:
+                        flc.flares[colname] = flc.flares.apply(lambda x: flc.saturation[x.istart: x.istop].max(),
+                                                        axis=1)
+                                               
 
         return flc
 
