@@ -86,7 +86,7 @@ def find_flares_in_cont_obs_period(flux, median, error, N1=3, N2=3, N3=3):
         isflare[l:r+1] = True
     return isflare
 
-def find_flares(flc, minsep=3):
+def find_flares(flc, minsep=3, **kwargs):
     '''
     Main wrapper to obtain and process a light curve.
 
@@ -96,7 +96,8 @@ def find_flares(flc, minsep=3):
         FlareLightCurve object
     minsep : 1 or int
         minimum distance between two candidate start times in datapoints
-
+    kwargs : dict
+        keyword arguments to pass to :func:`find_flares_in_cont_obs_period`
     Return
     ----------
     numpy arrays of start and stop cadence numbers of flare candidates
@@ -118,7 +119,7 @@ def find_flares(flc, minsep=3):
         time = lc.time[le:ri]
         # run final flare-find on DATA - MODEL
 
-        isflare = find_flares_in_cont_obs_period(flux, median, error)
+        isflare = find_flares_in_cont_obs_period(flux, median, error, **kwargs)
 
         # now pick out final flare candidate indices
         candidates = np.where( isflare > 0)[0]

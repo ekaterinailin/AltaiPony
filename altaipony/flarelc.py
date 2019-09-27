@@ -336,7 +336,7 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
             raise ValueError(err_str)
 
 
-    def find_flares(self, minsep=3, fake=False):
+    def find_flares(self, minsep=3, fake=False, **kwargs):
 
         '''
         Find flares in a ``FlareLightCurve``.
@@ -345,6 +345,8 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
         -------------
         minsep : 3 or int
             Minimum distance between two candidate start times in datapoints.
+        kwargs : dict
+            keyword arguments to pass to :func:`find_flares_in_cont_obs_period`
 
         Returns
         ----------
@@ -364,7 +366,7 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
             if fake==False:
                 lc = find_iterative_median(lc)
             #find flares
-            lc = find_flares(lc)
+            lc = find_flares(lc, **kwargs)
 
         return lc
 
