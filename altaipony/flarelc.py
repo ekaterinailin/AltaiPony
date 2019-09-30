@@ -509,7 +509,6 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
                 return np.nanmax(saturation_level)
         
         colname = 'saturation_f{}'.format(factor)
-        print(flc.pixel_flux.shape)
         
         if np.isnan(flc.saturation).all():
             
@@ -519,7 +518,6 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
                 
             elif flc.flares.shape[0] == 0: # calculate saturation for all times
                 flare_aperture_pfl = flc.pixel_flux[:,flc.pipeline_mask]
-                print(flare_aperture_pfl.shape)
                 saturation_level = np.nanmax(flare_aperture_pfl, axis=tuple(np.arange(len(flare_aperture_pfl.shape)))[1:]) / well_depth
                 if return_level == False:
                     flc.saturation = saturation_level > factor
@@ -531,24 +529,21 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
              if flc.flares.shape[0] > 0:#do not attempt if no flares are detected
                  if isinstance(flc.saturation[0], np.bool_) :
                      if return_level == False:
-                        print("H2")
                         flc.flares[colname] = flc.flares.apply(lambda x: (flc.saturation[x.istart: x.istop] == True).any(),
                                                         axis=1)
                      elif return_level == True:
                          LOG.info("Warning: Saturation is given as boolean flag. \n Choose return_level=False.")
-                         print("H1")
                          return flc.get_saturation(factor=factor, return_level=False)
                     
                  elif (isinstance(flc.saturation[0], np.float_) | isinstance(flc.saturation[0], np.float32)) :
                      if return_level == False:
-                        print("H3")
                         flc.flares[colname] = flc.flares.apply(lambda x: (flc.saturation[x.istart: x.istop] > factor).any(),
-                                                        axis=1)
-                        print("H")
+                                                               axis=1)
+
                      elif return_level == True:
                         flc.flares[colname] = flc.flares.apply(lambda x: np.nanmax(flc.saturation[x.istart: x.istop]),
                                                         axis=1)
-                        print(flc.flares[colname])
+
                                                
 
         return flc
