@@ -191,7 +191,7 @@ def _from_path_AltaiPony(path):
     for k in ['time', 'flux', 'flux_err', 'centroid_col',
               'centroid_row', 'quality', 'cadenceno',
               'detrended_flux', 'detrended_flux_err',
-              'quality_bitmask']:
+              'quality_bitmask', 'saturation']:
         try:
             attrs[k] = rhdul[1].data[k].byteswap().newbyteorder()
         except KeyError:
@@ -211,7 +211,8 @@ def _convert_TPF_to_FLC(tpf, lc):
             'pos_corr1' : tpf.pos_corr1,
             'pos_corr2' : tpf.pos_corr2,
             'pixel_flux' : tpf.flux,
-            'pixel_flux_err' : tpf.flux_err,}
+            'pixel_flux_err' : tpf.flux_err,
+            'pipeline_mask' : tpf.pipeline_mask}
 
     attributes = lc.__dict__
     z = attributes.copy()

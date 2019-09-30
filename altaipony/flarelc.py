@@ -509,6 +509,7 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
                 return np.nanmax(saturation_level)
         
         colname = 'saturation_f{}'.format(factor)
+        print(flc.pixel_flux.shape)
         
         if np.isnan(flc.saturation).all():
             
@@ -518,7 +519,8 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
                 
             elif flc.flares.shape[0] == 0: # calculate saturation for all times
                 flare_aperture_pfl = flc.pixel_flux[:,flc.pipeline_mask]
-                saturation_level = np.nanmean(flare_aperture_pfl, axis=1) / well_depth
+                print(flare_aperture_pfl.shape)
+                saturation_level = np.nanmax(flare_aperture_pfl, axis=tuple(np.arange(len(flare_aperture_pfl.shape)))[1:]) / well_depth
                 if return_level == False:
                     flc.saturation = saturation_level > factor
                 else:
@@ -527,21 +529,26 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
 
         else:
              if flc.flares.shape[0] > 0:#do not attempt if no flares are detected
-                 if isinstance(flc.saturation[0], np.bool_):
+                 if isinstance(flc.saturation[0], np.bool_) :
                      if return_level == False:
+                        print("H2")
                         flc.flares[colname] = flc.flares.apply(lambda x: (flc.saturation[x.istart: x.istop] == True).any(),
                                                         axis=1)
                      elif return_level == True:
                          LOG.info("Warning: Saturation is given as boolean flag. \n Choose return_level=False.")
+                         print("H1")
                          return flc.get_saturation(factor=factor, return_level=False)
                     
-                 elif isinstance(flc.saturation[0], np.float_):
+                 elif (isinstance(flc.saturation[0], np.float_) | isinstance(flc.saturation[0], np.float32)) :
                      if return_level == False:
+                        print("H3")
                         flc.flares[colname] = flc.flares.apply(lambda x: (flc.saturation[x.istart: x.istop] > factor).any(),
                                                         axis=1)
+                        print("H")
                      elif return_level == True:
-                        flc.flares[colname] = flc.flares.apply(lambda x: flc.saturation[x.istart: x.istop].max(),
+                        flc.flares[colname] = flc.flares.apply(lambda x: np.nanmax(flc.saturation[x.istart: x.istop]),
                                                         axis=1)
+                        print(flc.flares[colname])
                                                
 
         return flc
@@ -686,50 +693,50 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
         del ampl_fake
         return fake_lc
 
-    def append(self, others):
-        """
-        Append FlareLightCurve objects. Copied from lightkurve
-        Parameters
-        ----------
-        others : LightCurve object or list of LightCurve objects
-            Light curves to be appended to the current one.
-        Returns
-        -------
-        new_lc : LightCurve object
-            Concatenated light curve.
-        """
-        if not hasattr(others, '__iter__'):
-            others = [others]
-        new_lc = copy.deepcopy(self)
-        for i in range(len(others)):
-            new_lc.time = np.append(new_lc.time, others[i].time)
-            new_lc.flux = np.append(new_lc.flux, others[i].flux)
-            new_lc.flux_err = np.append(new_lc.flux_err, others[i].flux_err)
-            if hasattr(new_lc, 'cadenceno'):
-                new_lc.cadenceno = np.append(new_lc.cadenceno, others[i].cadenceno)  # KJM
-            if hasattr(new_lc, 'quality'):
-                new_lc.quality = np.append(new_lc.quality, others[i].quality)
-            if hasattr(new_lc, 'centroid_col'):
-                new_lc.centroid_col = np.append(new_lc.centroid_col, others[i].centroid_col)
-            if hasattr(new_lc, 'centroid_row'):
-                new_lc.centroid_row = np.append(new_lc.centroid_row, others[i].centroid_row)
-            if hasattr(new_lc, 'pos_corr1'):
-                new_lc.pos_corr1 = np.append(new_lc.pos_corr1, others[i].pos_corr1)
-            if hasattr(new_lc, 'pos_corr2'):
-                new_lc.pos_corr2 = np.append(new_lc.pos_corr2, others[i].pos_corr2)
-            if hasattr(new_lc, 'detrended_flux'):
-                new_lc.detrended_flux = np.append(new_lc.detrended_flux, others[i].detrended_flux)
-            if hasattr(new_lc, 'detrended_flux_err'):
-                new_lc.detrended_flux_err = np.append(new_lc.detrended_flux_err, others[i].detrended_flux_err)
-            if hasattr(new_lc, 'flux_trends'):
-                new_lc.flux_trends = np.append(new_lc.flux_trends, others[i].flux_trends)
-            if hasattr(new_lc, 'it_med'):
-                new_lc.it_med = np.append(new_lc.it_med, others[i].it_med, axis=0)
-            if hasattr(new_lc, 'pixel_flux'):
-                new_lc.pixel_flux = np.append(new_lc.pixel_flux, others[i].pixel_flux,axis=0)
-            if hasattr(new_lc, 'pixel_flux_err'):
-                new_lc.pixel_flux_err = np.append(new_lc.pixel_flux_err, others[i].pixel_flux_err,axis=0)
-        return new_lc
+    #def append(self, others):
+        #"""
+        #Append FlareLightCurve objects. Copied from lightkurve
+        #Parameters
+        #----------
+        #others : LightCurve object or list of LightCurve objects
+            #Light curves to be appended to the current one.
+        #Returns
+        #-------
+        #new_lc : LightCurve object
+            #Concatenated light curve.
+        #"""
+        #if not hasattr(others, '__iter__'):
+            #others = [others]
+        #new_lc = copy.deepcopy(self)
+        #for i in range(len(others)):
+            #new_lc.time = np.append(new_lc.time, others[i].time)
+            #new_lc.flux = np.append(new_lc.flux, others[i].flux)
+            #new_lc.flux_err = np.append(new_lc.flux_err, others[i].flux_err)
+            #if hasattr(new_lc, 'cadenceno'):
+                #new_lc.cadenceno = np.append(new_lc.cadenceno, others[i].cadenceno)  # KJM
+            #if hasattr(new_lc, 'quality'):
+                #new_lc.quality = np.append(new_lc.quality, others[i].quality)
+            #if hasattr(new_lc, 'centroid_col'):
+                #new_lc.centroid_col = np.append(new_lc.centroid_col, others[i].centroid_col)
+            #if hasattr(new_lc, 'centroid_row'):
+                #new_lc.centroid_row = np.append(new_lc.centroid_row, others[i].centroid_row)
+            #if hasattr(new_lc, 'pos_corr1'):
+                #new_lc.pos_corr1 = np.append(new_lc.pos_corr1, others[i].pos_corr1)
+            #if hasattr(new_lc, 'pos_corr2'):
+                #new_lc.pos_corr2 = np.append(new_lc.pos_corr2, others[i].pos_corr2)
+            #if hasattr(new_lc, 'detrended_flux'):
+                #new_lc.detrended_flux = np.append(new_lc.detrended_flux, others[i].detrended_flux)
+            #if hasattr(new_lc, 'detrended_flux_err'):
+                #new_lc.detrended_flux_err = np.append(new_lc.detrended_flux_err, others[i].detrended_flux_err)
+            #if hasattr(new_lc, 'flux_trends'):
+                #new_lc.flux_trends = np.append(new_lc.flux_trends, others[i].flux_trends)
+            #if hasattr(new_lc, 'it_med'):
+                #new_lc.it_med = np.append(new_lc.it_med, others[i].it_med, axis=0)
+            #if hasattr(new_lc, 'pixel_flux'):
+                #new_lc.pixel_flux = np.append(new_lc.pixel_flux, others[i].pixel_flux,axis=0)
+            #if hasattr(new_lc, 'pixel_flux_err'):
+                #new_lc.pixel_flux_err = np.append(new_lc.pixel_flux_err, others[i].pixel_flux_err,axis=0)
+        #return new_lc
 
     def characterize_flares(self, ampl_bins=80, dur_bins=160):
         """Use results from injection recovery to determine

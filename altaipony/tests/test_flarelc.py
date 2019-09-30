@@ -256,17 +256,17 @@ def test_find_flares():
     assert flc.flares['tstop'][0] == pytest.approx(0.395833, rel=1e-4)
     assert flc.flares['total_n_valid_data_points'][0] == 1000
     
-def test_append():
-    flc1 = mock_flc(detrended=True)
-    flc2 = mock_flc()
-    flc = flc1.append(flc2)
-    assert flc.flux.shape[0] == 2000
-    assert flc.flux_err.shape[0] == 2000
-    assert flc.detrended_flux.shape[0] == 2000
-    assert flc.detrended_flux.shape[0] == 2000
-    assert flc.pixel_flux.shape[0] == 2000    
-    assert flc.pixel_flux_err.shape[0] == 2000
-    assert flc.it_med.size == 2000
+#def test_append():
+    #flc1 = mock_flc(detrended=True)
+    #flc2 = mock_flc()
+    #flc = flc1.append(flc2)
+    #assert flc.flux.shape[0] == 2000
+    #assert flc.flux_err.shape[0] == 2000
+    #assert flc.detrended_flux.shape[0] == 2000
+    #assert flc.detrended_flux.shape[0] == 2000
+    #assert flc.pixel_flux.shape[0] == 2000    
+    #assert flc.pixel_flux_err.shape[0] == 2000
+    #assert flc.it_med.size == 2000
 
 def test_inject_fake_flares():
     flc = mock_flc(detrended=True)
