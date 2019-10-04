@@ -167,7 +167,7 @@ def find_flares(flc, minsep=3, **kwargs):
     return lc
 
 
-def detrend_savgol(lc):
+def detrend_savgol(lc, window_length=None):
     '''Construct a model light curve.
     Based on original Apppaloosa (Davenport 2016)
     with Savitzky-Golay filtering from scipy,
@@ -179,6 +179,8 @@ def detrend_savgol(lc):
     ------------
     flc : FlareLightCurve
         TESS light curve
+    window_length : int
+        number of datapoint for Sav.-Gol. filter
     
     Return:
     -------
@@ -208,9 +210,13 @@ def detrend_savgol(lc):
         
         # This is from Appaloosa: 
         dt = np.nanmedian(time[1:] - time[0:-1])
-        Nsmo = np.floor(.1 / dt)
-        if Nsmo % 2 == 0:
-            Nsmo = Nsmo + 1
+        
+        if window_length is None:
+            Nsmo = np.floor(.1 / dt)
+            if Nsmo % 2 == 0:
+                Nsmo = Nsmo + 1
+        else:
+            Nsmo = window_length
         # args are flux, window_length, polyorder, mode is 
 
         flux_model_i = savgol_filter(flux, Nsmo, 3, mode='nearest')
