@@ -764,7 +764,7 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
         for key, val in vals.items():
             if type(val)==np.ndarray:
                 if len(val.shape) == 1:
-                    bintab.append(fits.Column(name=key, format='E', array=val))
+                    bintab.append(fits.Column(name=key, format='D', array=val))
                 else:
                     LOG.warning("Did not save {} because fits files only accept 1D arrays.".format(key))
             elif (type(val) == str) | (type(val) == int) | (type(val) == float):

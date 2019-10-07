@@ -217,6 +217,7 @@ def _convert_TPF_to_FLC(tpf, lc):
     attributes = lc.__dict__
     z = attributes.copy()
     z.update(keys)
+    del z["_flux_unit"]
     flc = FlareLightCurve(time_unit=u.day, origin="TPF",
                           flux_unit = u.electron/u.s, **z)
     if flc.pos_corr1 is None:
@@ -234,8 +235,10 @@ def _convert_TPF_to_FLC(tpf, lc):
 def _convert_LC_to_FLC(lc, origin=None, **kwargs):
     attributes = lc.__dict__
     attributes.update(kwargs)
+    del attributes["_flux_unit"]
     flc = FlareLightCurve(time_unit=u.day, origin=origin,
-                           flux_unit = u.electron/u.s, **attributes)
+                          flux_unit = u.electron/u.s,
+                           **attributes)
     flc = flc[np.isfinite(flc.time) &
               np.isfinite(flc.flux) &
               np.isfinite(flc.cadenceno)]
