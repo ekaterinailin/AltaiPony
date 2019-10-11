@@ -424,11 +424,10 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
                 print("saved EPIC {} LC before detrending".format(self.targetit))
                 
             injs = fake_lc.fake_flares
-            
             if inject_before_detrending == True:
                 LOG.info('\nDetrending fake LC:\n')
                 fake_lc = fake_lc.detrend(mode)
-                
+            
             fake_lc = fake_lc.find_flares(fake=True)
             recs = fake_lc.flares
             
