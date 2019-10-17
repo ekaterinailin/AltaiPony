@@ -442,9 +442,20 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
 
             bar.update(i + 1)
             if save == True:
-                if path is None:
-                    path = '{}_{}_inj_{}_{}.csv'.format(iterations, lc.targetid, injrecstr[inject_before_detrending], lc.campaign)
-                combined_irr.to_csv(path, index=False)
+                
+                if os.path.exists(path):
+                    
+                    with open(path, 'a') as f:
+                        combined_irr.to_csv(f, header=False, index=False)
+                
+                else:
+                
+                    if path is None:
+                        path = '{}_{}_inj_{}_{}.csv'.format(iterations, lc.targetid, injrecstr[inject_before_detrending], lc.campaign)
+                    
+                    else:
+                        combined_irr.to_csv(path, index=False)
+                        
         lc.fake_flares = combined_irr
         bar.finish()
         return lc, fake_lc
