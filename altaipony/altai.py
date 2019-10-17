@@ -218,7 +218,7 @@ def detrend_savgol(lc, window_length=None):
         else:
             Nsmo = window_length
         # args are flux, window_length, polyorder, mode is 
-
+        Nsmo = max(Nsmo, 5) #Nsmo must be larger than polyorder
         flux_model_i = savgol_filter(flux, Nsmo, 3, mode='nearest')
         
         flux_diff = flux - flux_model_i + np.nanmean(flux_model_i)
@@ -231,16 +231,21 @@ def detrend_savgol(lc, window_length=None):
         # Treat outliers at end and start of time series:
         if len(sta) > len(fin):
             fin.append(ri-le-1)
+    
         elif len(sta) < len(fin):
             sta = [0] + sta
+
         elif ((len(sta) == len(fin)) & (len(sta)!=0)):
-            if (sta[0] > fin[0]): # outliers on both ends
+
+            if ((sta[0] > fin[0]) | (sta[-1] > fin[-1])): # outliers on both ends
+
                 sta = [0] + sta
                 fin.append(ri-le-1)
         # Compute flux model as the mean value between 
         # start and end of flare, that is, we interpolate 
         # linearly.
         flux_model_j = []
+        
         
         for i,j in list(zip(sta,fin)):
             d = 0
@@ -255,8 +260,7 @@ def detrend_savgol(lc, window_length=None):
                 k = j + 2
             flux_model_j.append([np.mean(lc.flux_model[le:ri][[i,k]])] * (j - i + d))
         flux_model_j = [x for sublist in flux_model_j for x in sublist]
-        lc.detrended_flux[outliers] = lc.flux[outliers] - flux_model_j + np.nanmean(flux_model_i)
-        
+        lc.detrended_flux[np.where(a==1)[0]] = lc.flux[np.where(a==1)[0]] - flux_model_j + np.nanmean(flux_model_i)
         # End of main de-trending.
         # --------------------------------------------------
         
