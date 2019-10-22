@@ -1,6 +1,9 @@
 import pandas as pd
 import numpy as np
 
+import seaborn
+import matplotlib.pyplot as plt
+
 def wrap_characterization_of_flares(injrec, flares, ampl_bins=70, dur_bins=160):
     """Take injection-recovery results for a data set
     and the corresponding flare table. Determine
@@ -169,7 +172,13 @@ def tile_up_injection_recovery(df, typ, ampl="amplitude", dur="duration_d",
         column name for relevant parameter
     """
 
-    #
+    # Calculate helpful columns
+    if "rec" not in df.columns:
+        df["rec"] = df.ed_rec.fillna(0).astype(bool).astype(int)
+    if "dur" not in df.columns:
+        df["dur"] = df.tstop - df.tstart
+    
+    
     d1 = df.assign(Amplitude=pd.cut(df[ampl], ampl_bins),
                    Duration=pd.cut(df[dur],  dur_bins))
 
@@ -236,3 +245,75 @@ def percentile(x, q):
     else:
         return np.percentile(x.dropna(), q=q)
 
+
+def plot_heatmap(df, val, label=None,
+                 ID=None, valcbr=(0.,1.),
+                 ovalcbr=(0,50), xlabel="duration [d]",
+                 ylabel="amplitude", cmap="viridis"):
+    """Plot a heatmap from the "fake_flares" table. 
+    
+    Parameters:
+    ------------
+    df : DataFrame
+        fake_flares attribute or equivalent table
+    val : str
+        column name in df to map
+    label: str
+        human-readable version of "val"
+    ID : int or str
+        target id
+    valcbr : tuple
+        value range for "val"
+    xlabel : str or "duration [d]"
+        xlabel for plot
+    ylabel : str or "amplitude"
+        ylabel for plot   
+    cmap : colormap
+        default "viridis"
+    
+    Return:
+    -------
+    matplotlib.figure.Figure        
+    """
+    # Find the midpoint of the interval to use as ticks
+    df = df.reset_index()
+    df.Amplitude = df.Amplitude.apply(lambda x: x.mid)
+    df.Duration = df.Duration.apply(lambda x: x.mid)
+    
+    # Init figure
+    fig, ax = plt.subplots(nrows=1, ncols=1, figsize = (9,7))
+    
+    # Some layout stuff
+    if label is None:
+        label = val
+    
+    # Create heatmap data format 
+    heatmap1_data = pd.pivot_table(df, values=val, 
+                         index=['Amplitude'], 
+                         columns=['Duration'])
+
+    try:
+        heatmap = seaborn.heatmap(heatmap1_data, cmap=cmap,cbar_kws={'label': label},
+                              vmin=valcbr[0], vmax=valcbr[1], annot=False, ax=ax,
+                              yticklabels=["{:.2f}".format(x) for x in heatmap1_data.index.values],
+                              xticklabels=["{:.3f}".format(x) for x in heatmap1_data.columns.values])
+    except AttributeError:
+        heatmap = seaborn.heatmap(heatmap1_data, cmap=cmap,cbar_kws={'label': label},
+                              vmin=valcbr[0], vmax=valcbr[1], annot=False, ax=ax,
+                              yticklabels=["{:.2f}".format(x) for x in heatmap1_data.index.values.categories.values.mid.values],
+                              xticklabels=["{:.3f}".format(x) for x in heatmap1_data.columns.values.categories.values.mid.values])
+    
+    fig = heatmap.get_figure()
+    
+    # Do some layout stuff
+    
+    fig.tight_layout()
+    for label in ax.xaxis.get_ticklabels()[::2]:
+        label.set_visible(False)
+    for label in ax.yaxis.get_ticklabels()[::2]:
+        label.set_visible(False)    
+    ax.set_xlabel(xlabel, fontsize=16)
+    ax.set_ylabel(ylabel, fontsize=16)
+    ax.set_title("TIC {}".format(ID), fontsize=16)
+
+    return fig

@@ -4,11 +4,14 @@ import pytest
 import numpy as np
 import pandas as pd
 
+import matplotlib
+
 from ..injrecanalysis import (characterize_flares,
                               tile_up_injection_recovery,
                               multiindex_into_df_with_nans,
                               percentile,
-                              wrap_characterization_of_flares
+                              wrap_characterization_of_flares,
+                              plot_heatmap,
                              )
                              
 from . import PACKAGEDIR                             
@@ -160,7 +163,7 @@ def test_tile_up_injection_recovery():
         assert val == vali
         assert resdf[val].median() == pytest.approx(res, rel=1e-2)
 
-    with pytest.raises(KeyError):
+    with pytest.raises((KeyError, AttributeError)):
         dftest1 = pd.DataFrame()
         resdf, val = tile_up_injection_recovery(dftest1, "recovery_probability")
 
@@ -207,3 +210,21 @@ def test_percentile():
     assert np.isnan(percentile(s,16))
     s[2] = 1.
     assert percentile(s,1) == percentile(s,99)
+    
+
+
+def test_plot_heatmap():
+
+    df = pd.read_csv(os.path.join(PACKAGEDIR,
+                                          "tests/testfiles/injrec_TIC1539914_s9.csv"))
+    dft, val = tile_up_injection_recovery(df,"ed_ratio")
+    assert isinstance(plot_heatmap(dft, val), matplotlib.figure.Figure)
+
+    dft, val = tile_up_injection_recovery(df,"recovery_probability")
+    assert isinstance(plot_heatmap(dft, val), matplotlib.figure.Figure)
+
+    dft, val = tile_up_injection_recovery(df,"amplitude_ratio")
+    assert isinstance(plot_heatmap(dft, val), matplotlib.figure.Figure)
+
+    dft, val = tile_up_injection_recovery(df,"duration_ratio")
+    assert isinstance(plot_heatmap(dft, val), matplotlib.figure.Figure)
