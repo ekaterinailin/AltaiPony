@@ -38,7 +38,7 @@ def generate_fake_flare_distribution(nfake, ampl=[1e-4, 5], dur=[0.005, 0.012], 
         return (mod_random(n, **kwargs) * (tup[1] - tup[0]) + tup[0])
 
     if mode=='uniform':
-
+        
         dur_fake =  generate_range(nfake, dur, **kwargs)
         ampl_fake = generate_range(nfake, ampl, **kwargs)
 
@@ -60,7 +60,7 @@ def mod_random(x, d=False, seed=667):
         np.random.seed(seed)
         return np.random.rand(x)
     else:
-        np.random.seed()#do not remove: seed is fixed otherwise!
+#        np.random.seed()#do not remove: seed is fixed otherwise!
         return np.random.rand(x)
 
 def aflare(t, tpeak, dur, ampl, upsample=False, uptime=10):

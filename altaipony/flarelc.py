@@ -20,6 +20,8 @@ from .fakeflares import (merge_fake_and_recovered_events,
                          )
 from .injrecanalysis import wrap_characterization_of_flares
 
+import matplotlib.pyplot as plt 
+
 import time
 LOG = logging.getLogger(__name__)
 
@@ -363,8 +365,7 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
             #find continuous observing periods
             lc = lc.find_gaps()
             #find the true median value iteratively
-            if fake==False:
-                lc = find_iterative_median(lc)
+            lc = find_iterative_median(lc)
             #find flares
             lc = find_flares(lc, **kwargs)
 
@@ -424,18 +425,20 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
                 print("saved EPIC {} LC before detrending".format(self.targetit))
                 
             injs = fake_lc.fake_flares
+           
             if inject_before_detrending == True:
                 LOG.info('\nDetrending fake LC:\n')
                 fake_lc = fake_lc.detrend(mode)
             
             fake_lc = fake_lc.find_flares(fake=True)
             recs = fake_lc.flares
-            
+          
             if save_lc_to_file == True:
                 fake_lc.to_fits("{}after".format(folder))
                 print("saved EPIC {} LC after detrending".format(self.targetit))
                 
             injection_recovery_results = merge_fake_and_recovered_events(injs, recs)
+     
             combined_irr = combined_irr.append(injection_recovery_results,
                                                       ignore_index=True,)
 
@@ -444,8 +447,8 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
                 
                 if os.path.exists(path):
                     
-                    with open(path, 'a') as f:
-                        combined_irr.to_csv(f, header=False, index=False)
+                    with open(path, 'w') as f:
+                        combined_irr.to_csv(f, index=False)
                 
                 else:
                 
@@ -560,7 +563,7 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
 
 
     def inject_fake_flares(self, gapwindow=0.1, fakefreq=.005,
-                        inject_before_detrending=False, d=False, seed=0,
+                        inject_before_detrending=False, d=False, seed=None,
                         **kwargs):
 
         '''
@@ -581,10 +584,10 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
             flares per day, but at least one per continuous observation period will be injected
         inject_before_detrending : True or bool
             By default, flares are injected before the light curve is detrended.
-        d :
-
-        seed :
-
+        d : boolean
+            If True, a seed for random numbers will be set
+        seed : int or None
+            If d == True, seed will be set to this number 
         kwargs : dict
             Keyword arguments to pass to generate_fake_flare_distribution.
 
@@ -638,6 +641,7 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
         ampl_fake = np.zeros(nfakesum, dtype='float')
         ckm = 0
         for (le,ri) in fake_lc.gaps:
+            
             gap_fake_lc = fake_lc[le:ri]
             nfake = max(1,int(np.rint(fakefreq * (gap_fake_lc.time.max() - gap_fake_lc.time.min()))))
             LOG.debug('Inject {} fake flares into a {} datapoint long array.'.format(nfake,ri-le))
@@ -651,6 +655,7 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
             
             distribution  = generate_fake_flare_distribution(nfake, d=d,
                                                             seed=seed, **kwargs)
+
             dur_fake[ckm:ckm+nfake], ampl_fake[ckm:ckm+nfake] = distribution
             #loop over the numer of fake flares you want to generate
             for k in range(ckm, ckm+nfake):
@@ -658,7 +663,11 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
                 isok = False
                 while isok is False:
                     # choose a random peak time
-                    t0 = (mod_random(1, d=d, seed=seed*k) * dtime + mintime)[0]
+                    if isinstance(seed, int):
+                        t0 = (mod_random(1, d=d, seed=seed*k) * dtime + mintime)[0]
+                    elif seed is None:
+                        t0 = (mod_random(1, d=d) * dtime + mintime)[0]
+                     
                     #t0 =  random.uniform(np.min(time),np.max(time))
                     # Are there any real flares to deal with?
                     if real_flares_in_gap.tstart.shape[0]>0:
@@ -694,6 +703,9 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
                                                         ignore_index=True,)
         #workaround
         fake_lc.fake_flares = fake_lc.fake_flares[fake_lc.fake_flares.peak_time != 0.]
+        plt.figure(figsize=(12,5))
+        plt.plot(fake_lc.time, fake_lc.flux)
+        plt.scatter(fake_lc.fake_flares.peak_time, fake_lc.fake_flares.peak_time.shape[0]*[np.max(fake_lc.flux)])
         del dur_fake
         del ampl_fake
         return fake_lc
