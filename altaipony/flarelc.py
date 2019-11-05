@@ -20,8 +20,6 @@ from .fakeflares import (merge_fake_and_recovered_events,
                          )
 from .injrecanalysis import wrap_characterization_of_flares
 
-import matplotlib.pyplot as plt 
-
 import time
 LOG = logging.getLogger(__name__)
 
@@ -420,9 +418,7 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
             fake_lc = fake_lc.inject_fake_flares(inject_before_detrending=inject_before_detrending,
                                                  fakefreq=fakefreq,
                                                  **kwargs)
-            plt.figure(figsize=(12,5))
-            plt.plot(fake_lc.time, fake_lc.flux)
-            plt.plot(fake_lc.fake_flares.peak_time,fake_lc.fake_flares.shape[0]*[np.max(fake_lc.flux)])
+    
             if save_lc_to_file == True:
                 fake_lc.to_fits("{}before.fits".format(folder))
                 print("saved EPIC {} LC before detrending".format(self.targetit))
@@ -655,10 +651,9 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
             time = gap_fake_lc.time
             mintime, maxtime = np.min(time), np.max(time)
             dtime = maxtime - mintime
-            print(seed, nfake, d, kwargs)
             distribution  = generate_fake_flare_distribution(nfake, d=d,
                                                             seed=seed, **kwargs)
-            print(distribution)
+      
             dur_fake[ckm:ckm+nfake], ampl_fake[ckm:ckm+nfake] = distribution
             #loop over the numer of fake flares you want to generate
             for k in range(ckm, ckm+nfake):
@@ -706,9 +701,7 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
                                                         ignore_index=True,)
         #workaround
         fake_lc.fake_flares = fake_lc.fake_flares[fake_lc.fake_flares.peak_time != 0.]
-        plt.figure(figsize=(12,5))
-        plt.plot(fake_lc.time, fake_lc.flux)
-        plt.scatter(fake_lc.fake_flares.peak_time, fake_lc.fake_flares.peak_time.shape[0]*[np.max(fake_lc.flux)])
+
         del dur_fake
         del ampl_fake
         return fake_lc
