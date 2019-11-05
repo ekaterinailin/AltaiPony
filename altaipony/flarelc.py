@@ -257,7 +257,7 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
         return lc
 
     def detrend(self, mode, save=False,
-                path='detrended_lc.fits', de_niter=30, max_sigma=3, 
+                path='detrended_lc.fits', de_niter=3, max_sigma=3, 
                 **kwargs):
         """
         De-trends a FlareLightCurve using ``K2SC``.
@@ -316,7 +316,7 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
                 try:
                     new_lc.k2sc(de_niter=de_niter, max_sigma=max_sigma, **kwargs)
                     new_lc.detrended_flux = (new_lc.corr_flux - new_lc.tr_time
-                                          + np.nanmedian(new_lc.tr_time))
+                                             + np.nanmedian(new_lc.tr_time))
                     new_lc.detrended_flux_err = copy.copy(new_lc.flux_err) # does k2sc share their uncertainties somewhere?
                     new_lc.flux_trends = new_lc.tr_time
                     if new_lc.detrended_flux.shape != self.flux.shape:
@@ -420,8 +420,11 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
             fake_lc = fake_lc.inject_fake_flares(inject_before_detrending=inject_before_detrending,
                                                  fakefreq=fakefreq,
                                                  **kwargs)
+            plt.figure(figsize=(12,5))
+            plt.plot(fake_lc.time, fake_lc.flux)
+            plt.plot(fake_lc.fake_flares.peak_time,fake_lc.fake_flares.shape[0]*[np.max(fake_lc.flux)])
             if save_lc_to_file == True:
-                fake_lc.to_fits("{}before".format(folder))
+                fake_lc.to_fits("{}before.fits".format(folder))
                 print("saved EPIC {} LC before detrending".format(self.targetit))
                 
             injs = fake_lc.fake_flares
@@ -434,7 +437,7 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
             recs = fake_lc.flares
           
             if save_lc_to_file == True:
-                fake_lc.to_fits("{}after".format(folder))
+                fake_lc.to_fits("{}after.fits".format(folder))
                 print("saved EPIC {} LC after detrending".format(self.targetit))
                 
             injection_recovery_results = merge_fake_and_recovered_events(injs, recs)
@@ -652,10 +655,10 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
             time = gap_fake_lc.time
             mintime, maxtime = np.min(time), np.max(time)
             dtime = maxtime - mintime
-            
+            print(seed, nfake, d, kwargs)
             distribution  = generate_fake_flare_distribution(nfake, d=d,
                                                             seed=seed, **kwargs)
-
+            print(distribution)
             dur_fake[ckm:ckm+nfake], ampl_fake[ckm:ckm+nfake] = distribution
             #loop over the numer of fake flares you want to generate
             for k in range(ckm, ckm+nfake):

@@ -60,7 +60,7 @@ def mod_random(x, d=False, seed=667):
         np.random.seed(seed)
         return np.random.rand(x)
     else:
-#        np.random.seed()#do not remove: seed is fixed otherwise!
+        np.random.seed()#do not remove: seed is fixed otherwise!
         return np.random.rand(x)
 
 def aflare(t, tpeak, dur, ampl, upsample=False, uptime=10):
