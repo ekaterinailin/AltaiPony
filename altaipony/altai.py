@@ -180,7 +180,9 @@ def detrend_savgol(lc, window_length=None):
     flc : FlareLightCurve
         TESS light curve
     window_length : int
-        number of datapoint for Sav.-Gol. filter
+        number of datapoints for Sav.-Gol. filter,
+        either one value for entire light curve
+        of piecewise for gaps
     
     Return:
     -------
@@ -194,8 +196,14 @@ def detrend_savgol(lc, window_length=None):
     
     if lc.gaps is None:
         lc = lc.find_gaps()
-        
-    for (le,ri) in lc.gaps:
+    if isinstance(window_length, tuple):
+        gaps = [(window_length[i], lc.gaps[i][0], lc.gaps[i][1]) for i in range(len(lc.gaps))]
+    elif isinstance(window_length, int):
+        gaps = [(window_length, lc.gaps[i][0], lc.gaps[i][1]) for i in range(len(lc.gaps))]
+    elif window_length is None:
+        gaps = [(-999, lc.gaps[i][0], lc.gaps[i][1]) for i in range(len(lc.gaps))]
+    
+    for (wl,le,ri) in gaps:
         
         # Do the iterative sigma clipping
         ok = np.where(sigma_clip(lc.flux[le:ri]))[0] + le
@@ -209,17 +217,15 @@ def detrend_savgol(lc, window_length=None):
         # Main detrending happens here:
         
         # This is from Appaloosa: 
-        dt = np.nanmedian(time[1:] - time[0:-1])
+        if wl == -999:
+            dt = np.nanmedian(time[1:] - time[0:-1])
+            wl = np.floor(.1 / dt)
+            if wl % 2 == 0:
+                wl = wl + 1
         
-        if window_length is None:
-            Nsmo = np.floor(.1 / dt)
-            if Nsmo % 2 == 0:
-                Nsmo = Nsmo + 1
-        else:
-            Nsmo = window_length
         # args are flux, window_length, polyorder, mode is 
-        Nsmo = max(Nsmo, 5) #Nsmo must be larger than polyorder
-        flux_model_i = savgol_filter(flux, Nsmo, 3, mode='nearest')
+        wl = max(wl, 5) #wl must be larger than polyorder
+        flux_model_i = savgol_filter(flux, wl, 3, mode='nearest')
         
         flux_diff = flux - flux_model_i + np.nanmean(flux_model_i)
         lc.detrended_flux[ok] = flux_diff

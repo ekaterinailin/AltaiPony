@@ -5,10 +5,29 @@ from ..altai import (find_flares,
                      find_flares_in_cont_obs_period,
                      chi_square,
                      equivalent_duration,
-                     find_iterative_median)
+                     find_iterative_median,
+                     detrend_savgol)
 from ..flarelc import FlareLightCurve
 from .test_flarelc import mock_flc
 
+def test_detrend_savgol():
+    """Test if different window_length kwargs are processed correctly."""
+    
+    N = int(1e4)
+    time = np.linspace(2000,2050,N)
+    flux = np.sin(time / 2.) * 30. + 5e4 + np.random.rand(N) * 35. + 5e-4 * ((time-2004.)**3 - 30 * (time-2004)**2)
+    flux[5000:5010] = flux[5000:5010] + np.array([500,250,150,80,60,30,20,10,7,4])
+    flux[4500:4809] = np.nan
+    flux_err = np.random.rand(N) * 10.
+    flc = FlareLightCurve(targetid=10000009, time=time, flux=flux, flux_err=flux_err)
+    
+    flcds = [flc.detrend("savgol"),
+             flc.detrend("savgol", window_length=201),
+             flc.detrend("savgol", window_length=(101,205))]
+    for flcd in flcds:
+            assert flcd.detrended_flux.shape[0] == 1e4-309
+
+    
 def test_iterative_median():
 
     flc = mock_flc(detrended=True)
