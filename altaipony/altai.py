@@ -196,7 +196,7 @@ def detrend_savgol(lc, window_length=None):
     
     if lc.gaps is None:
         lc = lc.find_gaps()
-    if isinstance(window_length, tuple):
+    if (isinstance(window_length, tuple) or isinstance(window_length, list)):
         gaps = [(window_length[i], lc.gaps[i][0], lc.gaps[i][1]) for i in range(len(lc.gaps))]
     elif isinstance(window_length, int):
         gaps = [(window_length, lc.gaps[i][0], lc.gaps[i][1]) for i in range(len(lc.gaps))]

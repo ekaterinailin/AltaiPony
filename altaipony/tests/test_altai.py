@@ -23,7 +23,8 @@ def test_detrend_savgol():
     
     flcds = [flc.detrend("savgol"),
              flc.detrend("savgol", window_length=201),
-             flc.detrend("savgol", window_length=(101,205))]
+             flc.detrend("savgol", window_length=(101,205)),
+             flc.detrend("savgol", window_length=[101,205])]
     for flcd in flcds:
             assert flcd.detrended_flux.shape[0] == 1e4-309
 
