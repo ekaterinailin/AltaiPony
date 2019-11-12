@@ -255,7 +255,7 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
         return lc
 
     def detrend(self, mode, save=False,
-                path='detrended_lc.fits', de_niter=3, max_sigma=3, 
+                path='detrended_lc.fits', de_niter=30, max_sigma=3, 
                 **kwargs):
         """
         De-trends a FlareLightCurve using ``K2SC``.
