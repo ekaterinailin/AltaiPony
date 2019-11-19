@@ -167,7 +167,7 @@ def find_flares(flc, minsep=3, **kwargs):
     return lc
 
 
-def detrend_savgol(lc, window_length=None):
+def detrend_savgol(lc, window_length=None, pad=3):
     '''Construct a model light curve.
     Based on original Apppaloosa (Davenport 2016)
     with Savitzky-Golay filtering from scipy,
@@ -233,6 +233,17 @@ def detrend_savgol(lc, window_length=None):
         
         # Find out where outlier begin and end:
         a = np.isnan(lc.detrended_flux[le:ri]).astype(int)
+        
+        #pad outliers-------------------
+       # print(np.where(a)[0])
+        x = np.where(a)[0]
+        for i in range(-pad,pad+1):
+            y = x+i
+            y[np.where(y>len(a)-1)] = len(a)-1
+            a[y] = True
+        #print(list(np.where(a)[0]))
+        #--------------------------------
+        
         sta, fin = list(np.where(np.diff(a)==1)[0]), list(np.where(np.diff(a)==-1)[0])
         # Treat outliers at end and start of time series:
         if len(sta) > len(fin):
