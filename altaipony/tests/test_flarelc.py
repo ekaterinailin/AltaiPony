@@ -220,6 +220,38 @@ def test_detrend(**kwargs):
         assert aplc.flux.shape[0] == daplc.detrended_flux.shape[0] #no NaNs to throw out
         assert daplc.flux.max() > daplc.detrended_flux.max() # flare sits on a LC part above quiescent level
         assert (aplc.flux_err == daplc.detrended_flux_err).all() # uncertainties are simply kept
+        
+    # TEST CUSTOM DETRENDING
+    
+    # --- create a very minimalistic light curve
+    N = int(1e4)
+    time = np.linspace(2000,2050,N)
+    np.random.seed(200)
+    flux = 5e4 + np.random.rand(N) * 35. 
+    flux_err = np.random.rand(N) * 35. 
+    flc = FlareLightCurve(targetid=10000009, time=time, flux=flux, flux_err=flux_err)
+
+    # --- test a minimum function that fails to create the desired output
+    def custom_detrending(flc):
+        return flc
+
+    with pytest.raises(AttributeError) as e:
+        new_flc = flc.detrend(mode="custom", func=custom_detrending)
+
+    # -- test a minimum function that does the job    
+    def custom_detrending(flc):
+        flc.detrended_flux = flc.flux
+        flc.detrended_flux_err = flc.flux_err
+        return flc    
+        
+    new_flc = flc.detrend(mode="custom", func=custom_detrending)
+    assert (new_flc.flux == flc.flux).all()
+    assert (new_flc.flux_err == flc.flux_err).all()
+
+    # --- function should fail if no func is given
+
+    with pytest.raises(ValueError) as e:
+        new_flc = flc.detrend(mode="custom")
 
 
 def test_detrend_fails():

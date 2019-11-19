@@ -256,6 +256,7 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
 
     def detrend(self, mode, save=False,
                 path='detrended_lc.fits', de_niter=30, max_sigma=3, 
+                func=None,
                 **kwargs):
         """
         De-trends a FlareLightCurve using ``K2SC``.
@@ -265,7 +266,7 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
         Parameters:
         ----------
         mode : str
-            "k2sc" or "savgol"
+            "k2sc" or "savgol" or "custom"
         de_niter : int
             Differential Evolution global optimizer parameter. K2SC
             default is 150, here set to 30 as a safety net to avoid
@@ -280,8 +281,11 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
             Path to resulting fits file. 
             As a default, the fits file will be stored in the
             working directory.
+        func : function
+            custom detrending function
         kwargs : dict
-            Keyword arguments to pass to k2sc or detrend_savgol
+            Keyword arguments to pass to k2sc, detrend_savgol, or custom
+            method
 
         Returns
         --------
@@ -329,6 +333,28 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
                 if save == True:
                     new_lc.to_fits(path)
                 return new_lc
+                
+        elif mode=="custom":
+        
+            if func is None:
+                LOG.error('If you wish to use a custom detrending function you'
+                          ' must pass a callable to the "func" parameter.')
+                raise ValueError
+                
+            new_lc = copy.deepcopy(self)
+            new_lc = func(new_lc, **kwargs)
+            
+            if (np.isnan(new_lc.detrended_flux).all() | np.isnan(new_lc.detrended_flux_err).all()):
+                LOG.error('The custom de-trending function you passed does not'
+                          ' return an detrended_flux or detrended_flux_err attri'
+                          'bute.')
+                raise AttributeError
+            
+            if save == True:
+                new_lc.to_fits(path)
+            
+            return new_lc
+        
         else:
             err_str = ('\nDe-trending mode {} does not exist. Pass "k2sc" (K2 LCs)'
                        ' or "savgol" (Kepler, TESS).'.format(mode))
