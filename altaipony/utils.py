@@ -44,12 +44,32 @@ def medsig(a):
     return med, sig
 
 
-def sigma_clip(a, max_iter=10, max_sigma=3, 
-               separate_masks=False, mexc=None,
-               debug=False):
+def sigma_clip(a, max_iter=10, max_sigma=3., 
+               separate_masks=False, mexc=None):
     """Iterative sigma-clipping routine that 
     separates not finite points, and down-
     and upwards outliers.
+    
+    1: good data point
+    0: masked outlier
+    
+    Parameters:
+    ------------
+    max_iter : int
+        how often do we want to recalculate sigma to get
+        ever smaller outliers?
+    max_sigma : float
+        where do we clip the outliers?
+    separate_masks : bools
+        if True will give to boolean arrays for
+        positive and negative outliers.
+    mexc : boolean array
+        custom mask to additionally account for
+    
+    Return:
+    -------
+    boolean array (all) or two boolean arrays (positive/negative)
+    with the final outliers as zeros.
     """
     
     # perform sigma-clipping on finite points only, or custom indices given by mexc
@@ -79,7 +99,15 @@ def sigma_clip(a, max_iter=10, max_sigma=3,
         return mlow & mhigh
 
 def expand_mask(a, divval=1):
-    """Expand the mask if multiple outliers occur in a row."""
+    """Expand the mask if multiple outliers occur in a row.
+    Add 3 x sqrt(#outliers in a row / divval) masked points
+    before and after the outlier sequence.
+    
+    Parameters:
+    -----------
+    a : bool array
+        mask
+    """
     i, j, k = 0, 0, 0
     while i<len(a):
         v=a[i]

@@ -167,7 +167,7 @@ def find_flares(flc, minsep=3, **kwargs):
     return lc
 
 
-def detrend_savgol(lc, window_length=None, pad=3):
+def detrend_savgol(lc, window_length=None, pad=3, **kwargs):
     '''Construct a model light curve.
     Based on original Apppaloosa (Davenport 2016)
     with Savitzky-Golay filtering from scipy,
@@ -183,6 +183,12 @@ def detrend_savgol(lc, window_length=None, pad=3):
         number of datapoints for Sav.-Gol. filter,
         either one value for entire light curve
         of piecewise for gaps
+    pad : int
+        mask this number of data points before and
+        after each outlier. Note that sigma_clip
+        already expands the mask 
+    kwargs : dict
+        keyword arguments to pass to :func:`utils.sigma_clip`
     
     Return:
     -------
