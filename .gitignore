@@ -4,6 +4,11 @@ myenv/
 .ipynb_checkpoints/
 __pycache__/
 mastDownload/
+.cache/
+altaipony.egg-info/
+altaipony/.cache/
+altaipony/.idea/
+
 
 #File types
 
