@@ -4,5 +4,5 @@ pandas>=0.22
 progressbar2
 gatspy
 seaborn
-git+https://github.com/OxES/k2sc.git
+git+https://github.com/ekaterinailin/k2sc.git
 
