@@ -418,9 +418,8 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
 
         Returns
         -------
-        combined_irr : DataFrame
-            All injected and recovered flares. Complex flare superpositions are
-            collapsed.
+        lc : FlareLightCurve
+            Detrended LC with all fake_flares listed in the attribute
         fake_lc : FlareLightCurve
             Light curve with the last iteration of synthetic flares injected.
         """

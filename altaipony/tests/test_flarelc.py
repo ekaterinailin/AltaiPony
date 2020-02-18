@@ -74,7 +74,11 @@ def test_mark_flagged_flares():
     assert ((qs == s1) | (qs == s2))
 
 def test_sample_flare_recovery():
+    
+    
+    # Generic case
     flc = mock_flc(detrended=True)
+    
     flc, fflc = flc.sample_flare_recovery(iterations=2)
     #make sure no flares are injected overlapping true flares
     data = flc.fake_flares
@@ -83,6 +87,26 @@ def test_sample_flare_recovery():
     assert data.shape[0] == 2
     assert fflc.gaps == [(0, 1000)]
     assert np.median(fflc.it_med) == pytest.approx(500.005274113832)
+    
+    # Custom case
+    
+    def func(flc):
+        flc.detrended_flux =  flc.flux/2.
+        flc.detrended_flux_err =  flc.flux_err/2.
+        return flc
+    
+    flc = mock_flc(detrended=True)
+    
+    flcd, fflc = flc.sample_flare_recovery(iterations=10, inject_before_detrending=True,
+                                          func=func, mode="custom")
+    #make sure no flares are injected overlapping true flares
+    data = flcd.fake_flares
+    assert data[(data.istart > 14) & (data.istart < 19)].shape[0] == 0
+    #test if all injected event are covered in the merged flares:
+    assert data.shape[0] == 10
+    assert fflc.gaps == [(0, 1000)]
+    assert np.median(fflc.it_med) == pytest.approx(500.005274113832/2.)
+    assert flcd.detrended_flux == pytest.approx(flc.flux/2.)
 
 
 def test_to_fits():
