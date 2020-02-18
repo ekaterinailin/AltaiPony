@@ -396,7 +396,7 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
         return lc
 
     def sample_flare_recovery(self, iterations=2000, inject_before_detrending=False,
-                              mode=None, save_lc_to_file=False, folder="", 
+                              mode=None, func=None, save_lc_to_file=False, folder="", 
                               fakefreq=0.05, save=False, path=None, **kwargs):
         """
         Runs a number of injection recovery cycles and characterizes the light
@@ -428,7 +428,7 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
         
         lc = copy.deepcopy(self)
         if inject_before_detrending == True:
-            lc = lc.detrend(mode)
+            lc = lc.detrend(mode, func=func)
         lc = lc.find_gaps()
         lc = lc.find_flares()
         lc = find_iterative_median(lc)
@@ -453,7 +453,7 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
            
             if inject_before_detrending == True:
                 LOG.info('\nDetrending fake LC:\n')
-                fake_lc = fake_lc.detrend(mode)
+                fake_lc = fake_lc.detrend(mode, func=func)
             
             fake_lc = fake_lc.find_flares(fake=True)
             recs = fake_lc.flares
