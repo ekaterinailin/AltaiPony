@@ -16,7 +16,9 @@ setuptools.setup(
     install_requires = ['lightkurve>=1.0b21','numpy>=1.15.1', 'pandas>=0.23.4',
                         'progressbar2','seaborn'],
     dependency_links=['git+ssh://git@github.com/ekaterinailin/k2sc.git'],
-    include_package_data=True
+    include_package_data=True,
+    package_data={
+      'altaipony': ['static/*csv'],
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",
