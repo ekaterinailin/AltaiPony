@@ -16,10 +16,12 @@ Finally, if your flare table contains contributions from multiple stars that you
 
 *Note that samples with less than 100-200 flares are to be analysed with caution.*
 
-Example
--------
+A simple flare sample
+----------------------
 
-You can directly use the ``FlareLightCurve.flares`` table, or any ``pandas.DataFrame``_ where the recovered flare energies column is named ``ed_rec``.
+In the simplest of all cases, there is one star that was observed for a certain time with high cadence and very low noise. For the resulting light curve we obtained a table of flare candidates, for instance, using ``FlareLightCurve.find_flares()``.
+
+Now, you can directly use the ``FlareLightCurve.flares`` table, or any ``pandas.DataFrame`` where the recovered flare energies column is named ``ed_rec``.
 
 Assume we have such a ``FlareLightCurve`` called ``flc`` with the required attribute ``flc.flares``, we can create a FFD object 
 
@@ -34,9 +36,9 @@ Assume we have such a ``FlareLightCurve`` called ``flc`` with the required attri
 
     simple_ffd.tot_obs_time = 20.
     
-The unit is your choice, and you should know which one you are using. If you do not specify ``tot_obs_time``, the FFD frequencies will instead be the number counts, i.e. ``simple_ffd.tot_obs_time=1.``.
+The unit is up to you, and you should know which one you are using. If you do not specify ``tot_obs_time``, the FFD frequencies will instead be the number counts, i.e. ``simple_ffd.tot_obs_time=1.``.
 
-The core method in FFD is ``ed_and_freq``. It gives you the sorted array of energies, their corresponding frequencies, and number counts for each event with a certain energy, suitable for plotting:
+The core method in FFD is ``FFD.ed_and_freq()``. It gives you the sorted array of energies, their corresponding frequencies, and number counts for each event with a certain energy, suitable for plotting:
 
 ::
 
@@ -55,7 +57,7 @@ The core method in FFD is ``ed_and_freq``. It gives you the sorted array of ener
   :alt: a simple FFD
 
   
-Let's attempt to fit a power law to this distribution. We use a Maximum Likelihood Estimator approach detailed in Maschberger and Kroupa (2009)[1]_ to find the slope :math:`\alpha` and then do a simple least squares fit to estimate the intercept :math:`\beta`:
+Let's attempt to fit a power law to this distribution. We use a Maximum Likelihood Estimator approach detailed in Maschberger and Kroupa (2009) [1]_ to find the slope :math:`\alpha` and then do a simple least squares fit to estimate the intercept :math:`\beta`:
 
 
 ::
@@ -85,10 +87,20 @@ Use `plot_powerlaw` to plot the result on top of the FFD with the code snippet b
   :width: 400
   :alt: a simple FFD
 
+  
+A more involved example
+------------------------
+  
+The above example and the more involved case of when your flare sample 
 
+- stems from multiple light curves with different detection limits and/or
+- was characterized using ``FlareLightCurve.characterize_flares``
+
+is demonstrated in this_ notebook on Github.
+  
 .. rubric:: Footnotes
 
 .. [1] Thomas Maschberger, Pavel Kroupa, Estimators for the exponent and upper limit, and goodness-of-fit tests for (truncated) power-law distributions, Monthly Notices of the Royal Astronomical Society, Volume 395, Issue 2, May 2009, Pages 931–942, https://doi.org/10.1111/j.1365-2966.2009.14577.x
   
   
-  .. _``pandas.DataFrame``: https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.html
+  .. _here:https://github.com/ekaterinailin/AltaiPony/blob/master/notebooks/Flare_Frequency_Distributions_and_Power_Laws.ipynb
