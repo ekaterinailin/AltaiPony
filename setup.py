@@ -18,7 +18,7 @@ setuptools.setup(
     dependency_links=['git+ssh://git@github.com/ekaterinailin/k2sc.git'],
     include_package_data=True,
     package_data={
-      'altaipony': ['static/*csv'],
+      'altaipony': ['static/*csv']},
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",
