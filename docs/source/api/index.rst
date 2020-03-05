@@ -9,5 +9,5 @@ API Documentation
 	lcio
 	altai
 	fakeflares
-	ffd
+	ffds
 

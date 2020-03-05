@@ -38,8 +38,7 @@ The unit is your choice, and you should know which one you are using. If you do 
 
 The core method in FFD is `ed_and_freq`. It gives you the sorted array of energies, their corresponding frequencies, and number counts for each event with a certain energy, suitable for plotting:
 
-
-::  
+::
 
     import matplotlib.pyplot as plt
     ed, freq, counts = simple_ffd.ed_and_freq()
@@ -52,5 +51,36 @@ The core method in FFD is `ed_and_freq`. It gives you the sorted array of energi
     
     
 .. image:: FFD.jpg
+  :width: 400
+  :alt: a simple FFD
+
+  
+Let's attempt to fit a power law to this distribution. We use a Maximum Likelihood Estimator approach detailed in Maschberger and Kroupa (2009) to find the slope $\alpha$ and then do a simple least squares fit to estimate the intercept $\beta$:
+
+
+::
+
+    simple_ffd.fit_powerlaw()
+    simple_ffd.fit_beta_to_powerlaw()
+    
+
+The results can be accessed with `simple_ffd.alpha`, `simple_ffd.alpha_err`, `simple_ffd.beta`, and `simple_ffd.beta_err`, respectively.
+
+
+Use `plot_powerlaw` to plot the result on top of the FFD with the code snippet below:
+
+::
+
+    fig, ax = plt.subplots(1, figsize=(8,6))
+    ax.scatter(ed, freq, c="k")
+    ax.set_xscale("log")
+    ax.set_yscale("log")
+    ax.set_xlabel("ED [s]")
+    ax.set_ylabel("cumulative number of flares per time")
+    simple_ffd.plot_powerlaw(ax, c="r", label=fr'$\alpha=$-{simple_ffd.alpha:.1f}')
+    plt.legend();
+
+
+.. image:: powerlaw.jpg
   :width: 400
   :alt: a simple FFD
