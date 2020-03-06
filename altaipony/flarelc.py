@@ -291,7 +291,6 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
         --------
         FlareLightCurve
         """
-        
         if mode == "savgol":
         
             new_lc = copy.deepcopy(self)
@@ -333,9 +332,9 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
                 if save == True:
                     new_lc.to_fits(path)
                 return new_lc
-                
-        elif mode=="custom":
         
+        elif mode=="custom":
+            
             if func is None:
                 LOG.error('If you wish to use a custom detrending function you'
                           ' must pass a callable to the "func" parameter.')
@@ -356,8 +355,8 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
             return new_lc
         
         else:
-            err_str = ('\nDe-trending mode {} does not exist. Pass "k2sc" (K2 LCs)'
-                       ' or "savgol" (Kepler, TESS).'.format(mode))
+            err_str = (f'\nDe-trending mode {mode} does not exist. Pass "k2sc" (K2 LCs)'
+                       ' or "savgol" (Kepler, TESS).')
             LOG.exception(err_str)
             raise ValueError(err_str)
 

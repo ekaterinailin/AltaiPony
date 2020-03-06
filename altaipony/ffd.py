@@ -407,7 +407,8 @@ class FFD(object):
 
         Returns:
         ---------
-        True if we cannot reject the power law hypothesis.
+        True if we cannot reject the power law hypothesis jud
+        ging by this test.
         False if we must reject the power law hypothesis.
         '''
         ed = self._get_ed()

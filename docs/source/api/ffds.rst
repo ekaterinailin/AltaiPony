@@ -5,25 +5,25 @@ Once you have found all the flares, you can compute statistical measures using y
 
 The `ffd` module allows you to compute Flare Frequency Distributions. You can use it to
 
+- convert the flare table into a cumulative flare frequency distribution
 - fit the power law exponent :math:`\alpha` and intercept :math:`\beta`, 
 - plot the resulting function in the cumulative form,
 - test if the power law assumption must be rejected, 
-- and if the distribution is truncated at the high energy end.
+- test if the distribution is truncated at the high energy end,
+- characterize the flares using the ``ed_corr``, ``recovery_probability`` attributes of the flares in the flare table that you may obtain from performing *injection and recovery of synthetic flares* with ``FlareLightCurve.characterize_flares()``.
 
-Furthermore, you can make use of the ``ed_corr``, ``recovery_probability`` attributes of the flares in the flare table that you may obtain from performing *injection and recovery of synthetic flares*.
-
-Finally, if your flare table contains contributions from multiple stars that you think generate flares that can be described by the same power law but with different detection thresholds, you can use the `mutliple_stars` keyword to account for this. 
+Finally, if your flare table contains contributions from multiple stars that you think generate flares that can be described by the same power law but with different detection thresholds, you can use the `mutliple_stars` keyword to account for this to a first order approximation. 
 
 *Note that samples with less than 100-200 flares are to be analysed with caution.*
 
 A simple flare sample
-----------------------
+-----------------------------
 
 In the simplest of all cases, there is one star that was observed for a certain time with high cadence and very low noise. For the resulting light curve we obtained a table of flare candidates, for instance, using ``FlareLightCurve.find_flares()``.
 
 Now, you can directly use the ``FlareLightCurve.flares`` table, or any ``pandas.DataFrame`` where the recovered flare energies column is named ``ed_rec``.
 
-Assume we have such a ``FlareLightCurve`` called ``flc`` with the required attribute ``flc.flares``, we can create a FFD object 
+Assume we have such a ``FlareLightCurve`` called ``flc`` with the required attribute ``flc.flares``, we can create a ``FFD`` object 
 
 ::
 
@@ -38,7 +38,10 @@ Assume we have such a ``FlareLightCurve`` called ``flc`` with the required attri
     
 The unit is up to you, and you should know which one you are using. If you do not specify ``tot_obs_time``, the FFD frequencies will instead be the number counts, i.e. ``simple_ffd.tot_obs_time=1.``.
 
-The core method in FFD is ``FFD.ed_and_freq()``. It gives you the sorted array of energies, their corresponding frequencies, and number counts for each event with a certain energy, suitable for plotting:
+Convert the flare table into a cumulative flare frequency distribution
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The core method in FFD is ``FFD.ed_and_freq()``. It gives you the sorted array of energies, their corresponding frequencies, and number counts for each event with a certain energy, that is the cumulative flare frequency distribution:
 
 ::
 
@@ -56,9 +59,10 @@ The core method in FFD is ``FFD.ed_and_freq()``. It gives you the sorted array o
   :width: 400
   :alt: a simple FFD
 
+ Fit the power law exponent :math:`\alpha` and intercept :math:`\beta`
+ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   
-Let's attempt to fit a power law to this distribution. We use a Maximum Likelihood Estimator approach detailed in Maschberger and Kroupa (2009) [1]_ to find the slope :math:`\alpha` and then do a simple least squares fit to estimate the intercept :math:`\beta`:
-
+Let's fit a power law to this distribution. We use a Maximum Likelihood Estimator approach detailed in Maschberger and Kroupa (2009) [1]_ to find the slope :math:`\alpha` and then do a simple least squares fit to estimate the intercept :math:`\beta`:
 
 ::
 
@@ -68,6 +72,8 @@ Let's attempt to fit a power law to this distribution. We use a Maximum Likeliho
 
 The results can be accessed with `simple_ffd.alpha`, `simple_ffd.alpha_err`, `simple_ffd.beta`, and `simple_ffd.beta_err`, respectively.
 
+Plot the resulting function in the cumulative form
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Use `plot_powerlaw` to plot the result on top of the FFD with the code snippet below:
 
@@ -87,6 +93,24 @@ Use `plot_powerlaw` to plot the result on top of the FFD with the code snippet b
   :width: 400
   :alt: a simple FFD
 
+Test if the power law assumption must be rejected
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The stabilised Kolmogorov-Smirnov statistic, suggested by Maschberger and Kroupa (2009) [1]_, tests if we must reject the power law hypothesis for our FFD. It is not meaningful in absolute terms. But whenever we compare FFDs and/or their power law fits with each other it gives us a better sense of the statistical robustness of a sample at different significance levels. 
+
+For this hypothesis test, we must define a significance level, which is 5% per default. Above this limit we must reject the null-hypothesis. In our context, this is the hypothesis that the distribution follows the power law with the parameters we calculated.
+
+::
+
+    ffd.is_powerlaw(sig_level=0.05)
+
+
+Test if the distribution is truncated at the high energy end
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+An interesting question in flare statistics is whether or not there is a high energy limit seen in the FFD of any given star. It is hard to tell by eye, because the high-energy tail is sparsly populated with events, and log-log plots are deceptive. We may, however, ask, how many events we'd expect to occur above a certain energy threshold if the power law distribution was not truncated at some energy. We call this an exceedance test. ``FFD.is_powerlaw_truncated()`` performs this exceedance test, as suggested by Maschberger and Kroupa (2009) [1]_
+
+For this, we calculate the expected number of events with energies that exceed the maximum detected energy. This is done by generating a large number of power law distributions with the same power law exponent, the same minimum detected energy and the same total number of events each. If a large fraction of the total number of events falls above the maximum detected energy it is more likely that the power law distribution is in fact truncated or not a power law at all. If most generated events are distributed in the same energy range as the observed events, the distribution is consistent with a power law that is not truncated.
   
 A more involved example
 ------------------------
