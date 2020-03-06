@@ -10,7 +10,7 @@ The `ffd` module allows you to compute Flare Frequency Distributions. You can us
 - plot the resulting function in the cumulative form,
 - test if the power law assumption must be rejected, 
 - test if the distribution is truncated at the high energy end,
-- characterize the flares using the ``ed_corr``, ``recovery_probability`` attributes of the flares in the flare table that you may obtain from performing *injection and recovery of synthetic flares* with ``FlareLightCurve.characterize_flares()``.
+- apply statistical corrections to the flare properties using the ``ed_corr``, ``recovery_probability`` attributes of the flares in the flare table that you may obtain from performing *injection and recovery of synthetic flares* with ``FlareLightCurve.characterize_flares()``.
 
 Finally, if your flare table contains contributions from multiple stars that you think generate flares that can be described by the same power law but with different detection thresholds, you can use the `mutliple_stars` keyword to account for this to a first order approximation. 
 
@@ -112,8 +112,8 @@ An interesting question in flare statistics is whether or not there is a high en
 
 For this, we calculate the expected number of events with energies that exceed the maximum detected energy. This is done by generating a large number of power law distributions with the same power law exponent, the same minimum detected energy and the same total number of events each. If a large fraction of the total number of events falls above the maximum detected energy it is more likely that the power law distribution is in fact truncated or not a power law at all. If most generated events are distributed in the same energy range as the observed events, the distribution is consistent with a power law that is not truncated.
   
-A more involved example
-------------------------
+Apply statistical corrections to flare properties and deal with multi-star samples
+----------------------------------------------------------------------------------ß
   
 The above example and the more involved case of when your flare sample 
 
@@ -127,4 +127,4 @@ is demonstrated in this_ notebook on Github.
 .. [1] Thomas Maschberger, Pavel Kroupa, Estimators for the exponent and upper limit, and goodness-of-fit tests for (truncated) power-law distributions, Monthly Notices of the Royal Astronomical Society, Volume 395, Issue 2, May 2009, Pages 931–942, https://doi.org/10.1111/j.1365-2966.2009.14577.x
   
   
-  .. _here:https://github.com/ekaterinailin/AltaiPony/blob/master/notebooks/Flare_Frequency_Distributions_and_Power_Laws.ipynb
+  .. _here: https://github.com/ekaterinailin/AltaiPony/blob/master/notebooks/Flare_Frequency_Distributions_and_Power_Laws.ipynb
