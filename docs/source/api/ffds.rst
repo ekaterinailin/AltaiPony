@@ -3,7 +3,7 @@ Flare Frequency Distributions and Power Laws
 
 Once you have found all the flares, you can compute statistical measures using your flare table. 
 
-The ``FFD`` module allows you to compute Flare Frequency Distributions. You can use it to
+The `ffd` module allows you to compute Flare Frequency Distributions. You can use it to
 
 - convert the flare table into a cumulative flare frequency distribution
 - fit the power law exponent :math:`\alpha` and intercept :math:`\beta`, 
@@ -14,7 +14,7 @@ The ``FFD`` module allows you to compute Flare Frequency Distributions. You can 
 
 Finally, if your flare table contains contributions from multiple stars that you think generate flares that can be described by the same power law but with different detection thresholds, you can use the `mutliple_stars` keyword to account for this to a first order approximation. 
 
-*Note that analyses of samples with less than 100-200 flares should be treated with caution.*
+*Note that samples with less than 100-200 flares are to be analysed with caution.*
 
 A simple flare sample
 -----------------------------
@@ -36,7 +36,7 @@ Assume we have such a ``FlareLightCurve`` called ``flc`` with the required attri
 
     simple_ffd.tot_obs_time = 20.
     
-The unit is up to you, and you should know which one you are using. If you do not specify ``tot_obs_time``, the FFD frequencies will instead be the number counts, i.e. ``simple_ffd.tot_obs_time = 1.``.
+The unit is up to you, and you should know which one you are using. If you do not specify ``tot_obs_time``, the FFD frequencies will instead be the number counts, i.e. ``simple_ffd.tot_obs_time=1.``.
 
 Convert the flare table into a cumulative flare frequency distribution
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -70,12 +70,12 @@ Let's fit a power law to this distribution. We use a Maximum Likelihood Estimato
     simple_ffd.fit_beta_to_powerlaw()
     
 
-The results can be accessed with ``simple_ffd.alpha``, ``simple_ffd.alpha_err``, ``simple_ffd.beta``, and ``simple_ffd.beta_err``, respectively.
+The results can be accessed with `simple_ffd.alpha`, `simple_ffd.alpha_err`, `simple_ffd.beta`, and `simple_ffd.beta_err`, respectively.
 
 Plot the resulting function in the cumulative form
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Use ``plot_powerlaw`` to plot the result on top of the FFD with the code snippet below:
+Use `plot_powerlaw` to plot the result on top of the FFD with the code snippet below:
 
 ::
 
@@ -102,8 +102,7 @@ For this hypothesis test, we must define a significance level, which is 5% per d
 
 ::
 
-    >>> ffd.is_powerlaw(sig_level=0.05)
-    True
+    ffd.is_powerlaw(sig_level=0.05)
 
 
 Test if the distribution is truncated at the high energy end
