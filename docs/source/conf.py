@@ -18,7 +18,8 @@ sys.path.append(os.path.join(os.path.dirname(__name__), '..'))
 import sphinx_rtd_theme
 
 
-
+def setup(app):
+    app.add_javascript('_static/copybutton.js')
 
 # -- Project information -----------------------------------------------------
 
