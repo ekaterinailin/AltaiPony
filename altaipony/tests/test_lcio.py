@@ -11,7 +11,7 @@ from . import pathkepler, pathk2LC, pathk2TPF, pathtess, pathAltaiPony
                          [(pathkepler,"LC", 10002792, "Kepler", None, 2, None ),
                           (pathk2LC,"LC", 211117077, "K2", 4, None, None ),
                           (pathk2TPF,"TPF", 210994964, "K2", 4, None, None ),
-                          (pathtess,"LC", 358108509, "TESS", None, None, 1)
+                          (pathtess,"LC", 358108509, "TESS", None, None, None)
                           ])
 
 def test_from_path(path, mode, ID, mission, campaign, quarter, sector):
@@ -59,14 +59,14 @@ def test__from_path_AltaiPony():
     
 
 @pytest.mark.parametrize("ID,mission,c,mode,cadence,sector,campaign,quarter",
-                         [(395130640,"TESS", 11,"LC", "short", 11, None, None ),
-                          (211119999, "K2", 4, "LC", "long", None, 4, None),
-                          (211119999, "K2", 4, "TPF", "long", None, 4, None),
-                          (9726699, "Kepler", 6, "LC", "long", None, None, 6)
+                         [("TIC 395130640","TESS", 11,"LC", "short", 11, None, None ),
+                          ("EPIC 211119999", "K2", 4, "LC", "long", None, 4, None),
+                          ("EPIC 211119999", "K2", 4, "TPF", "long", None, 4, None),
+                          ("KIC 9726699", "Kepler", 6, "LC", "long", None, None, 6)
                           ])
 def test_from_mast(ID, mission, c, mode, cadence, sector, campaign, quarter):
     flc = from_mast(ID, mission, c, mode=mode, cadence=cadence)
-    assert flc.targetid == ID
+    assert flc.targetid == int(ID.split(" ")[1])
     assert flc.mission == mission
     assert flc.flux.shape[0] == flc.time.shape[0]
     assert flc.campaign == campaign
