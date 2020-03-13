@@ -11,7 +11,7 @@ from . import pathkepler, pathk2LC, pathk2TPF, pathtess, pathAltaiPony
                          [(pathkepler,"LC", 10002792, "Kepler", None, 2, None ),
                           (pathk2LC,"LC", 211117077, "K2", 4, None, None ),
                           (pathk2TPF,"TPF", 210994964, "K2", 4, None, None ),
-                          (pathtess,"LC", 358108509, "TESS", None, None, None)
+                          (pathtess,"LC", 358108509, "TESS", None, None, 1)
                           ])
 
 def test_from_path(path, mode, ID, mission, campaign, quarter, sector):
