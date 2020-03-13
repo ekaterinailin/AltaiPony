@@ -31,7 +31,7 @@ def test_detrend_savgol():
     N = int(1e4)
     time = np.linspace(2000,2050,N)
     np.random.seed(200)
-    flux = np.sin(time / .03) * 30. + 5e4 + np.random.rand(N) * 35. + 5e-4 * ((time-2004.)**3 - 30 * (time-2004)**2)
+    flux = np.sin(time / .03) * 30. + 5e4 + np.random.rand(N) * 25. + 5e-4 * ((time-2004.)**3 - 30 * (time-2004)**2)
     flux[5000:5010] = flux[5000:5010] + np.array([500,250,150,80,60,30,20,10,7,4])
     flux[4500:4809] = np.nan
     flux_err = np.random.rand(N) * 35. # this reflects the real noise
@@ -48,11 +48,13 @@ def test_detrend_savgol():
     # results given the rapid variability of the light curve. So let's check
     # the outcome of this one. It should only recover the one flare we intro-
     # duced above around t=2025
-    f = flcd.find_flares().flares.iloc[0,:]
+    flares = flcd.find_flares().flares
+    print(flares)
+    f = flares.iloc[0,:]
     assert f.tstart == pytest.approx(2025, abs=5e-3)
-    assert f.ed_rec == pytest.approx(7.8226,abs=f.ed_rec_err)
+    assert f.ed_rec == pytest.approx(8.46336,abs=f.ed_rec_err)
     assert f.istart == 4691
-    assert f.istop == 4694
+    assert f.istop == 4695
     assert f.total_n_valid_data_points == 1e4-309
 
     

@@ -13,7 +13,7 @@ from .detrend import MultiBoxcar
 
 LOG = logging.getLogger(__name__)
 
-def find_flares_in_cont_obs_period(flux, median, error, N1=3, N2=3, N3=3):
+def find_flares_in_cont_obs_period(flux, median, error, N1=3, N2=2, N3=3):
     '''
     The algorithm for local changes due to flares defined by
     S. W. Chang et al. (2015), Eqn. 3a-d
@@ -33,7 +33,7 @@ def find_flares_in_cont_obs_period(flux, median, error, N1=3, N2=3, N3=3):
         Coefficient from original paper (Default is 3 in paper, 3 here)
         How many times above the stddev is required.
     N2 : int, optional
-        Coefficient from original paper (Default is 1 in paper, 3 here)
+        Coefficient from original paper (Default is 1 in paper, 2 here)
         How many times above the stddev and uncertainty is required
     N3 : int, optional
         Coefficient from original paper (Default is 3)
@@ -50,7 +50,7 @@ def find_flares_in_cont_obs_period(flux, median, error, N1=3, N2=3, N3=3):
     sigma = error#np.nanstd(flux[~isflare])
     T0 = flux - median # excursion should be positive #"N0"
     T1 = np.abs(flux - median) / sigma #N1
-    T2 = np.abs(flux - median - error) / sigma #N2
+    T2 = np.abs(flux - median + error) / sigma #N2
     
     # apply thresholds N0-N2:
     LOG.debug('Factor above standard deviation: N1 = {},\n'
@@ -124,8 +124,7 @@ def find_flares(flc, minsep=3, **kwargs):
         # now pick out final flare candidate indices
         candidates = np.where( isflare > 0)[0]
         if (len(candidates) < 1):#no candidates = no indices
-            LOG.debug('INFO: No candidates were found in the ({},{}) gap.'
-                     .format(le,ri))
+            LOG.debug(f'INFO: No candidates were found in the ({le},{ri}) gap.')
             istart_gap = np.array([])
             istop_gap = np.array([])
         else:
@@ -142,11 +141,11 @@ def find_flares(flc, minsep=3, **kwargs):
         LOG.info('Found {} candidate(s) in the ({},{}) gap.'
                  .format(len(istart_gap), le, ri))
 
-    if len(istart)>0:
+    if len(istart) > 0:
         l = [equivalent_duration(lc, i, j, err=True) for (i,j) in zip(istart, istop)]
         ed_rec, ed_rec_err = zip(*l)
         fl = lc.detrended_flux
-        ampl_rec = [np.max(fl[i:j])/lc.it_med[i]-1. for (i,j) in zip(istart,istop)]
+        ampl_rec = [np.max(fl[i:j]) / lc.it_med[i] - 1. for (i,j) in zip(istart,istop)]
         cstart = lc.cadenceno[istart]
         cstop = lc.cadenceno[istop]
         tstart = lc.time[istart]

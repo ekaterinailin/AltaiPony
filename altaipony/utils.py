@@ -1,11 +1,12 @@
 import logging
-import numpy as np
+from numpy import isfinite, nan, median, abs, ones_like, where, rint, sqrt
 
 LOG = logging.getLogger(__name__)
 
 def k2sc_quality_cuts(data):
     """
-    Apply all the quality checks that k2sc uses internally.
+    Apply all the quality checks that K2SC (Aigrain et al. 2016) 
+    uses internally.
 
     Parameters
     ------------
@@ -17,21 +18,18 @@ def k2sc_quality_cuts(data):
     ``centroid_row`` all have finite values.
     """
 
-    data2 = data[np.isfinite(data.time) &
-                 np.isfinite(data.pos_corr1) &
-                 np.isfinite(data.pos_corr2)]
+    data2 = data[isfinite(data.time) &
+                 isfinite(data.pos_corr1) &
+                 isfinite(data.pos_corr2)]
 
     return data2
 
-# From the K2SC fork
-
-from numpy import isfinite, nan, median, abs, ones_like, where, rint, sqrt
-
-
 
 def medsig(a):
-    """Return median and outlier-robust estimate of standard deviation
+    """Return median and outlier-robust estimate
+    of standard deviation
        (1.48 x median of absolute deviations).
+    Adapted from K2SC (Aigrain et al. 2016).
     """
     l = isfinite(a)
     nfinite = l.sum()
@@ -49,6 +47,8 @@ def sigma_clip(a, max_iter=10, max_sigma=3.,
     """Iterative sigma-clipping routine that 
     separates not finite points, and down-
     and upwards outliers.
+    
+    Adapted from (Aigrain et al. 2016)
     
     1: good data point
     0: masked outlier
@@ -81,22 +81,40 @@ def sigma_clip(a, max_iter=10, max_sigma=3.,
     
     # iteratively (with i) clip outliers above(below) (-)max_sigma *sig
     i, nm = 0, None
-    while (nm != mask.sum()) and (i < max_iter):
+    
+    while (nm != mask.sum()) & (i < max_iter):
+    
+        # Okay values are finite and not outliers
         mask = mexc & mhigh & mlow
+        
+        # Safety check if the mask looks fine
         nm = mask.sum()
+        
+        # Calculate median and MAD adjusted standard deviation
         med, sig = medsig(a[mask])
-        mhigh[mexc] = a[mexc] - med <  max_sigma*sig #indices of okay values above median
-        mlow[mexc]  = a[mexc] - med > -max_sigma*sig #indices of okay values below median
-        i += 1
+    
+        mhigh[mexc] = a[mexc] - med <  max_sigma * sig #indices of okay values above median
+        mlow[mexc]  = a[mexc] - med > -max_sigma * sig #indices of okay values below median
+    
+        # Okay values are finite and not outliers
         mask = mexc & mhigh & mlow
-        LOG.debug("iteration {} at normalized median flux {:.5f} \pm {:.5f}".format(i, med, sig))
-        LOG.debug("upper mask size before expansion = ", mhigh.shape[0])
+    
+        LOG.debug(f"iteration {i} at normalized median flux {med:.5f} \pm {sig:.5f}")
+        LOG.debug(f"upper mask size before expansion = {mhigh.shape[0]}")
+    
+        # Expand the mask left and right
         mhigh = expand_mask(mhigh)
-        LOG.debug("upper mask size after expansion = ", mhigh.shape[0], "\n Should be the same as before.")
+    
+        LOG.debug("upper mask size after expansion = {mhigh.shape[0]}\n Should be the same as before.")
+        
+        i += 1
+    
     if separate_masks:
         return mlow, mhigh
+    
     else:
         return mlow & mhigh
+
 
 def expand_mask(a, divval=1):
     """Expand the mask if multiple outliers occur in a row.
@@ -107,6 +125,13 @@ def expand_mask(a, divval=1):
     -----------
     a : bool array
         mask
+    divval : float
+        optional parameter to set the length of the
+        expanded mask
+     
+    Return:
+    -------
+    array - expanded mask
     """
     i, j, k = 0, 0, 0
     while i<len(a):
