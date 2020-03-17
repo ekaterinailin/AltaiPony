@@ -108,9 +108,13 @@ For this hypothesis test, we must define a significance level, which is 5% per d
 Test if the distribution is truncated at the high energy end
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-An interesting question in flare statistics is whether or not there is a high energy limit seen in the FFD of any given star. It is hard to tell by eye, because the high-energy tail is sparsly populated with events, and log-log plots are deceptive. We may, however, ask, how many events we'd expect to occur above a certain energy threshold if the power law distribution was not truncated at some energy. We call this an exceedance test. ``FFD.is_powerlaw_truncated()`` performs this exceedance test, as suggested by Maschberger and Kroupa (2009) [1]_
+An interesting question in flare statistics is whether or not there is a high energy limit seen in the FFD of any given star. It is hard to tell by eye, because the high-energy tail is sparsly populated with events, and log-log plots are deceptive. We may, however, ask, how small the highest observed energy can be to be consistent with an infinite power law distribution. ``FFD.is_powerlaw_truncated()`` performs this exceedance test, a left-sided hypothesis test suggested by Maschberger and Kroupa (2009) [1]_
 
-For this, we calculate the expected number of events with energies that exceed the maximum detected energy. This is done by generating a large number of power law distributions with the same power law exponent, the same minimum detected energy and the same total number of events each. If a large fraction of the total number of events falls above the maximum detected energy it is more likely that the power law distribution is in fact truncated or not a power law at all. If most generated events are distributed in the same energy range as the observed events, the distribution is consistent with a power law that is not truncated.
+For this, we generate a random sample of power law distributions and determine their maximum energies. These power law distributions have the same power law exponent, the same minimum detected energy and the same total number of events each. If a large fraction of the maximum energies in the random sample above the maximum detected energy it is more likely that the power law distribution is in fact truncated. As a default value we use percentile:math:`=2.5\%`
+
+.. image:: truncation.png
+  :width: 400
+  :alt: exceedance test FFD
   
 Apply statistical corrections to flare properties and deal with multi-star samples
 -----------------------------------------------------------------------------------
