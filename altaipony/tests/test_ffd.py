@@ -9,8 +9,8 @@ from ..ffd import (FFD,
                    _ML_powerlaw_estimator,
                    _de_biased_upper_limit,
                    _de_bias_alpha,
-                   _calculate_average_number_of_exceeding_values,
-                   _calculate_number_of_exceeding_values,
+                   _calculate_percentile_max_ed,
+                   _calculate_max_ed,
                    _stabilised_KS_statistic,
                    _calculate_KS_acceptance_limit,
                    _apply_stabilising_transformation,
@@ -244,7 +244,7 @@ def test_is_powerlaw_truncated(l,i):
     a, b, g, size = 10, 1e3, -1, 200
     pwl = generate_random_power_law_distribution(a, b, g, size=size, seed=80)
     f = pd.DataFrame({"ed_rec":pwl})
-    simple_truncated_ffd = FFD(f=f[f.ed_rec < l])#truncate at 200s 
+    simple_truncated_ffd = FFD(f=f[f.ed_rec < l])#truncate at l seconds 
     simple_truncated_ffd.alpha = 2.
     ed, freq, counts = simple_truncated_ffd.ed_and_freq()
     assert simple_truncated_ffd.is_powerlaw_truncated() == i
@@ -288,7 +288,7 @@ def test_is_powerlaw():
     pwl = generate_random_power_law_distribution(a, b, g, size=size, seed=80)
     ffd = FFD(f=pd.DataFrame({"ed_rec":pwl}))
 
-    with pytest.raises(AssertionError): #throw error when alpha is missing
+    with pytest.raises(TypeError): #throw error when alpha is missing
         ffd.is_powerlaw()
     
 def test__ML_powerlaw_estimator():
@@ -337,30 +337,65 @@ def test__de_bias_alpha():
     with pytest.raises(ZeroDivisionError):
         _de_bias_alpha(2,2)
         
-
-def test__calculate_average_number_of_exceeding_values():
-    data = np.linspace(10,1e4, 300)
+#------------------------------------------------------------------------
+def test__calculate_max_ed():
+    # fake data
+    data = np.linspace(10,1e3,100)
     alpha = 2.
-    mean, std = _calculate_average_number_of_exceeding_values(data, alpha, 1000, seed=2311)
-    assert mean == 3.
-    assert std == 0.
-    mean, std = _calculate_average_number_of_exceeding_values(data, alpha, 1000, seed=10)
-    assert mean == 0.
-    assert std == 0.
+
+    # apply function once
+    maxval = _calculate_max_ed(data, alpha, maxlim=1e8, seed=10)
+
+    assert maxval == pytest.approx(808.1118136567375)
+
+    # apply it again
+
+    maxval = _calculate_max_ed(data, alpha, maxlim=1e8, seed=2000)
+    assert maxval == pytest.approx(1372.7172156831662)
 
 
-def test__calculate_number_of_exceeding_values():
-    data = np.linspace(10,1e4, 300)
-    assert _calculate_number_of_exceeding_values(data, 2., seed=10) == 0
-    assert _calculate_number_of_exceeding_values(data, 2., seed=2311) == 3
-    with pytest.raises(ValueError):
-        _calculate_number_of_exceeding_values(np.arange(3), 2., seed=2311)
+    # test failure mode alpha or data is not finite
+    with pytest.raises(TypeError):
+        maxval = _calculate_max_ed(data, None, maxlim=1e8, seed=2000)
+
+    with pytest.raises(TypeError):
+        maxval = _calculate_max_ed(None, alpha, maxlim=1e8, seed=2000)
+
+    with pytest.raises(AssertionError):
+        maxval = _calculate_max_ed(data, np.nan, maxlim=1e8, seed=2000)
+
+    with pytest.raises(AssertionError):
+        maxval = _calculate_max_ed([np.nan, 1., 2., 3. ,4.],
+                                   alpha, maxlim=1e8, seed=2000)
+
+
+#-----------------------------------------------------------------------
+def test__calculate_percentile_max_ed():
+    # fake data
+    data = np.linspace(10,1e3,100)
+    alpha = 2.
+    n = 10000
+    percentile = 3.
+
+    # apply function
+    vals, edcrit = _calculate_percentile_max_ed(data, alpha, n, percentile)
+    assert len(vals) == n
+    assert edcrit == pytest.approx(289, abs=20)
+    
+    # test failure modes
+    with pytest.raises(AssertionError):
+        vals, edcrit = _calculate_percentile_max_ed(data, alpha, n, 200)
+    with pytest.raises(AssertionError):
+        vals, edcrit = _calculate_percentile_max_ed(data, alpha, n, -3)
+    with pytest.raises(AssertionError):
+        vals, edcrit = _calculate_percentile_max_ed(data, alpha, n, np.nan)
         
 
 def test__stabilised_KS_statistic():
     sizes = [1e2,1e3,1e4]
     minval, maxval = 10, 1e4
-    datas = [generate_random_power_law_distribution(minval, maxval, -1., size=int(size), seed=10) for size in sizes]
+    datas = [generate_random_power_law_distribution(minval, maxval, -1., size=int(size),
+                                                    seed=10) for size in sizes]
     
     KSlist = [_stabilised_KS_statistic(data, 2., False) for data in datas]
     assert KSlist[0] > KSlist[1]

@@ -5,6 +5,8 @@ import pandas as pd
 import numpy as np
 
 from scipy.optimize import fmin
+from math import isfinite
+
 import os
 
 CWD = os.path.dirname(os.path.abspath(__file__))
@@ -352,20 +354,21 @@ class FFD(object):
 
         return self.alpha, self.alpha_err
 
-    def is_powerlaw_truncated(self, rejection=(.15, .05), nthresh=100):
+    def is_powerlaw_truncated(self, percentile=2.5, n=500):
         '''
         Apply the exceedance test recommended by
         Maschberger and Kroupa 2009.
 
         Parameters:
         ------------
-        rejection : tuple of floats < 1.
-            above these thresholds the distribution
-            can be suspected to be truncated
-        nthresh : int
-            Number at which to use the more permissive
-            or more restrictive truncation rejection
-            limit, i.e. value 0 or 1 in `rejection`
+        percentile : float [0,100]
+            define the percentile of the distribution
+            of exceeding values that serves as critical
+            value for the left-sided hypothesis test. 
+            Default: 2.5
+        n : int
+            number generated power law distributions for
+            the test, default 500
 
         Return:
         ---------
@@ -374,22 +377,15 @@ class FFD(object):
         '''
         ed = self._get_ed()
 
-        mean, std = _calculate_average_number_of_exceeding_values(ed,
-                                                                  self.alpha,
-                                                                  500)
+        vals, truncation_limit = _calculate_percentile_max_ed(ed, self.alpha,
+                                                              n, percentile)
 
         if self.alpha > 2.:
             warnings.warn('Power law exponent is steep. '
                           'Power of statistical tests decreases '
                           'according to Maschberger and Kroupa 2009.')
-            
-        if len(ed) >= nthresh:
-            truncation_limit = rejection[1]
-            
-        else:
-            truncation_limit = rejection[0]
 
-        truncated = (mean / len(ed) > truncation_limit)
+        truncated = np.max(ed) < truncation_limit
 
         return truncated
 
@@ -449,40 +445,9 @@ class FFD(object):
             ed = self.ed
         
         return ed
+
     
-    
-def _calculate_average_number_of_exceeding_values(data, alpha, n, **kwargs):
-    '''
-    Parameters:
-    -----------
-    ffd : FFD object
-
-    n : int
-        number of samples to average
-    kwargs : dict
-        Keyword arguments to pass to
-        :func:calculate_number_of_exceeding_values
-
-    Returns:
-    --------
-    (mean, std) : (float, float)
-        average number number of exceeding values
-        and standard deviation
-    '''
-
-    assert alpha is not None
-    assert data is not None
-    
-    exceedance_statistic = [_calculate_number_of_exceeding_values(data, 
-                                                                  alpha, 
-                                                                  **kwargs) 
-                            for i in range(n)]
-    exceedance_statistic = np.array(exceedance_statistic)
-    
-    return np.nanmean(exceedance_statistic), np.nanstd(exceedance_statistic)
-
-
-def _calculate_number_of_exceeding_values(data, alpha, maxlim=1e8, **kwargs):
+def _calculate_max_ed(data, alpha, maxlim=1e8, **kwargs):
     '''
     Helper function that mimicks data similar
     to the observations (same alpha and size)
@@ -509,6 +474,9 @@ def _calculate_number_of_exceeding_values(data, alpha, maxlim=1e8, **kwargs):
     --------
     int : number of exceeding values
     '''
+    assert isfinite(alpha)
+    assert np.isfinite(data).all()
+    
     pdist = generate_random_power_law_distribution(np.min(data),
                                                    np.max(data) * maxlim,
                                                    -alpha + 1,
@@ -519,7 +487,37 @@ def _calculate_number_of_exceeding_values(data, alpha, maxlim=1e8, **kwargs):
         raise ValueError('Fake power law distribution for the'
                          ' exceedance test could not be generated.'
                          ' Check your inputs.')
-    return len(np.where(pdist > np.max(data))[0])
+    return np.max(pdist)
+
+    
+def _calculate_percentile_max_ed(data, alpha, n, percentile, **kwargs):
+    '''Calculate the percentile of maximum energies/EDs
+    below which we define the power law to be truncated.
+
+    Parameters:
+    -----------
+    data : array
+        observed energies/EDs
+    alpha : float
+        power law exponent
+    n : int
+        number of samples to average
+    percentile : float [0,100]
+        percentile of the maximum energy distribution
+    kwargs : dict
+        Keyword arguments to pass to
+        :func:_calculate_max_ed
+
+    Returns:
+    --------
+    (mean, perc) : (float, float)
+        average maximum energy and percentile
+    '''
+    assert 0 <= percentile <=100
+    max_vals = [_calculate_max_ed(data, alpha, **kwargs) 
+                            for i in range(n)]
+    max_vals = np.array(max_vals)
+    return max_vals, np.percentile(max_vals, percentile)
 
 
 def _get_multistar_factors(dataframe, ID, sort):
