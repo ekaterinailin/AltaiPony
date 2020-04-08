@@ -110,10 +110,10 @@ Test if the distribution is truncated at the high energy end
 
 An interesting question in flare statistics is whether or not there is a high energy limit seen in the FFD of any given star. It is hard to tell by eye, because the high-energy tail is sparsly populated with events, and log-log plots are deceptive. We may, however, ask, how small the highest observed energy can be to be consistent with an infinite power law distribution. ``FFD.is_powerlaw_truncated()`` performs this exceedance test, a left-sided hypothesis test suggested by Maschberger and Kroupa (2009) [1]_
 
-For this, we generate a random sample of power law distributions and determine their maximum energies. These power law distributions have the same power law exponent, the same minimum detected energy and the same total number of events each. If a large fraction of the maximum energies in the random sample above the maximum detected energy it is more likely that the power law distribution is in fact truncated. As a default value we use percentile:math:`=2.5\%`
+For this, we generate a random sample of power law distributions and determine their maximum energies. These power law distributions have the same power law exponent, the same minimum detected energy and the same total number of events each. If a large fraction of the maximum energies in the random sample above the maximum detected energy it is more likely that the power law distribution is in fact truncated. As a default value we use percentile :math:`=2.5\%`:
 
 .. image:: truncation.png
-  :width: 400
+  :width: 550
   :alt: exceedance test FFD
   
 Apply statistical corrections to flare properties and deal with multi-star samples

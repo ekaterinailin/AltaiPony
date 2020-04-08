@@ -8,9 +8,11 @@ from scipy.optimize import fmin
 from math import isfinite
 
 import os
+import logging
 
 CWD = os.path.dirname(os.path.abspath(__file__))
 
+LOG = logging.getLogger(__name__)
 
 class FFD(object):
     """Flare frequency distribution.
@@ -78,7 +80,7 @@ class FFD(object):
 
     @multiple_stars.setter
     def multiple_stars(self, multiple_stars):
-        print(f"Setting multiple_stars flag with {multiple_stars}.")
+        LOG.info(f"Setting multiple_stars flag with {multiple_stars}.")
         self._multiple_stars = multiple_stars
 
     @property
@@ -87,7 +89,7 @@ class FFD(object):
 
     @ed.setter
     def ed(self, ed):
-        print(f"Setting ED with new values, size {len(ed)}.")
+        LOG.info(f"Setting ED with new values, size {len(ed)}.")
         self._ed = ed
 
     @property
@@ -96,7 +98,7 @@ class FFD(object):
 
     @freq.setter
     def freq(self, freq):
-        print(f"Setting frequency values with new values, size {len(freq)}.")
+        LOG.info(f"Setting frequency values with new values, size {len(freq)}.")
         self._freq = freq
 
     @property
@@ -105,7 +107,7 @@ class FFD(object):
 
     @count_ed.setter
     def count_ed(self, count_ed):
-        print(f"Setting frequency adjusted count values "
+        LOG.info(f"Setting frequency adjusted count values "
               f"with new values, size {len(count_ed)}.")
         self._count_ed = count_ed
 
