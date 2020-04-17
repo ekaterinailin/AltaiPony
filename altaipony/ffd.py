@@ -7,6 +7,11 @@ import numpy as np
 from scipy.optimize import fmin
 from math import isfinite
 
+from .utils import generate_random_power_law_distribution
+from .wheatland import (loglikelihood_uniform_wheatland,
+			BayesianFlaringAnalysis
+			)
+
 import os
 import logging
 
@@ -56,7 +61,7 @@ class FFD(object):
 
     """
     def __init__(self, f=None, alpha=None, alpha_err=None,
-                 beta=None, beta_err=None, tot_obs_time=1.,
+                 beta=None, beta_err=None, tot_obs_time=None,
                  ID=None, multiple_stars=False):
 
         self.f = f
@@ -70,6 +75,11 @@ class FFD(object):
         self._count_ed = None
         self.ID = ID
         self._multiple_stars = multiple_stars
+        if tot_obs_time is None:
+            LOG.info(f"No total observing time given. Set to 1.")
+            self.tot_obs_time = 1.     
+        else:    
+            self.tot_obs_time = tot_obs_time
 
     # Set all the setters and getters for attributes
     # that only methods should be allowed to change:
@@ -230,6 +240,9 @@ class FFD(object):
                                    True: ["ed_corr", get_msf_cumdist_recprob]}
                 }
         # make a copy to sort safely without affecting self.f
+        if self.f is None:
+            raise ValueError("You cannot call ed_and_freq() with a flare DataFrame."
+                             "Define self.f first.")
         df = self.f.copy(deep=True)
         # retrieve ED type (corrected or not), and function for counts
         col, func = vals[key][multiple_stars]
@@ -298,7 +311,7 @@ class FFD(object):
 
         Parameters:
         -----------
-        ax : matplotlibe Axes object
+        ax : matplotlib Axes object
             plot to insert the power law in to
         custom_xlim : 2-tuple
             minimum, maximum ED/energy value for power law
@@ -318,6 +331,28 @@ class FFD(object):
         y = self.beta / np.abs(self.alpha - 1.) * np.power(x, -self.alpha + 1.)
         a = ax.plot(x, y, **kwargs)
         return a, x, y
+
+    def plot_mcmc_powerlaw(self, ax, BFA, subset=300, c="grey",
+                            alpha=0.01, linewidth=10, **kwargs):
+        """Randomly sample a subset of powerlaws from 
+        the posterior distribution and plot it.
+        
+        Parameters:
+        -----------
+        ax : matplotlib Axes object
+            plot to insert the power law in to
+        BFA : BayesianFlaringAnalysis object
+            obtained from FFD.fit_mcmc_powerlaw()
+        subset : int
+            subset size
+        kwargs : dict
+            keyword arguments to pass to FFD.plot_powerlaw()
+        """
+        ffd = copy.deepcopy(self)
+        N = np.rint(BFA.samples.shape[0] * np.random.rand(subset)).astype(int)
+        for b, a in BFA.samples[N]:
+            ffd.alpha, ffd.beta = a, b
+            ffd.plot_powerlaw(ax=ax, c=c, alpha=alpha, linewidth=linewidth, **kwargs)
 
     def fit_powerlaw(self, alims=[1.01, 3.]):
         '''
@@ -427,6 +462,83 @@ class FFD(object):
                            r' the power law hypothesis at p={}.'
                            ' KS={}, limit={}'.format(sig_level, KS, limit))
         return ispowerlaw
+
+    def fit_mcmc_powerlaw(self, deltaT=None, mined=None,
+                          loglikelihood=loglikelihood_uniform_wheatland, 
+                          **kwargs):
+        """Fit powerlaw alpha and beta simultaneously
+        using MCMC. Use the joint posterior distribution
+        from Wheatland 2004.
+        
+        Parameters:
+        ------------
+        deltaT : float
+            time period within which the probability of
+            a flare of energy mined to occur. Default is
+            the same time as the original data, i.e.
+            repeating the observing campaign
+        mined : float
+            the energy for which to determine the occurrence
+            probability within deltaT. Default is 10x the highest
+            energy observed in the original data.
+        loglikelihood : function
+            log likelihood function from which to sample
+            using MCMC. Default is the joint posterior for
+            alpha and epsilon as defined in Wheatland 2004
+            with a uniform prior.
+        kwargs : dict
+            keyword arguments to pass to MCMC. Default:
+            {"nwalkers":300, "cutoff":100, "steps":500}
+        """
+        # Check if ed_and_freq was run:
+        if self.ed is None:
+            raise ValueError("Run FFD.ed_and_freq() first!")
+        
+        # Use Maximum Likelihood Estimator for a value for start with
+        alpha_prior, alpha_prior_err = self.fit_powerlaw()
+
+        # Minimum ED value we want to predict a rate for (same as S2 in Wheatland 2004 paper)
+        if mined is None:
+            mined = 10. * max(self.ed) 
+            
+        # Predict rate of flares above threshold for deltaT days in the futures
+        if deltaT is None:
+            deltaT = self.tot_obs_time 
+
+        # Determine a starting point for the MCMC sampling:
+        
+        # Evaluate cumulative FFD fit at mined:
+        rate_prior = (len(self.ed) / self.tot_obs_time / np.abs(alpha_prior - 1.) *
+                      np.power(mined, -alpha_prior +1.)) 
+        
+        # Use Poisson process statistics do get a probability from the rate
+        eps_prior = 1. - np.exp(-rate_prior * deltaT) 
+        
+        if self.beta_prior is None:
+            self.beta_prior = wheatland.beta_from_eps(eps_prior, alpha_prior, deltaT, mined)
+        
+        # init the MCMC suite
+        BFA = BayesianFlaringAnalysis(events=self.ed, mined=mined, 
+                                      Tprime=self.tot_obs_time,
+                                      deltaT=deltaT, alpha_prior=alpha_prior, 
+                                      eps_prior=eps_prior, 
+                                      beta_prior=self.beta_prior,
+                                      threshed=min(self.ed),
+                                      Mprime=len(self.ed),M=len(self.ed),
+                                      loglikelihood=loglikelihood)
+        # Run MCMC chain
+        BFA.sample_posterior_with_mcmc(**kwargs)
+        
+        # Get percentiles of posterior distribution
+        perc = BFA.calculate_percentiles()
+        
+        # Get alpha
+        # Uncertainty derived as the mean of 16th and 84th percentiles
+        self.alpha, self.alpha_up_err, self.alpha_low_err = perc[1][0], perc[1][1], perc[1][2]
+        self.beta, self.beta_up_err, self.beta_low_err = perc[0][0], perc[0][1], perc[0][2]
+        
+        return BFA
+
 
     def _get_ed(self):
         """Get ED array either for a single star sample
@@ -844,12 +956,4 @@ def _get_frequency_corrected_ed_sample(ed, counts):
     return np.array([i for E in eds for i in E])
 
 
-def generate_random_power_law_distribution(a, b, g, size=1, seed=None):
-    """Power-law generator for pdf(x)\propto x^{g-1}
-    for a<=x<=b
-    """
-    if seed is not None:
-        np.random.seed(seed)
-    r = np.random.random(size=size)
-    ag, bg = a**g, b**g
-    return (ag + (bg - ag) * r)**(1. / g)
+

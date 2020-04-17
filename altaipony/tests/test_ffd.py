@@ -4,6 +4,8 @@ import copy
 import numpy as np
 import pandas as pd
 
+from ..utils import generate_random_power_law_distribution
+from ..wheatland import generate_fake_data
 from ..ffd import (FFD,
                    _get_multistar_factors,
                    _ML_powerlaw_estimator,
@@ -14,7 +16,6 @@ from ..ffd import (FFD,
                    _stabilised_KS_statistic,
                    _calculate_KS_acceptance_limit,
                    _apply_stabilising_transformation,
-                   generate_random_power_law_distribution
                     )
 
 def test_init_FFD():
@@ -22,11 +23,11 @@ def test_init_FFD():
     # Generate a flare table
     a, b, g, size = 10, 1e3, -1, 200
     pwl = generate_random_power_law_distribution(a, b, g, size=size, seed=80)
-    df = pd.DataFrame({"ed_rec":pwl,
-                   "ed_corr":pwl*1.2,
-                   "recovery_probability":.8,
-                   "TIC":list(np.arange(1,21))*10
-                    })
+    df = pd.DataFrame({"ed_rec": pwl,
+                       "ed_corr": pwl * 1.2,
+                       "recovery_probability":.8,
+                       "TIC":list(np.arange(1,21))*10
+                       })
     
     # init an FFD object
     ffd = FFD(df)
@@ -290,6 +291,55 @@ def test_is_powerlaw():
 
     with pytest.raises(TypeError): #throw error when alpha is missing
         ffd.is_powerlaw()
+
+
+# --------------------Testing fit_mcmc_powerlaw() -----------------------------------
+
+def test_fit_mcmc_powerlaw():
+
+    # ----------------------------------------------------------
+    # Run an integration test:
+
+    # Generate fake FFD dictionary
+    fake = generate_fake_data(13, 120, 5, 1.7, seed=9000)
+
+    # Create an instance of an FFD
+    ffd = FFD()
+    ffd.f = pd.DataFrame({"ed_rec":fake["events"]})
+    ffd.tot_obs_time = fake['Tprime'] 
+    ffd.beta_prior = fake["beta_prior"]
+    ffd.alpha_prior = fake["alpha_prior"]
+    ed, freq, counts = ffd.ed_and_freq()
+
+    # Call the function you wish to test
+    np.random.seed(42)
+    BFA = ffd.fit_mcmc_powerlaw()
+
+    # Keep this for de-bugging
+    fig = BFA.show_corner_plot()
+
+    # check if the results are approximately right
+    assert ffd.alpha == pytest.approx(1.7, rel=.1) 
+    assert ffd.beta == pytest.approx(5., rel=.2)
+    assert ffd.beta_err is None
+    assert ffd.alpha_err == pytest.approx(0.075, rel=.1)
+    assert ffd.alpha_up_err == pytest.approx(0.080, rel=.1)
+    assert ffd.alpha_low_err == pytest.approx(0.073, rel=.1)
+    assert ffd.beta_up_err == pytest.approx(.827, rel=.1)
+    assert ffd.beta_low_err == pytest.approx(.720, rel=.1)
+    assert ffd.beta_prior == 5.
+    assert ffd.alpha_prior == 1.7
+    assert len(ffd.ed) == len(fake["events"])
+    
+    # ----------------------------------------------------------
+    # Run a failing test
+
+    # This should because ffd.f is not given:
+    ffd = FFD()
+    with pytest.raises(ValueError):
+        BFA = ffd.fit_mcmc_powerlaw()
+
+# --------------------------------------------------------------------------------------
     
 def test__ML_powerlaw_estimator():
     dataformat = [np.array, pd.Series]
