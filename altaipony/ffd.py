@@ -9,8 +9,9 @@ from math import isfinite
 
 from .utils import generate_random_power_law_distribution
 from .wheatland import (loglikelihood_uniform_wheatland,
-			BayesianFlaringAnalysis
-			)
+            			BayesianFlaringAnalysis,
+                        beta_from_eps
+            			)
 
 import os
 import logging
@@ -57,17 +58,24 @@ class FFD(object):
     multiple_stars : bool
         True when ed_and_freq was called with multiple_stars
         flag set
+    alpha_prior: float
+        alpha start value for MCMC power law fit
+    beta_prior: float
+        beta start value for MCMC power law fit
 
 
     """
     def __init__(self, f=None, alpha=None, alpha_err=None,
                  beta=None, beta_err=None, tot_obs_time=None,
-                 ID=None, multiple_stars=False):
+                 ID=None, multiple_stars=False, beta_prior=None,
+                 alpha_prior=None):
 
         self.f = f
         self.alpha = alpha
+        self.alpha_prior = alpha_prior
         self.alpha_err = alpha_err
         self.beta = beta
+        self.beta_prior = beta_prior
         self.beta_err = beta_err
         self.tot_obs_time = tot_obs_time
         self._ed = None
@@ -515,7 +523,7 @@ class FFD(object):
         eps_prior = 1. - np.exp(-rate_prior * deltaT) 
         
         if self.beta_prior is None:
-            self.beta_prior = wheatland.beta_from_eps(eps_prior, alpha_prior, deltaT, mined)
+            self.beta_prior = beta_from_eps(eps_prior, alpha_prior, deltaT, mined)
         
         # init the MCMC suite
         BFA = BayesianFlaringAnalysis(events=self.ed, mined=mined, 
