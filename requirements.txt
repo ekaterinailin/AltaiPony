@@ -3,6 +3,7 @@ numpy>=1.15.1
 pandas>=0.22
 scipy==1.3.0
 emcee
+corner
 progressbar2
 gatspy
 seaborn
