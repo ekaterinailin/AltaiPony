@@ -62,13 +62,14 @@ class FFD(object):
         alpha start value for MCMC power law fit
     beta_prior: float
         beta start value for MCMC power law fit
-
+    eps_prior : float
+	alternative to beta start value for MCMC power law fit
 
     """
     def __init__(self, f=None, alpha=None, alpha_err=None,
                  beta=None, beta_err=None, tot_obs_time=None,
                  ID=None, multiple_stars=False, beta_prior=None,
-                 alpha_prior=None):
+                 alpha_prior=None, eps_prior=None):
 
         self.f = f
         self.alpha = alpha
@@ -76,6 +77,7 @@ class FFD(object):
         self.alpha_err = alpha_err
         self.beta = beta
         self.beta_prior = beta_prior
+        self.eps_prior = eps_prior
         self.beta_err = beta_err
         self.tot_obs_time = tot_obs_time
         self._ed = None
@@ -528,8 +530,8 @@ class FFD(object):
         # init the MCMC suite
         BFA = BayesianFlaringAnalysis(events=self.ed, mined=mined, 
                                       Tprime=self.tot_obs_time,
-                                      deltaT=deltaT, alpha_prior=alpha_prior, 
-                                      eps_prior=eps_prior, 
+                                      deltaT=deltaT, alpha_prior=self.alpha_prior, 
+                                      eps_prior=self.eps_prior, 
                                       beta_prior=self.beta_prior,
                                       threshed=min(self.ed),
                                       Mprime=len(self.ed),M=len(self.ed),

@@ -95,7 +95,8 @@ class BayesianFlaringAnalysis(object):
         # output data if you only want to do post-processing or plotting
         self.samples = samples
 
-    def sample_posterior_with_mcmc(self, nwalkers=300, cutoff=100, steps=500):
+    def sample_posterior_with_mcmc(self, nwalkers=300, cutoff=100, steps=500,
+                                   autocorr_burnin=True):
         '''Sample from the posterior using MCMC with emcee.
 
         Parameters:
@@ -110,6 +111,10 @@ class BayesianFlaringAnalysis(object):
             of the chain, so cut them off.
         steps : int
             How long to run the walk.
+        autocorr_burnin : bool
+            If True, autocorrelation time of the chain will be used
+            to determine the burning phase and thinning of the MCMC chain,
+            if False cutoff and no thinning will be used.
 
         Return:
         --------
@@ -139,8 +144,21 @@ class BayesianFlaringAnalysis(object):
         pos = [inits + 1e-4*np.random.randn(ndim) for i in range(nwalkers)]
         sampler = emcee.EnsembleSampler(nwalkers, ndim, self.loglikelihood, args=args)
         sampler.run_mcmc(pos, steps)
-
-        self.samples = sampler.chain[:, cutoff:, :].reshape((-1, ndim))
+        
+        if autocorr_burnin == True:
+            got_samples = False
+            while got_samples==False:
+                try:
+                    tau = sampler.get_autocorr_time()
+                    burnin = int(2 * np.max(tau))
+                    thin = int(0.5 * np.min(tau))
+                    self.samples = sampler.get_chain(discard=burnin, flat=True, thin=thin)
+                    got_samples = True
+                except: #(can I specify emcee.AutocorrError here?)
+                    sampler.run_mcmc(None, steps, progress=True)
+     
+        else:
+            self.samples = sampler.chain[:, cutoff:, :].reshape((-1, ndim))
 
         # Get beta from eps and alpha
         self.samples.T[0][:] = beta_from_eps(self.samples.T[0],
@@ -149,36 +167,37 @@ class BayesianFlaringAnalysis(object):
 
 
     def show_corner_plot(self, labels=(r'$\beta$', r'$\alpha$'),
-                         save=False, path=''):
+                         save=False, path='', show_truths=True,
+                         show_titles=True,):
         '''Show (and save) a corner plot.
 
         '''
 
         fig = corner.corner(self.samples, labels=labels,
                             quantiles=[0.16, 0.5, 0.84],
-                            show_titles=True, title_kwargs={"fontsize": 12},
+                            show_titles=show_titles, title_kwargs={"fontsize": 12},
                             truths=(self.alpha_prior, self.beta_prior)
                             )
+        if show_truths == True:
+            # For flare we so far have two dimensions fixed
+            ndim = 2
 
-        # For flare we so far have two dimensions fixed
-        ndim = 2
+            # Extract the axes
+            axes = np.array(fig.axes).reshape((ndim, ndim))
 
-        # Extract the axes
-        axes = np.array(fig.axes).reshape((ndim, ndim))
-
-        # Loop over the diagonal
-        for i in range(ndim):
-            ax = axes[i, i]
-            ax.axvline(self.alpha_prior, color="g")
-            ax.axvline(self.beta_prior, color="g")
-
-        # Loop over the histograms
-        for yi in range(ndim):
-            for xi in range(yi):
-                ax = axes[yi, xi]
+            # Loop over the diagonal
+            for i in range(ndim):
+                ax = axes[i, i]
+                ax.axvline(self.alpha_prior, color="g")
                 ax.axvline(self.beta_prior, color="g")
-                ax.axhline(self.alpha_prior, color="g")
-                ax.plot(self.beta_prior, self.alpha_prior, "sg")
+
+            # Loop over the histograms
+            for yi in range(ndim):
+                for xi in range(yi):
+                    ax = axes[yi, xi]
+                    ax.axvline(self.beta_prior, color="g")
+                    ax.axhline(self.alpha_prior, color="g")
+                    ax.plot(self.beta_prior, self.alpha_prior, "sg")
 
         if save == True:
             fig.savefig(path, dpi=300)
@@ -214,7 +233,6 @@ def loglikelihood_uniform_wheatland(theta, *args):
     def prior(x):
         return uninformative_prior(x, 1., 3.)
     return calculate_joint_posterior_distribution(theta, *args, prior)
-
 
 def calculate_posterior_value_that_can_be_passed_to_mcmc(lp):
     '''Do some checks to make sure MCMC will work. NOT TESTED.'''
@@ -270,7 +288,6 @@ def calculate_joint_posterior_distribution(theta, mined, Tprime,
     big event above mined during a period deltaT.
     '''
     np.seterr(divide='ignore')
-
     x, alpha = theta
     # This is the uniform prior for epsilon:
     if ((x < 0) | (x > 1)):
