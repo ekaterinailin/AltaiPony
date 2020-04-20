@@ -154,7 +154,7 @@ def test_sample_posterior_with_mcmc():
 
     # Check that the function ran through
 
-    assert BFA.samples.shape == (120000, 2) #this goes wrong if default values for steps/cutoff/nwalkers are changed
+    assert BFA.samples.shape == (31800, 2) #this goes wrong if default values for steps/cutoff/nwalkers are changed
     assert BFA.samples[:,1].max() < 2.25 # as defined by prior on alpha
     assert BFA.samples[:,1].min() > 1.25 # as defined by prior on alpha
     assert BFA.samples[:,0].min() > 0 # beta is always positive
