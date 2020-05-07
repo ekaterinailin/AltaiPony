@@ -505,7 +505,11 @@ class FFD(object):
             raise ValueError("Run FFD.ed_and_freq() first!")
         
         # Use Maximum Likelihood Estimator for a value for start with
-        alpha_prior, alpha_prior_err = self.fit_powerlaw()
+        print(len(self.ed))
+        if len(self.ed) > 2:
+            alpha_prior, alpha_prior_err = self.fit_powerlaw()
+        elif len(self.ed) < 3:
+            alpha_prior = self.alpha_prior
 
         # Minimum ED value we want to predict a rate for (same as S2 in Wheatland 2004 paper)
         if mined is None:
