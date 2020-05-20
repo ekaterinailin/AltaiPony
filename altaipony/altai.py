@@ -369,45 +369,6 @@ def equivalent_duration(lc, start, stop, err=False):
     else:
         return ed
     
-def fwhm(lc, start, stop, err=False):
-
-    '''
-    Returns the FWHM in s for a flare
-    found within indices [start, stop],
-    calculated as the 
-
-    Parameters
-    --------------
-    start : int
-        start time index of a flare event
-    stop : int
-        end time index of a flare event
-    lc : FlareLightCurve
-
-    err: False or bool
-        If True will compute uncertainty on ED
-
-    Return
-    --------------
-    ed : float
-        equivalent duration in seconds
-    ederr : float
-        uncertainty in seconds
-    '''
-
-    start, stop = int(start),int(stop)+1
-    lct = lc[start:stop]
-    residual = lct.detrended_flux / np.nanmedian(lct.it_med)-1.
-    x = lct.time * 60.0 * 60.0 * 24.0
-    ed = np.sum(np.diff(x) * residual[:-1])
-
-    if err == True:
-        flare_chisq = chi_square(residual[:-1],
-                                 lct.detrended_flux_err[:-1]/np.nanmedian(lct.it_med))
-        ederr = np.sqrt(ed**2 / (stop-1-start) / flare_chisq)
-        return ed, ederr
-    else:
-        return ed
 
 
 def chi_square(residual, error):
