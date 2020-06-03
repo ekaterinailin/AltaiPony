@@ -4,6 +4,8 @@ import numpy as np
 import seaborn
 import matplotlib.pyplot as plt
 
+import copy
+
 def wrap_characterization_of_flares(injrec, flares, ampl_bins=70, dur_bins=160):
     """Take injection-recovery results for a data set
     and the corresponding flare table. Determine
@@ -287,9 +289,9 @@ def _heatmap(flcd, typ, ampl_bins, dur_bins, flares_per_bin):
         
         # Which one is not defined?
         if ampl_bins is None:
-            b = dur_bins
+            b = copy.copy(dur_bins)
         elif dur_bins is None:
-            b = ampl_bins
+            b = copy.copy(ampl_bins)
             
         # If defined bins are given as array, find length
         if (isinstance(b, float) | isinstance(b, int)):
@@ -308,7 +310,7 @@ def _heatmap(flcd, typ, ampl_bins, dur_bins, flares_per_bin):
     elif ~bins.any():
         bins = int(np.rint(np.sqrt(flcd.fake_flares.shape[0] / flares_per_bin)))
         ampl_bins, dur_bins = bins, bins
-    
+   
     # Tile up the inj-rec table using the bins.
     dff, val = tile_up_injection_recovery(flcd.fake_flares, 
                                           typ,
@@ -320,7 +322,7 @@ def _heatmap(flcd, typ, ampl_bins, dur_bins, flares_per_bin):
                ["injected", "FWHM", "recovery probability"],
                "ed_ratio" : 
                ["recovered", "duration", "ED ratio"]}
-    
+
     # Create a heatmap
     fig = plot_heatmap(dff, val, ID=flcd.targetid, label=typ_map[typ][2],
                        ylabel=f"{typ_map[typ][0]} amplitude", 
