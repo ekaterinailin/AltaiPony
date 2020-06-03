@@ -312,17 +312,6 @@ def test_find_flares():
     assert flc.flares['tstop'][0] == pytest.approx(0.395833, rel=1e-4)
     assert flc.flares['total_n_valid_data_points'][0] == 1000
     
-#def test_append():
-    #flc1 = mock_flc(detrended=True)
-    #flc2 = mock_flc()
-    #flc = flc1.append(flc2)
-    #assert flc.flux.shape[0] == 2000
-    #assert flc.flux_err.shape[0] == 2000
-    #assert flc.detrended_flux.shape[0] == 2000
-    #assert flc.detrended_flux.shape[0] == 2000
-    #assert flc.pixel_flux.shape[0] == 2000    
-    #assert flc.pixel_flux_err.shape[0] == 2000
-    #assert flc.it_med.size == 2000
 
 def test_inject_fake_flares():
     flc = mock_flc(detrended=True)
@@ -349,4 +338,50 @@ def test_inject_fake_flares():
     assert fake_flc.flux.all() <= 1.
     assert fake_flc.flux.shape == flc.flux.shape
 
+def test_load_injrec_data():
+    # Create a minimal empty light curve with an ID
+    flcd = FlareLightCurve(targetid="GJ 1243", time=np.linspace(10,1))
 
+    # Path to test file
+    path = "altaipony/tests/testfiles/gj1243_injrec.csv"
+
+    # Call the function for the first time
+    flcd.load_injrec_data(path)
+
+    # Check if nothing happened to the size
+    assert flcd.fake_flares.shape[0] == 1010
+    assert flcd.fake_flares.shape[1] == 14 
+
+    # Loading a second time should append the new table
+    flcd.load_injrec_data(path)
+    
+    # Twice as many rows, but same number of columns
+    assert flcd.fake_flares.shape[0] == 2020
+    assert flcd.fake_flares.shape[1] == 14 
+
+    # We should get a FileNotFoundError when a bad path is passed:
+    with pytest.raises(FileNotFoundError) as err:
+        flcd.load_injrec_data("badpath")
+
+def test_plot_ed_ratio_heatmap():
+    # Create a minimal empty light curve with an ID
+    flcd = FlareLightCurve(targetid="GJ 1243", time=np.linspace(10,1))
+    
+    # Path to test file
+    path = "altaipony/tests/testfiles/gj1243_injrec.csv"
+    flcd.load_injrec_data(path)
+    
+    # Test if the function is called properly with default values
+    flcd.plot_ed_ratio_heatmap()
+
+
+def test_plot_recovery_probability_heatmap():
+    # Create a minimal empty light curve with an ID
+    flcd = FlareLightCurve(targetid="GJ 1243", time=np.linspace(10,1))
+    
+    # Path to test file
+    path = "altaipony/tests/testfiles/gj1243_injrec.csv"
+    flcd.load_injrec_data(path)
+    
+    # Test if the function is called properly with default values
+    flcd.plot_recovery_probability_heatmap()

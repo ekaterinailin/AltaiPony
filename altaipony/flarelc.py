@@ -18,7 +18,7 @@ from .fakeflares import (merge_fake_and_recovered_events,
                          mod_random,
                          aflare,
                          )
-from .injrecanalysis import wrap_characterization_of_flares
+from .injrecanalysis import wrap_characterization_of_flares, _heatmap
 
 import time
 LOG = logging.getLogger(__name__)
@@ -730,50 +730,63 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
         del ampl_fake
         return fake_lc
 
-    #def append(self, others):
-        #"""
-        #Append FlareLightCurve objects. Copied from lightkurve
-        #Parameters
-        #----------
-        #others : LightCurve object or list of LightCurve objects
-            #Light curves to be appended to the current one.
-        #Returns
-        #-------
-        #new_lc : LightCurve object
-            #Concatenated light curve.
-        #"""
-        #if not hasattr(others, '__iter__'):
-            #others = [others]
-        #new_lc = copy.deepcopy(self)
-        #for i in range(len(others)):
-            #new_lc.time = np.append(new_lc.time, others[i].time)
-            #new_lc.flux = np.append(new_lc.flux, others[i].flux)
-            #new_lc.flux_err = np.append(new_lc.flux_err, others[i].flux_err)
-            #if hasattr(new_lc, 'cadenceno'):
-                #new_lc.cadenceno = np.append(new_lc.cadenceno, others[i].cadenceno)  # KJM
-            #if hasattr(new_lc, 'quality'):
-                #new_lc.quality = np.append(new_lc.quality, others[i].quality)
-            #if hasattr(new_lc, 'centroid_col'):
-                #new_lc.centroid_col = np.append(new_lc.centroid_col, others[i].centroid_col)
-            #if hasattr(new_lc, 'centroid_row'):
-                #new_lc.centroid_row = np.append(new_lc.centroid_row, others[i].centroid_row)
-            #if hasattr(new_lc, 'pos_corr1'):
-                #new_lc.pos_corr1 = np.append(new_lc.pos_corr1, others[i].pos_corr1)
-            #if hasattr(new_lc, 'pos_corr2'):
-                #new_lc.pos_corr2 = np.append(new_lc.pos_corr2, others[i].pos_corr2)
-            #if hasattr(new_lc, 'detrended_flux'):
-                #new_lc.detrended_flux = np.append(new_lc.detrended_flux, others[i].detrended_flux)
-            #if hasattr(new_lc, 'detrended_flux_err'):
-                #new_lc.detrended_flux_err = np.append(new_lc.detrended_flux_err, others[i].detrended_flux_err)
-            #if hasattr(new_lc, 'flux_trends'):
-                #new_lc.flux_trends = np.append(new_lc.flux_trends, others[i].flux_trends)
-            #if hasattr(new_lc, 'it_med'):
-                #new_lc.it_med = np.append(new_lc.it_med, others[i].it_med, axis=0)
-            #if hasattr(new_lc, 'pixel_flux'):
-                #new_lc.pixel_flux = np.append(new_lc.pixel_flux, others[i].pixel_flux,axis=0)
-            #if hasattr(new_lc, 'pixel_flux_err'):
-                #new_lc.pixel_flux_err = np.append(new_lc.pixel_flux_err, others[i].pixel_flux_err,axis=0)
-        #return new_lc
+    def load_injrec_data(self, path, **kwargs):
+        """Fetch the injection-recovery table
+        from a given path, and append it to 
+        any existing table.
+
+        Parameters:
+        -----------
+        path : string
+            path to file
+        kwargs : dict
+            keyword arguments to pass to
+            `pandas.read_csv()`
+        """
+
+        df = pd.read_csv(path)
+        if self.fake_flares.shape[0]>0:
+	        LOG.warning("The file is appended to an existing table.")
+	        self.fake_flares = self.fake_flares.append(df)
+        else:
+	        self.fake_flares = df
+
+    def plot_recovery_probability_heatmap(self, ampl_bins=None, 
+                                          dur_bins=None, flares_per_bin=20):
+        """Plot injected amplitude and injected
+        FWHM vs. the fraction of recovered flares.
+        
+        Parameters:
+        -----------
+        ampl_bins : int or array
+            bins for amplitudes
+        dur_bins : int or array
+            bins for FWHM
+        flares_per_bin : int
+            number of flares per bin, default is 20
+        """
+
+        flc = copy.deepcopy(self)
+        return _heatmap(flc, "recovery_probability", 
+                        ampl_bins, dur_bins, flares_per_bin)
+
+    def plot_ed_ratio_heatmap(self, ampl_bins=None, dur_bins=None, flares_per_bin=20):
+        """Plot recovered amplitude and recovered
+        duration vs. the ratio of recovered ED to
+        injected ED.
+        
+        Parameters:
+        -----------
+        ampl_bins : int or array
+            bins for recovered amplitudes
+        dur_bins : int or array
+            bins for recovered duration
+        flares_per_bin : int
+            number of flares per bin, default is 20
+        """
+        flc = copy.deepcopy(self)
+        return _heatmap(flc, "ed_ratio", 
+                        ampl_bins, dur_bins, flares_per_bin)
 
     def characterize_flares(self, ampl_bins=80, dur_bins=160):
         """Use results from injection recovery to determine

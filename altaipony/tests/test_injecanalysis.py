@@ -12,7 +12,9 @@ from ..injrecanalysis import (characterize_flares,
                               percentile,
                               wrap_characterization_of_flares,
                               plot_heatmap,
+                              _heatmap,
                              )
+from ..flarelc import FlareLightCurve
                              
 from . import PACKAGEDIR                             
 
@@ -228,3 +230,44 @@ def test_plot_heatmap():
 
     dft, val = tile_up_injection_recovery(df,"duration_ratio")
     assert isinstance(plot_heatmap(dft, val), matplotlib.figure.Figure)
+
+
+
+def test__heatmap():
+    # Create a minimal empty light curve with an ID
+    flcd = FlareLightCurve(targetid="GJ 1243", time=np.linspace(10,1))
+    ampl_bins, dur_bins, flares_per_bin = None, None, 20
+    
+    # If inj-rec data are missing, throw an error.
+    with pytest.raises(AttributeError) as err:
+        _heatmap(flcd, "recovery_probability", ampl_bins, dur_bins, flares_per_bin)
+    
+    # Path to test file
+    path = "altaipony/tests/testfiles/gj1243_injrec.csv"
+    flcd.load_injrec_data(path)
+    
+    # Test the default case
+    _heatmap(flcd, "recovery_probability", ampl_bins, dur_bins, flares_per_bin)
+    _heatmap(flcd, "ed_ratio", ampl_bins, dur_bins, flares_per_bin)
+    
+    # Check other cases of bin specifications
+    for typ in ["recovery_probability", "ed_ratio"]:
+        # only dur_bins
+        ampl_bins, dur_bins, flares_per_bin = None, 5, 20
+        _heatmap(flcd, typ, ampl_bins, dur_bins, flares_per_bin)
+
+        # only ampl_bins
+        ampl_bins, dur_bins, flares_per_bin = 3, None, 20
+        _heatmap(flcd, typ, ampl_bins, dur_bins, flares_per_bin)
+
+        # both dur_bins and ampl_bins
+        ampl_bins, dur_bins, flares_per_bin = 3, 9, None
+        _heatmap(flcd, typ, ampl_bins, dur_bins, flares_per_bin)
+        
+        # one of the two is defined as array
+        ampl_bins, dur_bins, flares_per_bin = 3, np.linspace(5e-4,.004,20), None
+        _heatmap(flcd, typ, ampl_bins, dur_bins, flares_per_bin)
+        
+        # It should also work if you give an array for one bin only
+        ampl_bins, dur_bins, flares_per_bin = None, np.linspace(5e-4,.004,20), 7
+        _heatmap(flcd, typ, ampl_bins, dur_bins, flares_per_bin)
