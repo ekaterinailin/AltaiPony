@@ -4,6 +4,8 @@ import numpy as np
 import seaborn
 import matplotlib.pyplot as plt
 
+import copy
+
 def wrap_characterization_of_flares(injrec, flares, ampl_bins=70, dur_bins=160):
     """Take injection-recovery results for a data set
     and the corresponding flare table. Determine
@@ -33,10 +35,23 @@ def wrap_characterization_of_flares(injrec, flares, ampl_bins=70, dur_bins=160):
     injrec['rec'] = injrec.ed_rec.astype(bool).astype(float)
     injrec['dur'] = injrec.tstop - injrec.tstart
     flares['dur'] = flares.tstop - flares.tstart
-    ampl_bins = np.linspace(min(injrec.ampl_rec.min(), flares.ampl_rec.min(), injrec.amplitude.min()),
-                            max(injrec.ampl_rec.max(), flares.ampl_rec.max(), injrec.amplitude.max()), ampl_bins)
-    dur_bins = np.linspace(min(injrec.dur.min(), flares.dur.min(), injrec.duration_d.min()),
-                            max(injrec.dur.max(), flares.dur.max(), injrec.duration_d.max()), dur_bins)
+
+    ampl_bins = np.linspace(min(injrec.ampl_rec.min(),
+                                flares.ampl_rec.min(), 
+                                injrec.amplitude.min()),
+                            max(injrec.ampl_rec.max(),
+                                flares.ampl_rec.max(),
+                                injrec.amplitude.max()), 
+                            ampl_bins)
+
+    dur_bins = np.linspace(min(injrec.dur.min(),
+                               flares.dur.min(), 
+                               injrec.duration_d.min()),
+                           max(injrec.dur.max(),
+                               flares.dur.max(),
+                               injrec.duration_d.max()), 
+                           dur_bins)
+
     flcc, dscc = characterize_flares(flares, injrec, otherfunc="count",
                             amplrec="ampl_rec", durrec="dur",
                             amplinj="amplitude", durinj="duration_d",
@@ -245,11 +260,80 @@ def percentile(x, q):
     else:
         return np.percentile(x.dropna(), q=q)
 
+def _heatmap(flcd, typ, ampl_bins, dur_bins, flares_per_bin):
+    """Create a heatmap for either recovery probability or ED ratio.
+    
+    Parameters:
+    -----------
+    typ : string
+        Either "recovery_probability" or "ed_ratio"
+    ampl_bins : int or array
+        bins for amplitudes
+    dur_bins : int or array
+        bins for duration or FWHM
+    flares_per_bin : int
+        number of flares per bin
+    """
 
+    if not bool(flcd.fake_flares.shape[0] > 0):
+        raise AttributeError("Missing injection-recovery data. "
+                             "Use `FLC.load_injrec_data(path)` to fetch "
+                             "some, or run `FLC.sample_flare_recovery()`.")
+    
+    # Did the use give appropriate bins?
+    bins = np.array([bool(ampl_bins is not None),bool(dur_bins is not None)])
+    
+    # If only one out of [ampl_bins, dur_bins] is specified
+    # specify the other by fixing the `flares_per_bin`
+    if ((bins.any()) & (~bins.all())):
+        
+        # Which one is not defined?
+        if ampl_bins is None:
+            b = copy.copy(dur_bins)
+        elif dur_bins is None:
+            b = copy.copy(ampl_bins)
+            
+        # If defined bins are given as array, find length
+        if (isinstance(b, float) | isinstance(b, int)):
+            l = b
+        else:
+            l = len(b)    
+
+        # Define the other bins accordingly
+        if ampl_bins is None:
+            ampl_bins = int(np.rint(flcd.fake_flares.shape[0] / l / flares_per_bin))
+        elif dur_bins is None:
+            dur_bins = int(np.rint(flcd.fake_flares.shape[0] / l / flares_per_bin))
+    
+    # If no bins are specified, choose bins of equal size
+    # with approximately `flares_per_bin` in each bin:
+    elif ~bins.any():
+        bins = int(np.rint(np.sqrt(flcd.fake_flares.shape[0] / flares_per_bin)))
+        ampl_bins, dur_bins = bins, bins
+   
+    # Tile up the inj-rec table using the bins.
+    dff, val = tile_up_injection_recovery(flcd.fake_flares, 
+                                          typ,
+                                          ampl_bins=ampl_bins,
+                                          dur_bins=dur_bins,)
+    
+    # Map internal keywords to human-readable ones:
+    typ_map = {"recovery_probability" : 
+               ["injected", "FWHM", "recovery probability"],
+               "ed_ratio" : 
+               ["recovered", "duration", "ED ratio"]}
+
+    # Create a heatmap
+    fig = plot_heatmap(dff, val, ID=flcd.targetid, label=typ_map[typ][2],
+                       ylabel=f"{typ_map[typ][0]} amplitude", 
+                       xlabel=f"{typ_map[typ][0]} {typ_map[typ][1]} [d]");
+    
+    return
 def plot_heatmap(df, val, label=None,
                  ID=None, valcbr=(0.,1.),
                  ovalcbr=(0,50), xlabel="duration [d]",
-                 ylabel="amplitude", cmap="viridis"):
+                 ylabel="amplitude", cmap="viridis",
+                 font_scale=1.5):
     """Plot a heatmap from the "fake_flares" table. 
     
     Parameters:
@@ -270,11 +354,17 @@ def plot_heatmap(df, val, label=None,
         ylabel for plot   
     cmap : colormap
         default "viridis"
+    font_scale : float
+        set the size of tick labels, and bar label
     
     Return:
     -------
     matplotlib.figure.Figure        
     """
+
+    # configure Seaborn
+    seaborn.set(font_scale=font_scale)
+
     # Find the midpoint of the interval to use as ticks
     df = df.reset_index()
     df.Amplitude = df.Amplitude.apply(lambda x: x.mid)
@@ -314,6 +404,6 @@ def plot_heatmap(df, val, label=None,
         label.set_visible(False)    
     ax.set_xlabel(xlabel, fontsize=16)
     ax.set_ylabel(ylabel, fontsize=16)
-    ax.set_title("TIC {}".format(ID), fontsize=16)
+    ax.set_title(ID, fontsize=16)
 
     return fig
