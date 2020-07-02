@@ -18,6 +18,8 @@ from ..ffd import (FFD,
                    _apply_stabilising_transformation,
                     )
 
+#------------------------------ TESTING FFD() ------------------------------------------
+
 def test_init_FFD():
     
     # Generate a flare table
@@ -38,8 +40,53 @@ def test_init_FFD():
                                      'recovery_probability', 
                                      'TIC']).all()
 
+#---------------------------------------------------------------------------------------
+
+#--------------------- TESTING SETTER OUTPUTS IN PROPERTIES ----------------------------
+
+def test_setter_outputs(caplog):
+    """Test all setters to work in both silent and loud modes.
+    Using the caplog fixture from pytest to get logging outputs.""" 
+    simple_ffd = FFD()
+    assert ('No total observing time given. Set to 1. '
+            'You are now working with number counts instead of frequency.' in caplog.text)
+    
+    # multiple_stars
+    simple_ffd._multiple_stars = True
+    assert ('Setting multiple_stars flag with True.' in caplog.text) == False
+    simple_ffd.multiple_stars = True
+    assert 'Setting multiple_stars flag with True.' in caplog.text
+    
+    a = [1,2,3]
+
+    # ed
+    s = f"Setting ED with new values, size {len(a)}."
+    simple_ffd._ed = a
+    assert (s in caplog.text) == False
+    simple_ffd.ed = a
+    assert s in caplog.text
+
+    # freq
+    s = f"Setting frequency values with new values, size {len(a)}."
+    simple_ffd._freq = a
+    assert (s in caplog.text) == False
+    simple_ffd.freq = a
+    assert s in caplog.text
+
+    # count_ed
+    simple_ffd._count_ed = a
+    s = (f"Setting frequency adjusted count values "
+         f"with new values, size {len(a)}.")
+    assert (s in caplog.text) == False
+    simple_ffd.count_ed = a
+    assert s in caplog.text
+    
+#---------------------------------------------------------------------------------------
+
+#--------------------- TESTING ed_and_freq() ---------------------
+
 def test_ed_and_freq():
-    """Tests _ed_and_counts, too."""
+    """Tests _ed_and_counts under the hood."""
     
     # Generate a flare table
     a, b, g, size = 10, 1e3, -1, 200
@@ -195,28 +242,9 @@ def test_ed_and_freq():
                                recovery_probability_correction=True,
                                 multiple_stars=False)
 
-def test__get_multistar_factors():
-    
-    # Generate a flare table
-    N = 20
-    testdf = pd.DataFrame({"ID":np.arange(N)%4,
-                           "sortcol":np.arange(200, 200-N, -1)})
-    
-    # call _get_multistar_factors
-    f = _get_multistar_factors(testdf, "ID", "sortcol")
-    
-    # Check if the result is as expected
-    assert (f == np.array([1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.,
-                           1., 1., 1., 1., 1., 1., 0.75, 0.5, 0.25])).all()
+#---------------------------------------------------------------------------------------
 
-    # If the required keys don't exist throw errors
-    with pytest.raises(KeyError):
-        testdf = pd.DataFrame({"ID":np.arange(N)%4})
-        f = _get_multistar_factors(testdf, "ID", "sortcol")
-
-    with pytest.raises(KeyError):
-        testdf = pd.DataFrame({"sortcol":np.arange(200, 200-N, -1)})
-        f = _get_multistar_factors(testdf, "ID", "sortcol")
+#--------------------------- TESTING fit_powerlaw() ------------------------------------
         
 def test_fit_powerlaw():
     # Generate a flare table
@@ -235,7 +263,9 @@ def test_fit_powerlaw():
     # check the result
     assert (1.963553855895996, 0.08012203082491737) == ffd.fit_powerlaw()
 
-#------------------------------ TESTING is_powerlaw_truncated() ---------------
+#---------------------------------------------------------------------------------------
+
+#------------------------------ TESTING is_powerlaw_truncated() ------------------------
 
 cases = [(1000, False), (900, False), (800, False),
          (200, True), (20, True)]
@@ -250,7 +280,9 @@ def test_is_powerlaw_truncated(l,i):
     ed, freq, counts = simple_truncated_ffd.ed_and_freq()
     assert simple_truncated_ffd.is_powerlaw_truncated() == i
     
-#--------------------------------------------------------------------------------
+#---------------------------------------------------------------------------------------
+
+#------------------------------ TESTING is_powerlaw() ----------------------------------
 
 def test_is_powerlaw():
 
@@ -292,8 +324,9 @@ def test_is_powerlaw():
     with pytest.raises(TypeError): #throw error when alpha is missing
         ffd.is_powerlaw()
 
+#---------------------------------------------------------------------------------------
 
-# --------------------Testing fit_mcmc_powerlaw() -----------------------------------
+# -------------------- TESTING fit_mcmc_powerlaw() -------------------------------------
 
 def test_fit_mcmc_powerlaw():
 
@@ -339,7 +372,36 @@ def test_fit_mcmc_powerlaw():
     with pytest.raises(ValueError):
         BFA = ffd.fit_mcmc_powerlaw()
 
+#---------------------------------------------------------------------------------------
+
+# -------------------- TESTING _get_multistar_factors() ---------------------------------
+
+def test__get_multistar_factors():
+    
+    # Generate a flare table
+    N = 20
+    testdf = pd.DataFrame({"ID":np.arange(N)%4,
+                           "sortcol":np.arange(200, 200-N, -1)})
+    
+    # call _get_multistar_factors
+    f = _get_multistar_factors(testdf, "ID", "sortcol")
+    
+    # Check if the result is as expected
+    assert (f == np.array([1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.,
+                           1., 1., 1., 1., 1., 1., 0.75, 0.5, 0.25])).all()
+
+    # If the required keys don't exist throw errors
+    with pytest.raises(KeyError):
+        testdf = pd.DataFrame({"ID":np.arange(N)%4})
+        f = _get_multistar_factors(testdf, "ID", "sortcol")
+
+    with pytest.raises(KeyError):
+        testdf = pd.DataFrame({"sortcol":np.arange(200, 200-N, -1)})
+        f = _get_multistar_factors(testdf, "ID", "sortcol")
+
 # --------------------------------------------------------------------------------------
+
+#-------------------------- TESTING _ML_powerlaw_estimator() ---------------------------
     
 def test__ML_powerlaw_estimator():
     dataformat = [np.array, pd.Series]
@@ -359,6 +421,10 @@ def test__ML_powerlaw_estimator():
         with pytest.raises(ValueError):
             _ML_powerlaw_estimator(x0, ed)
 
+#---------------------------------------------------------------------------------------
+
+#------------------------ TESTING _de_biased_upper_limit() -----------------------------
+
             
 def test__de_biased_upper_limit():
     dataformat = [np.array, pd.Series]
@@ -375,6 +441,9 @@ def test__de_biased_upper_limit():
         with pytest.raises(ValueError):
             _de_biased_upper_limit(data, 3.)
 
+#---------------------------------------------------------------------------------------
+
+#----------------------------- TESTING _de_bias_alpha() --------------------------------
             
 def test__de_bias_alpha():
     assert _de_bias_alpha(200,1) == 1.
@@ -387,7 +456,10 @@ def test__de_bias_alpha():
     with pytest.raises(ZeroDivisionError):
         _de_bias_alpha(2,2)
         
-#------------------------------------------------------------------------
+#---------------------------------------------------------------------------------------
+
+#-------------------------- TESTING _calculate_max_ed() --------------------------------
+
 def test__calculate_max_ed():
     # fake data
     data = np.linspace(10,1e3,100)
@@ -403,7 +475,6 @@ def test__calculate_max_ed():
     maxval = _calculate_max_ed(data, alpha, maxlim=1e8, seed=2000)
     assert maxval == pytest.approx(1372.7172156831662)
 
-
     # test failure mode alpha or data is not finite
     with pytest.raises(TypeError):
         maxval = _calculate_max_ed(data, None, maxlim=1e8, seed=2000)
@@ -418,8 +489,10 @@ def test__calculate_max_ed():
         maxval = _calculate_max_ed([np.nan, 1., 2., 3. ,4.],
                                    alpha, maxlim=1e8, seed=2000)
 
+#---------------------------------------------------------------------------------------
 
-#-----------------------------------------------------------------------
+#---------------------- TESTING _calculate_percentile_max_ed() -------------------------
+
 def test__calculate_percentile_max_ed():
     # fake data
     data = np.linspace(10,1e3,100)
@@ -440,6 +513,9 @@ def test__calculate_percentile_max_ed():
     with pytest.raises(AssertionError):
         vals, edcrit = _calculate_percentile_max_ed(data, alpha, n, np.nan)
         
+#---------------------------------------------------------------------------------------
+
+#------------------------ TESTING _stabilised_KS_statistic() -----------------------------
 
 def test__stabilised_KS_statistic():
     sizes = [1e2,1e3,1e4]
@@ -451,6 +527,10 @@ def test__stabilised_KS_statistic():
     assert KSlist[0] > KSlist[1]
     assert KSlist[1] > KSlist[2]
     
+
+#---------------------------------------------------------------------------------------
+
+#---------------------- TESTING _calculate_KS_acceptance_limit() -----------------------
 
 def test__calculate_KS_acceptance_limit():
     with pytest.raises(ValueError):
@@ -466,6 +546,9 @@ def test__calculate_KS_acceptance_limit():
     assert (_calculate_KS_acceptance_limit(100, sig_level=0.01)
             > _calculate_KS_acceptance_limit(1000, sig_level=0.01))
     
+#---------------------------------------------------------------------------------------
+
+#--------------------- TESTING _apply_stabilising_transformation() ---------------------
 
 def test__apply_stabilising_transformation():
     u = [.1,.2,.3]

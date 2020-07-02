@@ -29,13 +29,14 @@ class FFD(object):
 
     N - number of flares
     E - energy or equivalent duration
+    alpha, beta - free parameters
 
 
     Attributes:
     -----------
     f : DataFrame
         flare table in the FlareLightCurve.flares format
-        with extra columns for flare target identifiers
+        add extra column named ID for flare target identifiers 
     alpha : float
         power law exponent
     alpha_err : float
@@ -55,9 +56,6 @@ class FFD(object):
         frequencies of EDs in cumulative FFD, sorted like ed
     count_ed : array
         frequency adjusted ed sample
-    multiple_stars : bool
-        True when ed_and_freq was called with multiple_stars
-        flag set
     alpha_prior: float
         alpha start value for MCMC power law fit
     beta_prior: float
@@ -68,31 +66,43 @@ class FFD(object):
     """
     def __init__(self, f=None, alpha=None, alpha_err=None,
                  beta=None, beta_err=None, tot_obs_time=None,
-                 ID=None, multiple_stars=False, beta_prior=None,
-                 alpha_prior=None, eps_prior=None):
+                 ID=None, beta_prior=None, alpha_prior=None, 
+                 eps_prior=None):
 
         self.f = f
+        self.ID = ID
+
         self.alpha = alpha
         self.alpha_prior = alpha_prior
         self.alpha_err = alpha_err
+
         self.beta = beta
         self.beta_prior = beta_prior
-        self.eps_prior = eps_prior
         self.beta_err = beta_err
-        self.tot_obs_time = tot_obs_time
-        self._ed = None
-        self._freq = None
-        self._count_ed = None
-        self.ID = ID
-        self._multiple_stars = multiple_stars
+
+        self.eps_prior = eps_prior
+
         if tot_obs_time is None:
-            LOG.info(f"No total observing time given. Set to 1.")
+            LOG.info(f"No total observing time given. Set to 1. "
+                     f"You are now working with number counts instead of frequency.")
             self.tot_obs_time = 1.     
         else:    
             self.tot_obs_time = tot_obs_time
 
+        # These attributes should only be altered by a method, and not by the user:
+
+        self._ed = None
+
+        self._freq = None
+
+        self._count_ed = None
+        
+        # True if `ed_and_freq` method was called with multiple_stars
+        # flag set, initiated as False
+        self._multiple_stars = False
+
     # Set all the setters and getters for attributes
-    # that only methods should be allowed to change:
+    # that only methods should change. Output some string for info if wanted:
 
     @property
     def multiple_stars(self):
@@ -128,7 +138,7 @@ class FFD(object):
     @count_ed.setter
     def count_ed(self, count_ed):
         LOG.info(f"Setting frequency adjusted count values "
-              f"with new values, size {len(count_ed)}.")
+                 f"with new values, size {len(count_ed)}.")
         self._count_ed = count_ed
 
 # -----------------------------------------------------------------------
@@ -182,7 +192,7 @@ class FFD(object):
         return self._ed_and_counts(key, multiple_stars)
 
     def _ed_and_counts(self, key, multiple_stars):
-        """Sub function to ed_and_func.
+        """Sub-function to ed_and_func for better readability.
 
         Parameters:
         ------------
@@ -249,16 +259,19 @@ class FFD(object):
                 "edrecprob_corr": {False: ["ed_corr", cum_dist_rec_prob],
                                    True: ["ed_corr", get_msf_cumdist_recprob]}
                 }
+
         # make a copy to sort safely without affecting self.f
         if self.f is None:
             raise ValueError("You cannot call ed_and_freq() with a flare DataFrame."
                              "Define self.f first.")
         df = self.f.copy(deep=True)
+
         # retrieve ED type (corrected or not), and function for counts
         col, func = vals[key][multiple_stars]
         df = df.sort_values(by=col, ascending=False)
 
         ed = df[col].values  # get the right EDs
+
         # get the (corrected) flare counts
         freq, counts = func(df, col, self.ID)  
 
@@ -487,10 +500,12 @@ class FFD(object):
             a flare of energy mined to occur. Default is
             the same time as the original data, i.e.
             repeating the observing campaign
+            Keep the default if you only care about alpha and beta.
         mined : float
             the energy for which to determine the occurrence
             probability within deltaT. Default is 10x the highest
             energy observed in the original data.
+            Keep the default if you only care about alpha and beta.
         loglikelihood : function
             log likelihood function from which to sample
             using MCMC. Default is the joint posterior for
@@ -505,7 +520,6 @@ class FFD(object):
             raise ValueError("Run FFD.ed_and_freq() first!")
         
         # Use Maximum Likelihood Estimator for a value for start with
-        print(len(self.ed))
         if len(self.ed) > 2:
             alpha_prior, alpha_prior_err = self.fit_powerlaw()
         elif len(self.ed) < 3:
@@ -564,11 +578,11 @@ class FFD(object):
         ed - sample of flare energies 
         """
 
-        if self.multiple_stars is True:
+        if self._multiple_stars is True:
             
             ed = self.count_ed
                 
-        elif self.multiple_stars is False:
+        elif self._multiple_stars is False:
             
             ed = self.ed
         
