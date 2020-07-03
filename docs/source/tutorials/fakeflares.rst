@@ -6,7 +6,7 @@ These are the functions that inject synthetic flare events and manage the output
 ::
 
     from altaipony.lcio import from_mast
-    flc = from_mast("29780677", mode="LC", c=2, mission="TESS")
+    flc = from_mast("TIC 29780677", mode="LC", c=2, mission="TESS")
     flc = flc.detrend("savgol")
     flc, fake_flc = flc.sample_flare_recovery(inject_before_detrending=True, mode="savgol", 
                                               iterations=50, fakefreq=1, ampl=[1e-4, 0.5], 
