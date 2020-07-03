@@ -356,6 +356,29 @@ def test_is_powerlaw():
 
 #---------------------------------------------------------------------------------------
 
+#------------------------------ TESTING _get_ed() ----------------------------------
+
+def test__get_ed():
+
+    a, b, g, size = 10, 1e3, -1., 200
+    pwl = generate_random_power_law_distribution(a, b, g, size=size, seed=80)
+
+    # init an FFD object
+
+    # case multiple_stars==False
+    ffd = FFD(f=pd.DataFrame({"ed_rec":pwl}))
+    ffd.ed_and_freq()
+    
+    assert (ffd._get_ed() == np.sort(pwl)[::-1]).all()
+
+    # case multiple_stars==True
+    pwl = np.sort(pwl)[::-1]
+    ffd = FFD(f=pd.DataFrame({"ed_rec":pwl, "ID": [1]*(len(pwl)-1) + [2]}),
+              ID="ID")
+    ffd.ed_and_freq(multiple_stars=True)
+    assert (ffd._get_ed() == list(pwl) + [np.min(pwl)]).all()
+
+
 # -------------------- TESTING fit_mcmc_powerlaw() -------------------------------------
 
 def test_fit_mcmc_powerlaw():
