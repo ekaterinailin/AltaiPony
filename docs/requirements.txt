@@ -4,4 +4,4 @@ git+https://github.com/OxES/k2sc.git
 matplotlib
 lightkurve
 progressbar2
-
+emcee
