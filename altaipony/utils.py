@@ -1,5 +1,5 @@
 import logging
-from numpy import isfinite, nan, median, abs, ones_like, where, rint, sqrt
+from numpy import isfinite, nan, median, abs, ones_like, where, rint, sqrt, random
 
 LOG = logging.getLogger(__name__)
 
@@ -161,3 +161,13 @@ def expand_mask(a, divval=1):
             k = 0
                  
     return a
+
+def generate_random_power_law_distribution(a, b, g, size=1, seed=None):
+    """Power-law generator for pdf(x)\propto x^{g-1}
+    for a<=x<=b
+    """
+    if seed is not None:
+        random.seed(seed)
+    r = random.random(size=size)
+    ag, bg = a**g, b**g
+    return (ag + (bg - ag) * r)**(1. / g)
