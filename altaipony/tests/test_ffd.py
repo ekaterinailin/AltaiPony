@@ -244,9 +244,39 @@ def test_ed_and_freq():
 
 #---------------------------------------------------------------------------------------
 
-#--------------------------- TESTING fit_powerlaw() ------------------------------------
+#--------------------------- TESTING fit_powerlaw() -------------------------------
         
-def test_fit_powerlaw():
+def test_fit_mmle_powerlaw():
+    # Generate a flare table
+    a, b, g, size = 10, 1e3, -1, 200
+    pwl = generate_random_power_law_distribution(a, b, g, size=size, seed=80)
+    df = pd.DataFrame({"ed_rec":pwl,
+                       "ed_corr":pwl*1.2,
+                       "recovery_probability":.8,
+                       "TIC":list(np.arange(1,21))*(size//20)
+                       })
+
+    # init an FFD object
+    ffd = FFD(f=df)
+    ed, freq, counts = ffd.ed_and_freq()
+    
+    # mode 'mmle'
+    ffd.fit_powerlaw("mmle")
+    assert (1.963553855895996, 0.08012203082491737) == (ffd.alpha, ffd.alpha_err)
+    assert (1753.1677389526367, 140.50464845948764) == (ffd.beta, ffd.beta_err)
+
+    # mode 'mcmc'
+    ffd.fit_powerlaw("mcmc")
+    assert ((2.041785081531872, 0.07598158206969874, 0.07111524587912488) ==
+            (ffd.alpha, ffd.alpha_up_err, ffd.alpha_low_err))
+    assert ((2302.96755340424, 670.4364587925747, 503.09507205326236) ==
+            (ffd.beta, ffd.beta_up_err, ffd.beta_low_err))
+
+#---------------------------------------------------------------------------------------
+
+#--------------------------- TESTING fit_mmle_powerlaw() -------------------------------
+        
+def test_fit_mmle_powerlaw():
     # Generate a flare table
     a, b, g, size = 10, 1e3, -1, 200
     pwl = generate_random_power_law_distribution(a, b, g, size=size, seed=80)
@@ -261,7 +291,7 @@ def test_fit_powerlaw():
     ed, freq, counts = ffd.ed_and_freq()
     
     # check the result
-    assert (1.963553855895996, 0.08012203082491737) == ffd.fit_powerlaw()
+    assert (1.963553855895996, 0.08012203082491737) == ffd.fit_mmle_powerlaw()
 
 #---------------------------------------------------------------------------------------
 

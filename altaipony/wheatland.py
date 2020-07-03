@@ -135,14 +135,15 @@ class BayesianFlaringAnalysis(object):
                                                self.deltaT, self.mined)
         except:
             ValueError("Either beta_prior or eps_prior must be given.")
+
         inits = [self.eps_prior, self.alpha_prior]
 
-
         args = [i for i in args if i is not None]
-        inits = [i for i in inits if i]
+        inits = [i for i in inits if i is not None]
         ndim = len(inits)
         pos = [inits + 1e-4*np.random.randn(ndim) for i in range(nwalkers)]
         sampler = emcee.EnsembleSampler(nwalkers, ndim, self.loglikelihood, args=args)
+        
         sampler.run_mcmc(pos, steps)
         
         if autocorr_burnin == True:
