@@ -59,7 +59,8 @@ The first method you apply before doing anything else is ``FFD.ed_and_freq()``. 
   :width: 400
   :alt: a simple FFD
 
- Fit a power law to the FFD
+
+Fit a power law to the FFD
 -----------------------------
   
 Next, let's fit a power law to this distribution. We can use a Modified Maximum Likelihood Estimator (MMLE) approach detailed in Maschberger and Kroupa (2009) [1]_ to find the slope :math:`\alpha` and then do a simple least squares fit to estimate the intercept :math:`\beta`:
@@ -77,6 +78,7 @@ Alternatively, we can the Bayesian flare prediction approach explained in Wheatl
     simple_ffd.fit_powerlaw("mcmc")    
 
 The results can be accessed with `simple_ffd.alpha`, `simple_ffd.alpha_up_err`, and `simple_ffd.alpha_low_err`; and `simple_ffd.beta`, `simple_ffd.beta_up_err`, and `simple_ffd.beta_low_err`, respectively. Upper and lower uncertainties represent the 16th and 84th percentiles of the marginalized posterior distributions for  :math:`\alpha` and :math:`\beta`.
+
 
 Plot the resulting function in the cumulative form
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
