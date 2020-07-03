@@ -95,6 +95,7 @@ class BayesianFlaringAnalysis(object):
         # output data if you only want to do post-processing or plotting
         self.samples = samples
 
+
     def sample_posterior_with_mcmc(self, nwalkers=300, cutoff=100, steps=500,
                                    autocorr_burnin=True):
         '''Sample from the posterior using MCMC with emcee.
@@ -204,6 +205,7 @@ class BayesianFlaringAnalysis(object):
             fig.savefig(path, dpi=300)
         return fig
 
+
     def calculate_percentiles(self):
         '''Calculate best fit value and its uncertainties.
 
@@ -225,6 +227,9 @@ class BayesianFlaringAnalysis(object):
         self.eps_posterior = percentiles[0]
         return percentiles
 
+#---------------------------------------------------------------------------------------
+
+#------------------------- Likelihoods, prior and posteriors ---------------------------
 
 def loglikelihood_uniform_wheatland(theta, *args):
     '''Log likelihood to pass to BayesianFlaringAnalysis
@@ -235,14 +240,19 @@ def loglikelihood_uniform_wheatland(theta, *args):
         return uninformative_prior(x, 1., 3.)
     return calculate_joint_posterior_distribution(theta, *args, prior)
 
+
 def calculate_posterior_value_that_can_be_passed_to_mcmc(lp):
-    '''Do some checks to make sure MCMC will work. NOT TESTED.'''
+    '''Do some checks to make sure MCMC will work. 
+
+    (Not explicitly tested)
+    '''
     if not np.isfinite(lp):
         return -np.inf
     if np.isnan(lp):
         return -np.inf
     else:
         return lp
+
 
 def logit(function):
     '''Make a probability distribution
@@ -260,7 +270,9 @@ def calculate_joint_posterior_distribution(theta, mined, Tprime,
                                            M, events, prior):
     '''Equation (24) in Wheatland 2004.
     Log-probability distribution of an event bigger than mined
-    occurring in an interval deltaT. NOT TESTED.
+    occurring in an interval deltaT. 
+
+    (Not explicitly tested)
 
     Parameters:
     ----------
@@ -338,10 +350,14 @@ def uninformative_prior(rate, minrate, maxrate):
     else:
         return 0
 
+
 def gaussian_prior(x, mu, sigma):
     '''Evaluate a normalized Gaussian function
-    with mu and sigma at x. NOT TESTED.'''
-    return  1 / (sigma * np.sqrt(2 * np.pi)) * np.exp( - (x - mu)**2 / (2 * sigma**2))
+    with mu and sigma at x. 
+    
+    (Not explicitly tested)
+    '''
+    return  (1 / (sigma * np.sqrt(2 * np.pi)) * np.exp( - (x - mu)**2 / (2 * sigma**2)))
 
 
 def occurrence_probability_posterior(x, alpha, mined, Tprime,
@@ -411,36 +427,62 @@ def flaring_rate_likelihood(rates, Mprime, Tprime, norm=False):
     else:
         return likelihood
 
+#--------------------------------------------------------------------------------------
+
+#----------------------------- helper functions ---------------------------------------
 
 def beta_from_eps(eps, alpha, deltaT, mined):
-    """Obtain beta from epsilon.
+    """Obtain the FFD beta parameters from 
+    the occurrence probability epsilon of a flare 
+    above mined within time period deltaT.
 
     Parameters:
     ------------
+    eps : float
+        flaring probability within time period deltaT
+        and above energy mined
+    alpha : float
+        power law exponent
+    deltaT : float
+        time period for eps
+    mined : float
+        minimum energy for eps
 
     Return:
     --------
-
+    float - FFD beta parameter
     """
-    # See Wheatland 2004: fraling rate vs. flaring probability eps
+    # See Wheatland 2004: flaring rate vs. flaring probability eps
     rate = -np.log(1 - eps) / deltaT
 
     # Use cumulative flare frequency formula
     return rate * (alpha - 1.) * np.power(mined, alpha - 1.)
 
+
 def eps_from_beta(beta, alpha, deltaT, mined):
     """Obtain epsilon from beta. Reverse of
-    beta_from_epsilon.
+    `beta_from_epsilon`.
 
     Parameters:
     ------------
+    beta : float
+        FFD beta parameter
+    alpha : float
+        power law exponent
+    deltaT : float
+        time period for eps
+    mined : float
+        minimum energy for eps
 
     Return:
-    -------
+    --------
+    float - flaring probability within time period deltaT
+            and above energy mined
     """
     exponent = beta * np.power(mined, 1. - alpha) * deltaT / (alpha - 1.)
  
     return 1. - np.exp(-exponent)
+
 
 def generate_fake_data(Tprime, cadence, beta_prior,
                        alpha_prior, mined=None,
