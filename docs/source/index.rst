@@ -18,8 +18,9 @@ K2 light curves are best de-trended using **k2sc_**. For TESS and Kepler we empl
 	:maxdepth: 2
 
 	install
+        tutorials/index
    	api/index
-	tutorials/index
+	
 	
 Problems?
 ^^^^^^^^^

@@ -1,9 +1,9 @@
 Flare Frequency Distributions and Power Laws
-=====
+==============================================
 
 Once you have found all the flares, you can compute statistical measures using your flare table. 
 
-The `ffd` module allows you to compute Flare Frequency Distributions. You can use it to
+The `FFD` module allows you to compute Flare Frequency Distributions. You can use it to
 
 - convert the flare table into a cumulative flare frequency distribution
 - fit the power law exponent :math:`\alpha` and intercept :math:`\beta`, 
@@ -12,9 +12,9 @@ The `ffd` module allows you to compute Flare Frequency Distributions. You can us
 - test if the distribution is truncated at the high energy end,
 - apply statistical corrections to the flare properties using the ``ed_corr``, ``recovery_probability`` attributes of the flares in the flare table that you may obtain from performing *injection and recovery of synthetic flares* with ``FlareLightCurve.characterize_flares()``.
 
-Finally, if your flare table contains contributions from multiple stars that you think generate flares that can be described by the same power law but with different detection thresholds, you can use the `mutliple_stars` keyword to account for this to a first order approximation. 
+Finally, if your flare table contains contributions from multiple stars that you think generate flares that can be described by the same power law but with different detection thresholds, you can use the `multiple_stars` keyword to account for this to a first order approximation. 
 
-*Note that samples with less than 100-200 flares are to be analysed with caution.*
+*Note that results from samples with less than 100-200 flares should be interpreted with caution.*
 
 A simple flare sample
 -----------------------------
@@ -41,7 +41,7 @@ The unit is up to you, and you should know which one you are using. If you do no
 Convert the flare table into a cumulative flare frequency distribution
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-The core method in FFD is ``FFD.ed_and_freq()``. It gives you the sorted array of energies, their corresponding frequencies, and number counts for each event with a certain energy, that is the cumulative flare frequency distribution:
+The first method you apply before doing anything else is ``FFD.ed_and_freq()``. It gives you the sorted array of energies, their corresponding frequencies, and number counts for each event with a certain energy, that is the cumulative flare frequency distribution:
 
 ::
 
@@ -59,18 +59,24 @@ The core method in FFD is ``FFD.ed_and_freq()``. It gives you the sorted array o
   :width: 400
   :alt: a simple FFD
 
- Fit the power law exponent :math:`\alpha` and intercept :math:`\beta`
- ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ Fit a power law to the FFD
+-----------------------------
   
-Let's fit a power law to this distribution. We use a Maximum Likelihood Estimator approach detailed in Maschberger and Kroupa (2009) [1]_ to find the slope :math:`\alpha` and then do a simple least squares fit to estimate the intercept :math:`\beta`:
+Next, let's fit a power law to this distribution. We can use a Modified Maximum Likelihood Estimator (MMLE) approach detailed in Maschberger and Kroupa (2009) [1]_ to find the slope :math:`\alpha` and then do a simple least squares fit to estimate the intercept :math:`\beta`:
 
 ::
 
-    simple_ffd.fit_powerlaw()
-    simple_ffd.fit_beta_to_powerlaw()
-    
+    simple_ffd.fit_powerlaw("mmle")    
 
 The results can be accessed with `simple_ffd.alpha`, `simple_ffd.alpha_err`, `simple_ffd.beta`, and `simple_ffd.beta_err`, respectively.
+
+Alternatively, we can the Bayesian flare prediction approach explained in Wheatland (2004) [2]_ to find :math:`\alpha` and :math:`\beta` using the MCMC method:
+
+::
+
+    simple_ffd.fit_powerlaw("mcmc")    
+
+The results can be accessed with `simple_ffd.alpha`, `simple_ffd.alpha_up_err`, and `simple_ffd.alpha_low_err`; and `simple_ffd.beta`, `simple_ffd.beta_up_err`, and `simple_ffd.beta_low_err`, respectively. Upper and lower uncertainties represent the 16th and 84th percentiles of the marginalized posterior distributions for  :math:`\alpha` and :math:`\beta`.
 
 Plot the resulting function in the cumulative form
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -91,7 +97,10 @@ Use `plot_powerlaw` to plot the result on top of the FFD with the code snippet b
 
 .. image:: powerlaw.jpg
   :width: 400
-  :alt: a simple FFD
+  :alt: a simple FFD with powerlaw
+
+Statistical tests
+------------------
 
 Test if the power law assumption must be rejected
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -116,8 +125,8 @@ For this, we generate a random sample of power law distributions and determine t
   :width: 550
   :alt: exceedance test FFD
   
-Apply statistical corrections to flare properties and deal with multi-star samples
------------------------------------------------------------------------------------
+Dealing with multi-star samples
+--------------------------------
   
 The above example and the more involved case of when your flare sample 
 
@@ -129,6 +138,8 @@ is demonstrated in this_ notebook on Github.
 .. rubric:: Footnotes
 
 .. [1] Thomas Maschberger, Pavel Kroupa, Estimators for the exponent and upper limit, and goodness-of-fit tests for (truncated) power-law distributions, Monthly Notices of the Royal Astronomical Society, Volume 395, Issue 2, May 2009, Pages 931–942, https://doi.org/10.1111/j.1365-2966.2009.14577.x
+
+.. [2] Wheatland, M. S. "A Bayesian approach to solar flare prediction." The Astrophysical Journal 609.2 (2004): 1134. https://doi.org/10.1086/421261
   
   
   .. _this: https://github.com/ekaterinailin/AltaiPony/blob/master/notebooks/Flare_Frequency_Distributions_and_Power_Laws.ipynb
