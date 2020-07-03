@@ -5,3 +5,4 @@ matplotlib
 lightkurve
 progressbar2
 emcee
+corner
