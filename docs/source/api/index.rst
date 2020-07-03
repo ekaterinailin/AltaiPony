@@ -6,8 +6,5 @@ API Documentation
 	:maxdepth: 1
 
 	flarelc
-	lcio
-	altai
-	fakeflares
-	ffds
+	ffd
 
