@@ -61,7 +61,15 @@ class FFD(object):
     beta_prior: float
         beta start value for MCMC power law fit
     eps_prior : float
-	alternative to beta start value for MCMC power law fit
+	    alternative to beta start value for MCMC power law fit
+    alpha_up_err : float
+        84th percentile uncertainty in posterior on alpha
+    alpha_low_err : float
+        16th percentile uncertainty in posterior on alpha
+    beta_up_err : float
+        84th percentile uncertainty in posterior on beta
+    beta_low_err : float
+        16th percentile uncertainty in posterior on beta
 
     """
     def __init__(self, f=None, alpha=None, alpha_err=None,
