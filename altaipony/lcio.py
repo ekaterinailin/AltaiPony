@@ -94,11 +94,23 @@ def _from_mast_Kepler(targetid, c, flux_type="PDCSAP_FLUX", cadence="long",
                       download_dir=None):
     flcfilelist = search_lightcurvefile(targetid, mission="Kepler",
                                         quarter=c, cadence=cadence)
-    flcfile = flcfilelist.download(download_dir=download_dir)
-    lc = flcfile.get_lightcurve(flux_type)
+    if len(flcfilelist)==1:
+        flcfile = flcfilelist.download(download_dir=download_dir)
+        lc = flcfile.get_lightcurve(flux_type)
 
-    flc = _convert_LC_to_FLC(lc, origin="KLC")
-    return flc
+        flc = _convert_LC_to_FLC(lc, origin="KLC")
+        return flc
+
+    elif len(flcfilelist)>1:
+        warnings.warn(f"Multiple Kepler light curves for {targetid}"
+                      f" in quarter {c}. Downloading all to list.")
+        lclist = []
+        flcfiles = flcfilelist.download_all(download_dir=download_dir)
+        for flcfile in flcfiles:
+            lc = flcfile.get_lightcurve(flux_type)
+            flc = _convert_LC_to_FLC(lc, origin="KLC")
+            lclist.append(flc)
+        return lclist
 
 
 def _from_mast_TESS(targetid, c, flux_type="PDCSAP_FLUX", cadence="long",
