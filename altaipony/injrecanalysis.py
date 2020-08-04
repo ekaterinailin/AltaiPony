@@ -283,38 +283,10 @@ def _heatmap(flcd, typ, ampl_bins, dur_bins, flares_per_bin):
         raise AttributeError("Missing injection-recovery data. "
                              "Use `FLC.load_injrec_data(path)` to fetch "
                              "some, or run `FLC.sample_flare_recovery()`.")
-    
-    # Did the user give appropriate bins?
-    bins = np.array([bool(ampl_bins is not None),bool(dur_bins is not None)])
-    
 
-    # If only one out of [ampl_bins, dur_bins] is specified
-    # specify the other by fixing the `flares_per_bin`
-    if ((bins.any()) & (~bins.all())):
-        
-        # Which one is not defined?
-        if ampl_bins is None:
-            b = copy.copy(dur_bins)
-        elif dur_bins is None:
-            b = copy.copy(ampl_bins)
-            
-        # If defined bins are given as array, find length
-        if (isinstance(b, float) | isinstance(b, int)):
-            l = b
-        else:
-            l = len(b)    
-
-        # Define the other bins accordingly
-        if ampl_bins is None:
-            ampl_bins = int(np.rint(flcd.fake_flares.shape[0] / l / flares_per_bin))
-        elif dur_bins is None:
-            dur_bins = int(np.rint(flcd.fake_flares.shape[0] / l / flares_per_bin))
-    
-    # If no bins are specified, choose bins of equal size
-    # with approximately `flares_per_bin` in each bin:
-    elif ~bins.any():
-        bins = int(np.rint(np.sqrt(flcd.fake_flares.shape[0] / flares_per_bin)))
-        ampl_bins, dur_bins = bins, bins
+    ampl_bins, dur_bins = setup_bins(flcd.fake_flares, ampl_bins=ampl_bins, 
+                                    dur_bins=dur_bins,
+                                    flares_per_bin=flares_per_bin)
    
     # Tile up the inj-rec table using the bins.
     dff, val = tile_up_injection_recovery(flcd.fake_flares, 
