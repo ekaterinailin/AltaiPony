@@ -6,7 +6,8 @@ import matplotlib.pyplot as plt
 
 import copy
 
-def wrap_characterization_of_flares(injrec, flares, ampl_bins=70, dur_bins=160):
+def wrap_characterization_of_flares(injrec, flares, ampl_bins=None, dur_bins=None,
+                                    flares_per_bin=None):
     """Take injection-recovery results for a data set
     and the corresponding flare table. Determine
     recovery probability, ED ratio, amplitude ratio,
@@ -29,6 +30,9 @@ def wrap_characterization_of_flares(injrec, flares, ampl_bins=70, dur_bins=160):
     DataFrame : flares and injrec merged with the characteristics
                 listed above.
     """
+    ampl_bins, dur_bins = setup_bins(injrec, ampl_bins=ampl_bins, 
+                                     dur_bins=dur_bins,
+                                     flares_per_bin=flares_per_bin)
 
     flares = flares.dropna(subset=["ed_rec"])
     injrec.ed_rec = injrec.ed_rec.fillna(0)
@@ -280,9 +284,10 @@ def _heatmap(flcd, typ, ampl_bins, dur_bins, flares_per_bin):
                              "Use `FLC.load_injrec_data(path)` to fetch "
                              "some, or run `FLC.sample_flare_recovery()`.")
     
-    # Did the use give appropriate bins?
+    # Did the user give appropriate bins?
     bins = np.array([bool(ampl_bins is not None),bool(dur_bins is not None)])
     
+
     # If only one out of [ampl_bins, dur_bins] is specified
     # specify the other by fixing the `flares_per_bin`
     if ((bins.any()) & (~bins.all())):
@@ -407,3 +412,41 @@ def plot_heatmap(df, val, label=None,
     ax.set_title(ID, fontsize=16)
 
     return fig
+
+
+def setup_bins(injrec, ampl_bins=None, dur_bins=None, flares_per_bin=None):
+
+    # Did the user give appropriate bins?
+    bins = np.array([bool(ampl_bins is not None),bool(dur_bins is not None)])
+    
+
+    # If only one out of [ampl_bins, dur_bins] is specified
+    # specify the other by fixing the `flares_per_bin`
+    if ((bins.any()) & (~bins.all())):
+        
+        # Which one is not defined?
+        if ampl_bins is None:
+            b = copy.copy(dur_bins)
+        elif dur_bins is None:
+            b = copy.copy(ampl_bins)
+            
+        # If defined bins are given as array, find length
+        if (isinstance(b, float) | isinstance(b, int)):
+            l = b
+        else:
+            l = len(b)    
+
+        # Define the other bins accordingly
+        if ampl_bins is None:
+            ampl_bins = int(np.rint(injrec.shape[0] / l / flares_per_bin))
+        elif dur_bins is None:
+            dur_bins = int(np.rint(injrec.shape[0] / l / flares_per_bin))
+    
+    # If no bins are specified, choose bins of equal size
+    # with approximately `flares_per_bin` in each bin:
+    elif ~bins.any():
+        bins = int(np.rint(np.sqrt(injrec.shape[0] / flares_per_bin)))
+        ampl_bins, dur_bins = bins, bins
+        print(bins)
+
+    return ampl_bins, dur_bins

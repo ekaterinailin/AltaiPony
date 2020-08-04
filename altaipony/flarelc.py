@@ -339,10 +339,10 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
                 LOG.error('If you wish to use a custom detrending function you'
                           ' must pass a callable to the "func" parameter.')
                 raise ValueError
-                
+
             new_lc = copy.deepcopy(self)
-            new_lc = func(new_lc, **kwargs)
-            
+            new_lc = func(new_lc, **kwargs)            
+
             if (np.isnan(new_lc.detrended_flux).all() | np.isnan(new_lc.detrended_flux_err).all()):
                 LOG.error('The custom de-trending function you passed does not'
                           ' return an detrended_flux or detrended_flux_err attri'
@@ -788,13 +788,14 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
         return _heatmap(flc, "ed_ratio", 
                         ampl_bins, dur_bins, flares_per_bin)
 
-    def characterize_flares(self, ampl_bins=80, dur_bins=160):
+    def characterize_flares(self, flares_per_bin=30, ampl_bins=None, dur_bins=None):
         """Use results from injection recovery to determine
         corrected flare characteristics.
         
         """
         flc = copy.deepcopy(self)
         flares = wrap_characterization_of_flares(flc.fake_flares, flc.flares,
+                                                 flares_per_bin=flares_per_bin,
                                                  ampl_bins=ampl_bins,
                                                  dur_bins=dur_bins)
         flc.flares = flares

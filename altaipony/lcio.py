@@ -117,7 +117,7 @@ def _from_mast_TESS(targetid, c, flux_type="PDCSAP_FLUX", cadence="long",
 # ----------------------------------------------------------
 # Read in local TPF (Kepler, K2, TESS) or LC (Kepler, K2, TESS, AltaiPony)
 
-def from_path(path, mode, mission):
+def from_path(path, mode, mission, **kwargs):
     """Construct a FlareLightCurve from
     a local LC or TPF file. Also loads
     AltaiPony-detrended light curves.
@@ -128,15 +128,18 @@ def from_path(path, mode, mission):
         Path to local file.
     mode : str
         "LC", "TPF", "AltaiPony"
-   mission : str
+    mission : str
         "Kepler", "K2", "TESS"
+    kwargs : dict
+        Keyword arguments to pass to _from_path_<XXX>
+        functions 
     """
     if mode == "LC":
-        return _from_path_LC(path, mission)
+        return _from_path_LC(path, mission, **kwargs)
     elif mode == "TPF":
-        return _from_path_TPF(path, mission)
+        return _from_path_TPF(path, mission, **kwargs)
     elif mode == "AltaiPony":
-        return _from_path_AltaiPony(path)
+        return _from_path_AltaiPony(path, **kwargs)
     else:
         raise KeyError("Invalid mode. Pass 'LC', 'TPF', or 'AltaiPony'.")
     return
