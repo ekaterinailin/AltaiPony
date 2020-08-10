@@ -13,6 +13,7 @@ from ..injrecanalysis import (characterize_flares,
                               wrap_characterization_of_flares,
                               plot_heatmap,
                               _heatmap,
+                              setup_bins,
                              )
 from ..flarelc import FlareLightCurve
                              
@@ -271,3 +272,101 @@ def test__heatmap():
         # It should also work if you give an array for one bin only
         ampl_bins, dur_bins, flares_per_bin = None, np.linspace(5e-4,.004,20), 7
         _heatmap(flcd, typ, ampl_bins, dur_bins, flares_per_bin)
+        
+        
+def test_setup_bins():
+    # Test a number of cases that could possibly be passed.
+    
+    # A failing example
+    # --------------------------------------------------------------
+    with pytest.raises(ValueError) as e:
+        val = np.linspace(0,130,30)
+        injrec = pd.DataFrame({"duration_d": val, "dur": val,
+                               "amplitude": val, "ampl_rec": val })
+        flares = pd.DataFrame({"dur": val, "ampl_rec": val })
+        setup_bins(injrec, flares, ampl_bins=None, 
+                   dur_bins=None, flares_per_bin=None)
+
+    # A working example
+    # --------------------------------------------------------------
+
+    # Hybrid use case
+
+    # Setup values
+    val = np.linspace(0,130,30)
+    injrec = pd.DataFrame({"duration_d": val, "dur": val, 
+                           "amplitude": val, "ampl_rec": val })
+    flares = pd.DataFrame({"dur": val, "ampl_rec": val })
+
+
+    # Run setup_bins
+    a, d = setup_bins(injrec, flares, ampl_bins=np.linspace(0,30,10),
+                      dur_bins=3, flares_per_bin=None)
+
+
+    # Do some checks
+    assert len(a) == 10
+    assert len(d) == 3
+    assert (a == np.linspace(0,30,10)).all()
+    assert (d == np.linspace(0,130,3)).all()
+
+    # Another working example
+    # --------------------------------------------------------------
+    # Hybrid use case
+
+    # Setup values
+    val = np.linspace(0,130,300)
+    injrec = pd.DataFrame({"duration_d": val, "dur": val, 
+                           "amplitude": val, "ampl_rec": val })
+    flares = pd.DataFrame({"dur": val, "ampl_rec": val })
+
+    # Run setup_bins
+    a, d = setup_bins(injrec, flares, ampl_bins=np.linspace(0,30,10),
+                      dur_bins=None, flares_per_bin=3)
+
+    assert len(a) == 10
+    assert len(d) == 10
+    assert (a == np.linspace(0, 30, len(a))).all()
+    assert (d == np.linspace(0, 130, len(d))).all()
+
+    # The lazy example
+    # --------------------------------------------------------------
+    # Just pass a number of flares per bin
+
+    # Setup values
+    val = np.linspace(0,130,300)
+    injrec = pd.DataFrame({"duration_d": val, "dur": val, 
+                           "amplitude": val, "ampl_rec": val })
+    flares = pd.DataFrame({"dur": val, "ampl_rec": val })
+
+    # Run setup_bins
+    a, d = setup_bins(injrec, flares, ampl_bins=None,
+                      dur_bins=None, flares_per_bin=3)
+
+    # Do some checks
+    assert len(a) == 10
+    assert len(d) == 10
+    assert (a == np.linspace(0, 130, len(a))).all()
+    assert (d == np.linspace(0, 130, len(d))).all()
+
+    # The control freak example
+    # --------------------------------------------------------------
+    # Set the bin edges manually.
+
+    # Setup values
+    val = np.linspace(0,130,300)
+    injrec = pd.DataFrame({"duration_d": val, "dur": val, 
+                           "amplitude": val, "ampl_rec": val })
+    flares = pd.DataFrame({"dur": val, "ampl_rec": val })
+
+    # Run setup_bins
+    abins, dbins = [2,30,88,210], [3,40,220,780]
+    a, d = setup_bins(injrec, flares, ampl_bins=abins,
+                      dur_bins=dbins, flares_per_bin=3)
+
+    # Do some checks
+    assert len(a) == 4
+    assert len(d) == 4
+
+    assert a == abins
+    assert d == dbins

@@ -30,7 +30,10 @@ def wrap_characterization_of_flares(injrec, flares, ampl_bins=None, dur_bins=Non
     DataFrame : flares and injrec merged with the characteristics
                 listed above.
     """
-    ampl_bins, dur_bins = setup_bins(injrec, ampl_bins=ampl_bins, 
+    # define observed flare duration
+    flares["dur"] = flares.tstop - flares.tstart
+    
+    ampl_bins, dur_bins = setup_bins(injrec, flares, ampl_bins=ampl_bins, 
                                      dur_bins=dur_bins,
                                      flares_per_bin=flares_per_bin)
 
@@ -39,22 +42,6 @@ def wrap_characterization_of_flares(injrec, flares, ampl_bins=None, dur_bins=Non
     injrec['rec'] = injrec.ed_rec.astype(bool).astype(float)
     injrec['dur'] = injrec.tstop - injrec.tstart
     flares['dur'] = flares.tstop - flares.tstart
-
-    ampl_bins = np.linspace(min(injrec.ampl_rec.min(),
-                                flares.ampl_rec.min(), 
-                                injrec.amplitude.min()),
-                            max(injrec.ampl_rec.max(),
-                                flares.ampl_rec.max(),
-                                injrec.amplitude.max()), 
-                            ampl_bins)
-
-    dur_bins = np.linspace(min(injrec.dur.min(),
-                               flares.dur.min(), 
-                               injrec.duration_d.min()),
-                           max(injrec.dur.max(),
-                               flares.dur.max(),
-                               injrec.duration_d.max()), 
-                           dur_bins)
 
     flcc, dscc = characterize_flares(flares, injrec, otherfunc="count",
                             amplrec="ampl_rec", durrec="dur",
@@ -108,7 +95,10 @@ def characterize_flares(flares, df, otherfunc="count",
     DataFrame: flares with additional columns
     """
     # define observed flare duration
-    flares["dur"] = flares.tstop - flares.tstart
+    if "dur" not in flares.columns:
+        flares["dur"] = flares.tstop - flares.tstart
+    if "dur" not in df.columns:
+        df["dur"] = df.tstop - df.tstart
     ds =dict()
 
     # calculate inj-rec ratio for ED, amplitude, and duration
@@ -283,10 +273,14 @@ def _heatmap(flcd, typ, ampl_bins, dur_bins, flares_per_bin):
         raise AttributeError("Missing injection-recovery data. "
                              "Use `FLC.load_injrec_data(path)` to fetch "
                              "some, or run `FLC.sample_flare_recovery()`.")
-
-    ampl_bins, dur_bins = setup_bins(flcd.fake_flares, ampl_bins=ampl_bins, 
-                                    dur_bins=dur_bins,
-                                    flares_per_bin=flares_per_bin)
+    
+    # define observed flare duration
+    flcd.flares["dur"] = flcd.flares.tstop - flcd.flares.tstart
+    flcd.fake_flares["dur"] = flcd.fake_flares.tstop - flcd.fake_flares.tstart
+    
+    ampl_bins, dur_bins = setup_bins(flcd.fake_flares, flcd.flares, 
+                                     ampl_bins=ampl_bins, dur_bins=dur_bins,
+                                     flares_per_bin=flares_per_bin)
    
     # Tile up the inj-rec table using the bins.
     dff, val = tile_up_injection_recovery(flcd.fake_flares, 
@@ -306,6 +300,8 @@ def _heatmap(flcd, typ, ampl_bins, dur_bins, flares_per_bin):
                        xlabel=f"{typ_map[typ][0]} {typ_map[typ][1]} [d]");
     
     return
+    
+    
 def plot_heatmap(df, val, label=None,
                  ID=None, valcbr=(0.,1.),
                  ovalcbr=(0,50), xlabel="duration [d]",
@@ -386,11 +382,20 @@ def plot_heatmap(df, val, label=None,
     return fig
 
 
-def setup_bins(injrec, ampl_bins=None, dur_bins=None, flares_per_bin=None):
-
-    # Did the user give appropriate bins?
-    bins = np.array([bool(ampl_bins is not None),bool(dur_bins is not None)])
+def setup_bins(injrec, flares, ampl_bins=None, dur_bins=None, flares_per_bin=None):
+    """Get amplitude and duration bins.
     
+    Parameters:
+    ------------
+    """
+    # Did the user give appropriate bins?
+    bins = np.array([bool(ampl_bins is not None), bool(dur_bins is not None)])
+    
+    # If only one or no bin is given explicitly, make dure flares_per_bin is set
+    if ((~bins.all()) & (flares_per_bin is None)):
+        raise ValueError("Give either ampl_bins and dur_bins, or either of "
+                         "the two together with flares_per_bin, or neither of"
+                         " the two but flares_per_bin.")
 
     # If only one out of [ampl_bins, dur_bins] is specified
     # specify the other by fixing the `flares_per_bin`
@@ -419,6 +424,28 @@ def setup_bins(injrec, ampl_bins=None, dur_bins=None, flares_per_bin=None):
     elif ~bins.any():
         bins = int(np.rint(np.sqrt(injrec.shape[0] / flares_per_bin)))
         ampl_bins, dur_bins = bins, bins
-        print(bins)
+        
+    # If no flares are given, substitute with fake flares
+    if flares.shape[0] == 0:
+        flares = injrec
+        
+    # Set bins according to data
+    if isinstance(ampl_bins, int):
+        ampl_bins = np.linspace(min(injrec.ampl_rec.min(),
+                                    flares.ampl_rec.min(), 
+                                    injrec.amplitude.min()),
+                                max(injrec.ampl_rec.max(),
+                                    flares.ampl_rec.max(),
+                                    injrec.amplitude.max()), 
+                                ampl_bins)
+                                
+    if isinstance(dur_bins, int):
+        dur_bins = np.linspace(min(injrec.dur.min(),
+                                   flares.dur.min(), 
+                                   injrec.duration_d.min()),
+                               max(injrec.dur.max(),
+                                   flares.dur.max(),
+                                   injrec.duration_d.max()), 
+                               dur_bins)
 
     return ampl_bins, dur_bins
