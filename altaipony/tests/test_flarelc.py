@@ -109,6 +109,29 @@ def test_sample_flare_recovery():
     assert flcd.detrended_flux == pytest.approx(flc.flux/2.)
 
 
+    # Custom case with detrend_kwargs
+    
+    def func(flc, kw=0):
+        flc.detrended_flux =  flc.flux/2.
+        flc.detrended_flux_err =  flc.flux_err/2.
+        a = kw + 3
+        assert a ==20
+        return flc
+    
+    flc = mock_flc(detrended=True)
+    
+    flcd, fflc = flc.sample_flare_recovery(iterations=10, inject_before_detrending=True,
+                                           func=func, mode="custom", 
+                                           detrend_kwargs={"kw":17})
+    #make sure no flares are injected overlapping true flares
+    data = flcd.fake_flares
+    assert data[(data.istart > 14) & (data.istart < 19)].shape[0] == 0
+    #test if all injected event are covered in the merged flares:
+    assert data.shape[0] == 10
+    assert fflc.gaps == [(0, 1000)]
+    assert np.median(fflc.it_med) == pytest.approx(500.005274113832/2.)
+    assert flcd.detrended_flux == pytest.approx(flc.flux/2.)
+
 def test_to_fits():
     # with light curve only:
     flc = from_path(pathkepler, mode="LC", mission="Kepler")
@@ -269,6 +292,18 @@ def test_detrend(**kwargs):
         return flc    
         
     new_flc = flc.detrend(mode="custom", func=custom_detrending)
+    assert (new_flc.flux == flc.flux).all()
+    assert (new_flc.flux_err == flc.flux_err).all()
+
+    # -- test a minimum function that does the job and has kwargs
+    def custom_detrending(flc, kw=0):
+        flc.detrended_flux = flc.flux
+        flc.detrended_flux_err = flc.flux_err
+        a = kw + 3 
+        assert a == 20
+        return flc    
+        
+    new_flc = flc.detrend(mode="custom", func=custom_detrending, kw=17)
     assert (new_flc.flux == flc.flux).all()
     assert (new_flc.flux_err == flc.flux_err).all()
 

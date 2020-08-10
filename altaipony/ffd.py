@@ -331,7 +331,7 @@ class FFD(object):
             self.fit_beta_to_powerlaw(**kwargs)
         
         elif mode == "mcmc":
-            self.fit_mcmc_powerlaw(**kwargs)
+            return self.fit_mcmc_powerlaw(**kwargs)
 
 # --------------------------------------------------------------------------------------
 

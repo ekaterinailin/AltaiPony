@@ -197,7 +197,7 @@ def tile_up_injection_recovery(df, typ, ampl="amplitude", dur="duration_d",
     if "dur" not in df.columns:
         df["dur"] = df.tstop - df.tstart
     
-    
+ 
     d1 = df.assign(Amplitude=pd.cut(df[ampl], ampl_bins),
                    Duration=pd.cut(df[dur],  dur_bins))
 
