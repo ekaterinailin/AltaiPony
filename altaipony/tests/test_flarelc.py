@@ -126,11 +126,13 @@ def test_sample_flare_recovery():
     #make sure no flares are injected overlapping true flares
     data = flcd.fake_flares
     assert data[(data.istart > 14) & (data.istart < 19)].shape[0] == 0
+    
     #test if all injected event are covered in the merged flares:
     assert data.shape[0] == 10
     assert fflc.gaps == [(0, 1000)]
     assert np.median(fflc.it_med) == pytest.approx(500.005274113832/2.)
     assert flcd.detrended_flux == pytest.approx(flc.flux/2.)
+    
     # Test that the original flare was not changed accidentally
     assert flcd.flares.loc[0,'ed_rec'] == pytest.approx(3455.8875941, rel=1e-4)
     assert flcd.flares['ed_rec_err'][0] < flc.flares['ed_rec'][0]
