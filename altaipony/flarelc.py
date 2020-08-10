@@ -436,13 +436,9 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
         lc = find_iterative_median(lc)
         
         lc_ = copy.deepcopy(lc)
-#        columns =  ['istart', 'istop', 'cstart', 'cstop', 'tstart', 'tstop',
-#                    'ed_rec', 'ed_rec_err', 'duration_d', 'amplitude', 'ed_inj',
-#                    'peak_time', 'ampl_rec']
-#        combined_irr = pd.DataFrame(columns=columns)
 
         widgets = [progressbar.Percentage(), progressbar.Bar()]
-        bar = progressbar.ProgressBar(widgets=widgets, max_value=iterations).start()
+        bar = progressbar.ProgressBar(widgets=widgets, maxval=iterations).start()
         for i in range(iterations):
             fake_lc = lc.inject_fake_flares(inject_before_detrending=inject_before_detrending,
                                                  fakefreq=fakefreq,
