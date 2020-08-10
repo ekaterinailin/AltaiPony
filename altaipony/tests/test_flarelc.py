@@ -215,7 +215,7 @@ def mock_flc(origin='TPF', detrended=False, ampl=1., dur=1):
             'quality' : quality, 'pipeline_mask' : pipeline_mask,
             'pixel_flux' : pixel_flux, 'campaign' : 5, 'ra' : 22.,
             'dec' : 22., 'mission' : 'K2', 'channel' : 55, 
-            'pixel_flux_err' : pixel_flux_err}
+            'pixel_flux_err' : pixel_flux_err, 'time_format': 'bjd'}
 
     if detrended == False:
         flc = FlareLightCurve(**keys)
