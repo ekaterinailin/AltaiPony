@@ -598,9 +598,8 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
 
 
     def inject_fake_flares(self, gapwindow=0.1, fakefreq=.005,
-                        inject_before_detrending=False, d=False, seed=None,
-                        **kwargs):
-
+                           inject_before_detrending=False, d=False, seed=None,
+                           **kwargs):
         '''
         Create a number of events, inject them in to data
         Use grid of amplitudes and durations, keep ampl in relative flux units
@@ -656,87 +655,146 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
         fake_lc = copy.deepcopy(self)
         LOG.debug(str() + '{} FakeFlares started'.format(datetime.datetime.now()))
         
+        # Either inject flares into the un-detrended light curve
         if inject_before_detrending == True:
             typ, typerr = 'flux', 'flux_err'
             LOG.debug('Injecting before detrending.')
             
+        # ... or into the detrended one
         elif inject_before_detrending == False:
             typ, typerr = 'detrended_flux', 'detrended_flux_err'
             LOG.debug('Injecting after detrending.')
-            
-        fakeres = pd.DataFrame()
-        #fake_lc.__dict__[typ] = fake_lc.__dict__[typ]
-        #fake_lc.__dict__[typerr] = fake_lc.__dict__[typerr]
+        
+        # How many flares do you want to inject
+        # At least one per gap
+        # or as defined by the frequency
         nfakesum = max(len(fake_lc.gaps),
                        int(np.rint(fakefreq *
                            (fake_lc.time.max() - fake_lc.time.min()))
                            )
                        )
         
+        # Use a light curve where you know the median flux
         fake_lc = find_iterative_median(fake_lc)
-        t0_fake = np.zeros(nfakesum, dtype='float')
-        ed_fake = np.zeros(nfakesum, dtype='float')
-        dur_fake = np.zeros(nfakesum, dtype='float')
-        ampl_fake = np.zeros(nfakesum, dtype='float')
+        
+        # Init arrays for the synthetic flare parameters
+        t0_fake = np.zeros(nfakesum, dtype='float') # peak times
+        ed_fake = np.zeros(nfakesum, dtype='float') # ED
+        dur_fake = np.zeros(nfakesum, dtype='float') # duration
+        ampl_fake = np.zeros(nfakesum, dtype='float') # amplitude
+        
+        # Init the synthetic flare counter to allow to point to the right
+        # places in the arrays above (XXX_fake etc.)
         ckm = 0
+        
+        # Iterate over continuous observing periods
         for (le,ri) in fake_lc.gaps:
             
+            # Pick the observing period
             gap_fake_lc = fake_lc[le:ri]
-            nfake = max(1,int(np.rint(fakefreq * (gap_fake_lc.time.max() - gap_fake_lc.time.min()))))
-            LOG.debug('Inject {} fake flares into a {} datapoint long array.'.format(nfake,ri-le))
-
-            real_flares_in_gap = self.flares[(self.flares.istart >= le) & (self.flares.istop <= ri)]
+            
+            # Define the number of synthetic flares you want to inject
+            # minimum of 1
+            nfake = max(1, int(np.rint(fakefreq *
+                                       (gap_fake_lc.time.max() -
+                                        gap_fake_lc.time.min()
+                                       )
+                                      )
+                              )
+                        )
+            LOG.debug(f'Inject {nfake} fake flares into a {ri-le} datapoint long array.')
+            
+            # Are there real flares to deal with in the gap?
+            real_flares_in_gap = self.flares[(self.flares.istart >= le) &
+                                             (self.flares.istop <= ri)]
+                                             
+            # Pick flux, time, and flux error arrays 
             error = gap_fake_lc.__dict__[typerr]
             flux = gap_fake_lc.__dict__[typ]
             time = gap_fake_lc.time
+            
+            # generate the time constraints for the flares you want to inject
             mintime, maxtime = np.min(time), np.max(time)
             dtime = maxtime - mintime
+            
+            # generate a distribution of durations and amplitudes
             distribution  = generate_fake_flare_distribution(nfake, d=d,
                                                             seed=seed, **kwargs)
-      
+            # add the distribution for this observing period 
+            # to the full list of injected flares
             dur_fake[ckm:ckm+nfake], ampl_fake[ckm:ckm+nfake] = distribution
-            #loop over the numer of fake flares you want to generate
+            
+            # loop over the numer of fake flares you want to generate
             for k in range(ckm, ckm+nfake):
+                
                 # generate random peak time, avoid known flares
                 isok = False
+                
+                # keep picking new random peak times for your synthetic flares
+                # until it does not overlap with a real one
                 while isok is False:
+                
                     # choose a random peak time
+                    # if you set a seed you will get the same synthetic flares
+                    # all the time
                     if isinstance(seed, int):
-                        t0 = (mod_random(1, d=d, seed=seed*k) * dtime + mintime)[0]
+                        t0 = (mod_random(1, d=d, seed=seed * k) * dtime + mintime)[0]
+                        
+                    # if you do note set a seed, the synthetic flares will be
+                    # randomly distributed
                     elif seed is None:
                         t0 = (mod_random(1, d=d) * dtime + mintime)[0]
                      
-                    #t0 =  random.uniform(np.min(time),np.max(time))
-                    # Are there any real flares to deal with?
-                    if real_flares_in_gap.tstart.shape[0]>0:
+                    # Check if there are there any real flares to deal with
+                    # at that peak time. Only relevant if there were any flares
+                    # detected at all:
+                    if real_flares_in_gap.tstart.shape[0] > 0:
+                    
                         # Are there any real flares happening at peak time?
                         # Fake flares should not overlap with real ones.
-                        b = ( real_flares_in_gap[(t0 >= real_flares_in_gap.tstart) &
+                        b = (real_flares_in_gap[(t0 >= real_flares_in_gap.tstart) &
                                                 (t0 <= real_flares_in_gap.tstop)].
-                                                shape[0] )
+                                                 shape[0] )
+                                                 
+                        # number of flares that overlap should be 0
                         if b == 0:
                             isok = True
+                            
+                    # No real flares, no trouble:
                     else:
                         isok = True
+                        
+                    # add the peak time to the list    
                     t0_fake[k] = t0
+                    
+                    # generate the flare flux from the Davenport 2014 model
                     fl_flux = aflare(time, t0, dur_fake[k], ampl_fake[k])
+                    
+                    # calculate the injected ED
                     ed_fake[k] = _equivalent_duration(time, fl_flux)
-                    #re-define injected duration (not as multiple times FWHM):
-                    i_visible_flare = np.where(fl_flux > (np.median(error) / np.median(flux)))[0]
-                # inject flare in to light curve
-                fake_lc.__dict__[typ][le:ri] = fake_lc.__dict__[typ][le:ri] + fl_flux * fake_lc.it_med[le:ri]
+                    
+                # inject flare in to light curve by adding the flare flux
+                fake_lc.__dict__[typ][le:ri] = (fake_lc.__dict__[typ][le:ri] +
+                                                fl_flux * fake_lc.it_med[le:ri])
+                
+            # Increment the counter
             ckm += nfake
-        #error minimum is a safety net for the spline function if mode=3
+            
+        # error minimum is a safety net for the spline function if mode=3
         fake_lc.__dict__[typerr] = max( 1e-10, np.nanmedian( pd.Series(fake_lc.__dict__[typ]).
                                                 rolling(3, center=True).
                                                 std() ) )*np.ones_like(fake_lc.__dict__[typ])
-        
-        injected_events = {'duration_d' : dur_fake, 'amplitude' : ampl_fake,
-                        'ed_inj' : ed_fake, 'peak_time' : t0_fake}
+        # Put the data together
+        injected_events = {'duration_d' : dur_fake,
+                           'amplitude' : ampl_fake,  
+                           'ed_inj' : ed_fake,
+                           'peak_time' : t0_fake}
         fake_lc.fake_flares = pd.DataFrame(injected_events)
-
+        
+        # Free up space
         del dur_fake
         del ampl_fake
+        
         return fake_lc
 
     def load_injrec_data(self, path, **kwargs):
