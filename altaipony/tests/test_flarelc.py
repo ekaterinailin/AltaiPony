@@ -215,7 +215,7 @@ def mock_flc(origin='TPF', detrended=False, ampl=1., dur=1):
             'quality' : quality, 'pipeline_mask' : pipeline_mask,
             'pixel_flux' : pixel_flux, 'campaign' : 5, 'ra' : 22.,
             'dec' : 22., 'mission' : 'K2', 'channel' : 55, 
-            'pixel_flux_err' : pixel_flux_err, 'time_format': 'bjd'}
+            'pixel_flux_err' : pixel_flux_err, 'time_format': 'bkjd'}
 
     if detrended == False:
         flc = FlareLightCurve(**keys)
@@ -253,7 +253,8 @@ def test_detrend(**kwargs):
     try:
         flc = flc.detrend("k2sc", de_niter=2,**kwargs)
         shape = flc.flux.shape
-        for att in ["detrended_flux", "flux_err", "flux", "time", "quality"]:
+        for att in ["detrended_flux", "detrended_flux_err",
+                    "flux_err", "flux", "time", "quality"]:
             assert flc[att].shape == shape
         assert flc.pv[0] == pytest.approx(-3.895176160613472, rel=0.1)
     except np.linalg.linalg.LinAlgError:
@@ -285,6 +286,10 @@ def test_detrend(**kwargs):
         assert aplc.flux.shape[0] == daplc.detrended_flux.shape[0] #no NaNs to throw out
         assert daplc.flux.max() > daplc.detrended_flux.max() # flare sits on a LC part above quiescent level
         assert (aplc.flux_err == daplc.detrended_flux_err).all() # uncertainties are simply kept
+        # Test that shapes of arrays are kept
+        for att in ["detrended_flux", "detrended_flux_err",
+            "flux_err", "flux", "time", "quality"]:
+            assert flc[att].shape == shape
         
     # TEST CUSTOM DETRENDING
     
