@@ -234,6 +234,9 @@ def _convert_TPF_to_FLC(tpf, lc):
     z.update(keys)
     if "_flux_unit" in z.keys():
         del z["_flux_unit"]
+    if '_required_columns_relax' in z.keys():
+        del z['_required_columns_relax']
+
     flc = FlareLightCurve(time_unit=u.day, origin="TPF",
                           flux_unit = u.electron/u.s, **z)
     if flc.pos_corr1 is None:

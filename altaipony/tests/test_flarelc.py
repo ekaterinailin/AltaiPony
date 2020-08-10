@@ -131,6 +131,17 @@ def test_sample_flare_recovery():
     assert fflc.gaps == [(0, 1000)]
     assert np.median(fflc.it_med) == pytest.approx(500.005274113832/2.)
     assert flcd.detrended_flux == pytest.approx(flc.flux/2.)
+    # Test that the original flare was not changed accidentally
+    assert flcd.flares.loc[0,'ed_rec'] == pytest.approx(3455.8875941, rel=1e-4)
+    assert flcd.flares['ed_rec_err'][0] < flc.flares['ed_rec'][0]
+    assert flcd.flares['istart'][0] == 15
+    assert flcd.flares['istop'][0] == 19
+    assert flcd.flares['cstop'][0] == 19
+    assert flcd.flares['cstart'][0] == 15
+    assert flcd.flares['tstart'][0] == pytest.approx(0.3125, rel=1e-4)
+    assert flcd.flares['tstop'][0] == pytest.approx(0.395833, rel=1e-4)
+    assert flcd.flares['total_n_valid_data_points'][0] == 1000
+    assert flcd.flares['ampl_rec'][0] == pytest.approx(1, rel=1e-3)
 
 def test_to_fits():
     # with light curve only:
@@ -351,6 +362,7 @@ def test_find_flares():
     assert flc.flares['tstart'][0] == pytest.approx(0.3125, rel=1e-4)
     assert flc.flares['tstop'][0] == pytest.approx(0.395833, rel=1e-4)
     assert flc.flares['total_n_valid_data_points'][0] == 1000
+    assert flc.flares['ampl_rec'][0] == pytest.approx(1, rel=1e-3)
     
 
 def test_inject_fake_flares():
