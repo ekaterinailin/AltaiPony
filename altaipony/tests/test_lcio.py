@@ -62,10 +62,16 @@ def test__from_path_AltaiPony():
                          [("TIC 395130640","TESS", 11,"LC", "short", 11, None, None ),
                           ("EPIC 211119999", "K2", 4, "LC", "long", None, 4, None),
                           ("EPIC 211119999", "K2", 4, "TPF", "long", None, 4, None),
-                          ("KIC 9726699", "Kepler", 6, "LC", "long", None, None, 6)
+                          ("KIC 9726699", "Kepler", 6, "LC", "long", None, None, 6),
+                          ("KIC 100004076", "Kepler", 14, "LC", "short", None, None, 14)
                           ])
 def test_from_mast(ID, mission, c, mode, cadence, sector, campaign, quarter):
     flc = from_mast(ID, mission, c, mode=mode, cadence=cadence)
+    # Only for the KIC 100004706 target:
+    if isinstance(flc, list):
+        assert len(flc) == 3 
+        flc = flc[0]
+    # -----------------------------------    
     assert flc.targetid == int(ID.split(" ")[1])
     assert flc.mission == mission
     assert flc.flux.shape[0] == flc.time.shape[0]
