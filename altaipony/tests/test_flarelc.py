@@ -238,14 +238,19 @@ def test_detrend(**kwargs):
     # Test K2SC de-trending:
     flc = mock_flc()
     try:
-        flc = flc.detrend("k2sc", de_niter=3,**kwargs)
-        assert flc.detrended_flux.shape == flc.flux.shape
+        flc = flc.detrend("k2sc", de_niter=2,**kwargs)
+        shape = flc.flux.shape
+        for att in ["detrended_flux", "flux_err", "flux", "time", "quality"]:
+            assert flc[att].shape == shape
         assert flc.pv[0] == pytest.approx(-3.895176160613472, rel=0.1)
     except np.linalg.linalg.LinAlgError:
         warning.warn('Detrending of mock LC failed, this happens.')
         pass
 
     #test non TPF derived LC fails
+    flc = mock_flc(origin='LC', detrended=False, ampl=1., dur=1)
+    with pytest.raises(ValueError) as e:
+        flc = flc.detrend("k2sc", de_niter=2,**kwargs)
     #test the shapes are the same for all
     # test that the necessary attributes are kept
     
