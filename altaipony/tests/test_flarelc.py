@@ -1,7 +1,9 @@
 import numpy as np
+import pandas as pd
 import pytest
 
-#from astropy.io.fits.hdu.hdulist import fitsopen
+import os
+
 from inspect import currentframe, getframeinfo
 
 from ..flarelc import FlareLightCurve
@@ -135,7 +137,7 @@ def test_sample_flare_recovery():
     
     # Test that the original flare was not changed accidentally
     assert flcd.flares.loc[0,'ed_rec'] == pytest.approx(3455.8875941, rel=1e-4)
-    assert flcd.flares['ed_rec_err'][0] < flc.flares['ed_rec'][0]
+    assert flcd.flares['ed_rec_err'][0] < flcd.flares['ed_rec'][0]
     assert flcd.flares['istart'][0] == 15
     assert flcd.flares['istop'][0] == 19
     assert flcd.flares['cstop'][0] == 19
@@ -144,6 +146,23 @@ def test_sample_flare_recovery():
     assert flcd.flares['tstop'][0] == pytest.approx(0.395833, rel=1e-4)
     assert flcd.flares['total_n_valid_data_points'][0] == 1000
     assert flcd.flares['ampl_rec'][0] == pytest.approx(1, rel=1e-3)
+    
+    # Test that adding another round of injrec will append to the path
+    flc = mock_flc(detrended=True)
+    flcd, fflc = flc.sample_flare_recovery(iterations=10, inject_before_detrending=False,
+                                           save=True)
+    size = len(flcd.fake_flares)
+    
+    flcd, fflc = flcd.sample_flare_recovery(iterations=10, inject_before_detrending=False,
+                                           save=True)
+    size2 = len(flcd.fake_flares)
+    assert size * 2 == size2
+    
+    path ='10_800000000_inj_after_5.csv'
+    saved = pd.read_csv(path)
+    assert saved.shape[0] == size2
+    
+    os.remove(path)
 
 def test_to_fits():
     # with light curve only:

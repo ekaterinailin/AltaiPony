@@ -434,22 +434,23 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
         lc = lc.find_gaps()
         lc = lc.find_flares()
         lc = find_iterative_median(lc)
-        columns =  ['istart', 'istop', 'cstart', 'cstop', 'tstart', 'tstop',
-                    'ed_rec', 'ed_rec_err', 'duration_d', 'amplitude', 'ed_inj',
-                    'peak_time', 'ampl_rec']
-        combined_irr = pd.DataFrame(columns=columns)
+        
+        lc_ = copy.deepcopy(lc)
+#        columns =  ['istart', 'istop', 'cstart', 'cstop', 'tstart', 'tstop',
+#                    'ed_rec', 'ed_rec_err', 'duration_d', 'amplitude', 'ed_inj',
+#                    'peak_time', 'ampl_rec']
+#        combined_irr = pd.DataFrame(columns=columns)
 
         widgets = [progressbar.Percentage(), progressbar.Bar()]
         bar = progressbar.ProgressBar(widgets=widgets, max_value=iterations).start()
         for i in range(iterations):
-            fake_lc = copy.deepcopy(lc)
-            fake_lc = fake_lc.inject_fake_flares(inject_before_detrending=inject_before_detrending,
+            fake_lc = lc.inject_fake_flares(inject_before_detrending=inject_before_detrending,
                                                  fakefreq=fakefreq,
                                                  **kwargs)
     
             if save_lc_to_file == True:
-                fake_lc.to_fits("{}before.fits".format(folder))
-                print("saved EPIC {} LC before detrending".format(self.targetit))
+                fake_lc.to_fits("{folder}before.fits")
+                print(f"saved {self.targetit} LC before detrending")
                 
             injs = fake_lc.fake_flares
            
@@ -461,31 +462,42 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
             recs = fake_lc.flares
           
             if save_lc_to_file == True:
-                fake_lc.to_fits("{}after.fits".format(folder))
-                print("saved EPIC {} LC after detrending".format(self.targetit))
+                fake_lc.to_fits(f"{folder}after.fits")
+                print(f"saved {self.targetit} LC after detrending")
                 
-            injection_recovery_results = merge_fake_and_recovered_events(injs, recs)
-     
-            combined_irr = combined_irr.append(injection_recovery_results,
-                                                      ignore_index=True,)
+            injrec_results = merge_fake_and_recovered_events(injs, recs)
 
             bar.update(i + 1)
+            
             if save == True:
-                
+            
+                #Define default path if needed
+                if path is None:
+                    path = (f'{iterations}_{lc.targetid}_inj_'
+                            f'{injrecstr[inject_before_detrending]}_'
+                            f'{lc.campaign}.csv')
+                            
+                # If it already exists append new injrec to the end       
                 if os.path.exists(path):
-                    
-                    with open(path, 'w') as f:
-                        combined_irr.to_csv(f, index=False)
-                
+                    with open(path, 'a') as f:
+                        injrec_results.to_csv(f, index=False, header=False)
+                # If it doesn't then write it out but keep the header
                 else:
+                    injrec_results.to_csv(path, index=False)
+            
+            # Add to previous runs of sample_flare_recovery on the same LC or create new table    
+            if lc.fake_flares.shape[0] > 0:    
+                lc.fake_flares = lc.fake_flares.append(injrec_results, ignore_index=True)
+            else:
+                lc.fake_flares = injrec_results
                 
-                    if path is None:
-                        path = '{}_{}_inj_{}_{}.csv'.format(iterations, lc.targetid, injrecstr[inject_before_detrending], lc.campaign)
-                    
-                    else:
-                        combined_irr.to_csv(path, index=False)
-                        
-        lc.fake_flares = combined_irr
+    
+        if save == True:
+            # Finally read in the result                    
+            lc.fake_flares = pd.read_csv(path)  
+
+        
+        # End monitoring
         bar.finish()
         return lc, fake_lc
 
@@ -659,7 +671,11 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
         fakeres = pd.DataFrame()
         #fake_lc.__dict__[typ] = fake_lc.__dict__[typ]
         #fake_lc.__dict__[typerr] = fake_lc.__dict__[typerr]
-        nfakesum = max(len(fake_lc.gaps), int(np.rint(fakefreq * (fake_lc.time.max() - fake_lc.time.min()))))
+        nfakesum = max(len(fake_lc.gaps),
+                       int(np.rint(fakefreq *
+                           (fake_lc.time.max() - fake_lc.time.min()))
+                           )
+                       )
         
         fake_lc = find_iterative_median(fake_lc)
         t0_fake = np.zeros(nfakesum, dtype='float')
@@ -711,10 +727,6 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
                     ed_fake[k] = _equivalent_duration(time, fl_flux)
                     #re-define injected duration (not as multiple times FWHM):
                     i_visible_flare = np.where(fl_flux > (np.median(error) / np.median(flux)))[0]
-                    #try:
-                        #dur_fake[k] = time[np.max(i_visible_flare)] - time[np.min(i_visible_flare)]
-                    #except:
-                        #dur_fake[k] = 0
                 # inject flare in to light curve
                 fake_lc.__dict__[typ][le:ri] = fake_lc.__dict__[typ][le:ri] + fl_flux * fake_lc.it_med[le:ri]
             ckm += nfake
@@ -725,10 +737,7 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
         
         injected_events = {'duration_d' : dur_fake, 'amplitude' : ampl_fake,
                         'ed_inj' : ed_fake, 'peak_time' : t0_fake}
-        fake_lc.fake_flares = fake_lc.fake_flares.append(pd.DataFrame(injected_events),
-                                                        ignore_index=True,)
-        #workaround
-        fake_lc.fake_flares = fake_lc.fake_flares[fake_lc.fake_flares.peak_time != 0.]
+        fake_lc.fake_flares = pd.DataFrame(injected_events)
 
         del dur_fake
         del ampl_fake
