@@ -58,18 +58,23 @@ def test__from_path_AltaiPony():
     
     
 
-@pytest.mark.parametrize("ID,mission,c,mode,cadence,sector,campaign,quarter",
-                         [("TIC 395130640","TESS", 11,"LC", "short", 11, None, None ),
-                          ("EPIC 211119999", "K2", 4, "LC", "long", None, 4, None),
-                          ("EPIC 211119999", "K2", 4, "TPF", "long", None, 4, None),
-                          ("KIC 9726699", "Kepler", 6, "LC", "long", None, None, 6),
-                          ("KIC 100004076", "Kepler", 14, "LC", "short", None, None, 14)
+@pytest.mark.parametrize("ID,mission,c,mode,cadence,sector,campaign,quarter,lflc",
+                         [("TIC 395130640","TESS", 11,"LC", "short", 11, None, None,1 ),
+                          ("EPIC 211119999", "K2", 4, "LC", "long", None, 4, None,1),
+                          ("EPIC 211119999", "K2", 4, "TPF", "long", None, 4, None,1),
+                          ("KIC 9726699", "Kepler", 6, "LC", "long", None, None, 6,1),
+                          ("KIC 100004076", "Kepler", 14, "LC", "short", None, None, 14,3),
+                          ("TIC 395130640","TESS", None,"LC", "short", 11, None, None,2),
+                          ("EPIC 211119999", "K2", None, "LC", "long", None, 4, None,1),
+                          ("EPIC 211119999", "K2", None, "TPF", "long", None, 4, None,1),
+                          ("KIC 9726699", "Kepler", None, "LC", "long", None, None, 0,15),
+                          ("KIC 100004076", "Kepler", None, "LC", "short", None, None, 14,3)
                           ])
-def test_from_mast(ID, mission, c, mode, cadence, sector, campaign, quarter):
+def test_from_mast(ID, mission, c, mode, cadence, sector, campaign, quarter, lflc):
     flc = from_mast(ID, mission, c, mode=mode, cadence=cadence)
     # Only for the KIC 100004706 target:
     if isinstance(flc, list):
-        assert len(flc) == 3 
+        assert len(flc) >= lflc 
         flc = flc[0]
     # -----------------------------------    
     assert flc.targetid == int(ID.split(" ")[1])

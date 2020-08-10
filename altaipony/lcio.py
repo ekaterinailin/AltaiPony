@@ -64,10 +64,10 @@ def from_mast(targetid, mission, c, mode="LC", **kwargs):
 def _from_mast_K2(targetid, mode, c, flux_type="PDCSAP_FLUX",
                   cadence="long", aperture_mask="default",
                   download_dir=None):
-    
+    mission = "K2"
     if mode == "TPF":
         
-        tpffilelist = search_targetpixelfile(targetid, mission="K2",
+        tpffilelist = search_targetpixelfile(targetid, mission=mission,
                                              campaign=c, cadence=cadence)
         tpf = tpffilelist.download(download_dir=download_dir)
         
@@ -82,18 +82,69 @@ def _from_mast_K2(targetid, mode, c, flux_type="PDCSAP_FLUX",
     
     elif mode == "LC":
         
-        flcfilelist = search_lightcurvefile(targetid, mission="K2",
+        flcfilelist = search_lightcurvefile(targetid, mission=mission,
                                             campaign=c, cadence=cadence)
-        flcfile = flcfilelist.download(download_dir=download_dir)
-        lc = flcfile.get_lightcurve(flux_type)
-        flc = _convert_LC_to_FLC(lc, origin="KLC")
-        return flc
+        
+        return _handle_missions(flcfilelist, mission, flux_type,
+                                cadence, download_dir, targetid,
+                                c)
 
 
 def _from_mast_Kepler(targetid, c, flux_type="PDCSAP_FLUX", cadence="long",
                       download_dir=None):
-    flcfilelist = search_lightcurvefile(targetid, mission="Kepler",
+                      
+    mission = "Kepler"
+    flcfilelist = search_lightcurvefile(targetid, mission=mission,
                                         quarter=c, cadence=cadence)
+                                        
+    return _handle_missions(flcfilelist, mission, flux_type,
+                            cadence, download_dir, targetid,
+                            c)
+
+
+def _from_mast_TESS(targetid, c, flux_type="PDCSAP_FLUX", cadence="long",
+                    download_dir=None):
+                    
+    mission = "TESS"
+    flcfilelist = search_lightcurvefile(targetid, mission=mission,
+                                        sector=c, cadence=cadence)
+
+    return _handle_missions(flcfilelist, mission, flux_type,
+                            cadence, download_dir, targetid,
+                            c)
+        
+def _handle_missions(flcfilelist, mission, flux_type,
+                     cadence, download_dir, targetid, c):
+    """Handle the download in different missions.
+    
+    Parameters:
+    -----------
+    flcfilelist : lightkurve.SearchResult
+        table of light curves that fit the query
+    mission : str
+        "TESS", "Kepler", or "K2"
+    flux_type : str
+        SAP_FLUX or PDCSAP_FLUX
+    cadence : str
+        short or long
+    download_dir : str
+        path to download to, defaults to lightkurve cache directory
+    targetid : str or int
+        queried target ID
+    c : int or list of ints or None
+        campaigns, quarter or sectors. If None is passed,
+        will return all available.
+    
+    Return:
+    -------
+    FlareLightCurve    
+    """
+    missiondict = {"TESS":["sector","TLC"],
+                   "K2":["campaign","KLC"],
+                   "Kepler":["quarter","KLC"],} 
+                   
+    S, origin = missiondict[mission]   
+    
     if len(flcfilelist)==1:
         flcfile = flcfilelist.download(download_dir=download_dir)
         lc = flcfile.get_lightcurve(flux_type)
@@ -102,27 +153,15 @@ def _from_mast_Kepler(targetid, c, flux_type="PDCSAP_FLUX", cadence="long",
         return flc
 
     elif len(flcfilelist)>1:
-        warnings.warn(f"Multiple Kepler light curves for {targetid}"
-                      f" in quarter {c}. Downloading all to list.")
+        warnings.warn(f"Multiple TESS light curves for {targetid}"
+                      f" in {S}(s) {c}. Downloading all to list.")
         lclist = []
         flcfiles = flcfilelist.download_all(download_dir=download_dir)
         for flcfile in flcfiles:
             lc = flcfile.get_lightcurve(flux_type)
-            flc = _convert_LC_to_FLC(lc, origin="KLC")
+            flc = _convert_LC_to_FLC(lc, origin=origin)
             lclist.append(flc)
-        return lclist
-
-
-def _from_mast_TESS(targetid, c, flux_type="PDCSAP_FLUX", cadence="long",
-                    download_dir=None):
-    flcfilelist = search_lightcurvefile(targetid, mission="TESS",
-                                        sector=c, cadence=cadence)
-    flcfile = flcfilelist.download(download_dir=download_dir)
-    print(flcfile)
-    lc = flcfile.get_lightcurve(flux_type)
-    flc = _convert_LC_to_FLC(lc, origin="TLC", sector=c)    
-    return flc
-
+        return lclist    
 
 # ----------------------------------------------------------
 

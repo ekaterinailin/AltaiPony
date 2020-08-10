@@ -255,7 +255,7 @@ def test_detrend(**kwargs):
         shape = flc.flux.shape
         for att in ["detrended_flux", "detrended_flux_err",
                     "flux_err", "flux", "time", "quality"]:
-            assert flc[att].shape == shape
+            assert getattr(flc, att).shape == shape
         assert flc.pv[0] == pytest.approx(-3.895176160613472, rel=0.1)
     except np.linalg.linalg.LinAlgError:
         warning.warn('Detrending of mock LC failed, this happens.')
@@ -289,7 +289,7 @@ def test_detrend(**kwargs):
         # Test that shapes of arrays are kept
         for att in ["detrended_flux", "detrended_flux_err",
             "flux_err", "flux", "time", "quality"]:
-            assert flc[att].shape == shape
+            assert getattr(flc, att).shape == shape
         
     # TEST CUSTOM DETRENDING
     
