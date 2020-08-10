@@ -118,6 +118,7 @@ def _from_mast_TESS(targetid, c, flux_type="PDCSAP_FLUX", cadence="long",
     flcfilelist = search_lightcurvefile(targetid, mission="TESS",
                                         sector=c, cadence=cadence)
     flcfile = flcfilelist.download(download_dir=download_dir)
+    print(flcfile)
     lc = flcfile.get_lightcurve(flux_type)
     flc = _convert_LC_to_FLC(lc, origin="TLC", sector=c)    
     return flc
