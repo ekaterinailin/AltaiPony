@@ -223,6 +223,9 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
     def find_gaps(self, maxgap=0.09, minspan=10, splits=[]):
         '''
         Find gaps in light curve and stores them in the gaps attribute.
+        If required, adds additional splits in an arbitrary number of places.
+        Caution: passing splits values means that you override the minspan
+        and maxgap.
 
         Parameters
         ------------
