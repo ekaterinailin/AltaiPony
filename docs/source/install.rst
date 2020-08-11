@@ -18,12 +18,6 @@ You will also need to install **k2sc** (`Aigrain et al. 2016`_) from this fork_ 
    cd k2sc
    python3 setup.py install
    
-In some cases you will have to install **pybind11**, too:
-
-:: 
-   
-   pip install pybind11
-
 
 Getting Started
 ^^^^^^^^^^^^^^^^
