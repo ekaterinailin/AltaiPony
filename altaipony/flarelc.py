@@ -326,7 +326,8 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
                     else:
                         LOG.info('De-trending successfully completed.')
 
-                except np.linalg.linalg.LinAlgError:
+                except np.linalg.linalg.LinAlgError as e:
+                    LOG.error(e)
                     LOG.error('Detrending failed because probably Cholesky '
                               'decomposition failed. Try again, you shall succeed.')
                 new_lc.__class__ = FlareLightCurve
