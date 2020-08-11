@@ -298,7 +298,7 @@ def test_detrend():
     #test non TPF derived LC fails
     flc = mock_flc(origin='LC', detrended=False, ampl=1., dur=1)
     with pytest.raises(ValueError) as e:
-        flc = flc.detrend("k2sc", de_niter=2,**kwargs)
+        flc = flc.detrend("k2sc", de_niter=2,)
     #test the shapes are the same for all
     # test that the necessary attributes are kept
     
