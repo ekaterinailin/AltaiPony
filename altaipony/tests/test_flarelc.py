@@ -13,6 +13,64 @@ from ..lcio import from_path
 from .. import PACKAGEDIR
 from . import test_ids, test_paths, pathkepler, pathAltaiPony, pathk2TPF
 
+def mock_flc(origin='TPF', detrended=False, ampl=1., dur=1):
+    """
+    Mocks a FlareLightCurve with a sinusoid variation and a single positive outlier.
+
+    Parameter
+    -----------
+    origin : 'TPF' or str
+        Mocks a specific origin, such as 'KLC', 'FLC' etc.
+    detrended : False or bool
+        If False, a sinusoid signal is added to the mock light curve.
+
+    Return
+    -------
+    FlareLightCurve
+    """
+    n = 1000
+    time = np.arange(0, n/48, 1./48.)
+    pixel_time = np.outer(time,np.full((3,3), 1)).reshape((1000,3,3))
+    np.random.seed(13854)
+
+    pipeline_mask = np.array([[False, False, False],
+                              [False, True,  False],
+                              [False, False, False],])
+    quality = np.zeros_like(time)
+    np.random.seed(33)
+    flux_err = np.random.rand(n)/100.
+    if detrended==False:
+        flux = np.sin(time/2)*7. + 500. +flux_err
+        pixel_flux = np.random.rand(len(time),3,3)/100.+500.+np.sin(pixel_time/2)*7.
+        pixel_flux_err = np.random.rand(len(time),3,3)/100.
+    else:
+        flux = 500. + flux_err
+        pixel_flux = np.random.rand(len(time),3,3)/100.+500.
+        pixel_flux_err = np.random.rand(len(time),3,3)/100.
+    flux[15:15+dur] += 500.*ampl
+    flux[15+dur:15+2*dur] += 250.*ampl
+    flux[15+2*dur:15+3*dur] += 130.*ampl
+    flux[15+3*dur:15+4*dur] += 80.*ampl
+    quality[17] = 1024
+    quality[18] = 128
+    keys = {'flux' : flux, 'flux_err' : flux_err, 'time' : time,
+            'pos_corr1' : np.zeros(n), 'pos_corr2' : np.zeros(n),
+            'cadenceno' : np.arange(n), 'targetid' : 800000000,
+            'origin' : origin, 'it_med' : np.full_like(time,500.005),
+            'quality' : quality, 'pipeline_mask' : pipeline_mask,
+            'pixel_flux' : pixel_flux, 'campaign' : 5, 'ra' : 22.,
+            'dec' : 22., 'mission' : 'K2', 'channel' : 55, 
+            'pixel_flux_err' : pixel_flux_err, 'time_format': 'bkjd'}
+
+    if detrended == False:
+        flc = FlareLightCurve(**keys)
+    else:
+        flc = FlareLightCurve(detrended_flux=flux,
+                              detrended_flux_err=flux_err,
+                              **keys)
+    return flc
+
+
 def test_get_saturation():
     flc = mock_flc(detrended=True)
     flc.pixel_flux[30,:] = 1e6 # add a saturated point
@@ -76,7 +134,6 @@ def test_mark_flagged_flares():
     assert ((qs == s1) | (qs == s2))
 
 def test_sample_flare_recovery():
-    
     
     # Generic case
     flc = mock_flc(detrended=True)
@@ -187,62 +244,6 @@ def test_repr():
 def test_getitem():
     pass
 
-def mock_flc(origin='TPF', detrended=False, ampl=1., dur=1):
-    """
-    Mocks a FlareLightCurve with a sinusoid variation and a single positive outlier.
-
-    Parameter
-    -----------
-    origin : 'TPF' or str
-        Mocks a specific origin, such as 'KLC', 'FLC' etc.
-    detrended : False or bool
-        If False, a sinusoid signal is added to the mock light curve.
-
-    Return
-    -------
-    FlareLightCurve
-    """
-    n = 1000
-    time = np.arange(0, n/48, 1./48.)
-    pixel_time = np.outer(time,np.full((3,3), 1)).reshape((1000,3,3))
-    np.random.seed(13854)
-
-    pipeline_mask = np.array([[False, False, False],
-                              [False, True,  False],
-                              [False, False, False],])
-    quality = np.zeros_like(time)
-    np.random.seed(33)
-    flux_err = np.random.rand(n)/100.
-    if detrended==False:
-        flux = np.sin(time/2)*7. + 500. +flux_err
-        pixel_flux = np.random.rand(len(time),3,3)/100.+500.+np.sin(pixel_time/2)*7.
-        pixel_flux_err = np.random.rand(len(time),3,3)/100.
-    else:
-        flux = 500. + flux_err
-        pixel_flux = np.random.rand(len(time),3,3)/100.+500.
-        pixel_flux_err = np.random.rand(len(time),3,3)/100.
-    flux[15:15+dur] += 500.*ampl
-    flux[15+dur:15+2*dur] += 250.*ampl
-    flux[15+2*dur:15+3*dur] += 130.*ampl
-    flux[15+3*dur:15+4*dur] += 80.*ampl
-    quality[17] = 1024
-    quality[18] = 128
-    keys = {'flux' : flux, 'flux_err' : flux_err, 'time' : time,
-            'pos_corr1' : np.zeros(n), 'pos_corr2' : np.zeros(n),
-            'cadenceno' : np.arange(n), 'targetid' : 800000000,
-            'origin' : origin, 'it_med' : np.full_like(time,500.005),
-            'quality' : quality, 'pipeline_mask' : pipeline_mask,
-            'pixel_flux' : pixel_flux, 'campaign' : 5, 'ra' : 22.,
-            'dec' : 22., 'mission' : 'K2', 'channel' : 55, 
-            'pixel_flux_err' : pixel_flux_err, 'time_format': 'bkjd'}
-
-    if detrended == False:
-        flc = FlareLightCurve(**keys)
-    else:
-        flc = FlareLightCurve(detrended_flux=flux,
-                              detrended_flux_err=flux_err,
-                              **keys)
-    return flc
 
 def test_invalid_lightcurve():
     """Invalid FlareLightCurves should not be allowed."""
