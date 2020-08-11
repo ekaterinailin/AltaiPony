@@ -1,6 +1,9 @@
-import logging
-from numpy import isfinite, nan, median, abs, ones_like, where, rint, sqrt, random
+import copy
 
+import pandas as pd
+import numpy as np
+			
+import logging
 LOG = logging.getLogger(__name__)
 
 def split_gaps(gaps, splits):
@@ -82,9 +85,9 @@ def k2sc_quality_cuts(data):
     ``centroid_row`` all have finite values.
     """
 
-    data2 = data[isfinite(data.time) &
-                 isfinite(data.pos_corr1) &
-                 isfinite(data.pos_corr2)]
+    data2 = data[np.isfinite(data.time) &
+                 np.isfinite(data.pos_corr1) &
+                 np.isfinite(data.pos_corr2)]
 
     return data2
 
@@ -95,14 +98,14 @@ def medsig(a):
        (1.48 x median of absolute deviations).
     Adapted from K2SC (Aigrain et al. 2016).
     """
-    l = isfinite(a)
+    l = np.isfinite(a)
     nfinite = l.sum()
     if nfinite == 0:
-        return nan, nan
+        return np.nan, np.nan
     if nfinite == 1:
-        return a[l], nan
-    med = median(a[l])
-    sig = 1.48 * median(abs(a[l] - med))
+        return a[l], np.nan
+    med = np.median(a[l])
+    sig = 1.48 * np.median(np.abs(a[l] - med))
     return med, sig
 
 
@@ -137,11 +140,11 @@ def sigma_clip(a, max_iter=10, max_sigma=3.,
     """
     
     # perform sigma-clipping on finite points only, or custom indices given by mexc
-    mexc  = isfinite(a) if mexc is None else isfinite(a) & mexc
+    mexc  = np.isfinite(a) if mexc is None else np.isfinite(a) & mexc
     #init different masks for up- and downward outliers
-    mhigh = ones_like(mexc)
-    mlow  = ones_like(mexc)
-    mask  = ones_like(mexc)
+    mhigh = np.ones_like(mexc)
+    mlow  = np.ones_like(mexc)
+    mask  = np.ones_like(mexc)
     
     # iteratively (with i) clip outliers above(below) (-)max_sigma *sig
     i, nm = 0, None
@@ -215,7 +218,7 @@ def expand_mask(a, divval=1):
         
         elif (v==1) & (j==1):
             if k >= 2:
-                addto = int(rint(3 * sqrt(k/divval)))
+                addto = int(np.rint(3 * np.sqrt(k/divval)))
                 a[i - k - addto : i - k] = 0
                 a[i : i + addto] = 0
                 i += addto
@@ -231,7 +234,7 @@ def generate_random_power_law_distribution(a, b, g, size=1, seed=None):
     for a<=x<=b
     """
     if seed is not None:
-        random.seed(seed)
-    r = random.random(size=size)
+        np.random.seed(seed)
+    r = np.random.random(size=size)
     ag, bg = a**g, b**g
     return (ag + (bg - ag) * r)**(1. / g)

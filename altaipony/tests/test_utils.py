@@ -1,6 +1,9 @@
+import pytest
+
 import numpy as np
 from ..flarelc import FlareLightCurve
 from ..utils import k2sc_quality_cuts, split_gaps
+
 
 def test_k2sc_quality_cuts():
     a = np.array([1, 3., 5, -np.inf])
