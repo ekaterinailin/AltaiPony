@@ -438,7 +438,7 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
         lc_ = copy.deepcopy(lc)
 
         widgets = [progressbar.Percentage(), progressbar.Bar()]
-        bar = progressbar.ProgressBar(widgets=widgets, maxval=iterations).start()
+        bar = progressbar.ProgressBar(widgets=widgets, max_value=iterations).start()
         for i in range(iterations):
             fake_lc = lc.inject_fake_flares(inject_before_detrending=inject_before_detrending,
                                                  fakefreq=fakefreq,
