@@ -40,8 +40,6 @@ def wrap_characterization_of_flares(injrec, flares, ampl_bins=None, dur_bins=Non
     flares = flares.dropna(subset=["ed_rec"])
     injrec.ed_rec = injrec.ed_rec.fillna(0)
     injrec['rec'] = injrec.ed_rec.astype(bool).astype(float)
-    injrec['dur'] = injrec.tstop - injrec.tstart
-    flares['dur'] = flares.tstop - flares.tstart
 
     flcc, dscc = characterize_flares(flares, injrec, otherfunc="count",
                             amplrec="ampl_rec", durrec="dur",
