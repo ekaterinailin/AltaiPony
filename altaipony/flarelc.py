@@ -6,12 +6,13 @@ import logging
 import progressbar
 import datetime
 
-from k2sc.standalone import k2sc_lc
+
 from lightkurve import KeplerLightCurve, KeplerTargetPixelFile, TessLightCurve
 from lightkurve.utils import KeplerQualityFlags
 
 from astropy.io import fits
 
+from .k2scmod import k2sc_lc
 from .altai import (find_flares, find_iterative_median, detrend_savgol)
 from .fakeflares import (merge_fake_and_recovered_events,
                          generate_fake_flare_distribution,
@@ -325,7 +326,8 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
                     else:
                         LOG.info('De-trending successfully completed.')
 
-                except np.linalg.linalg.LinAlgError:
+                except np.linalg.linalg.LinAlgError as e:
+                    LOG.error(e)
                     LOG.error('Detrending failed because probably Cholesky '
                               'decomposition failed. Try again, you shall succeed.')
                 new_lc.__class__ = FlareLightCurve
