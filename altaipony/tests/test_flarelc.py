@@ -232,6 +232,7 @@ def test_to_fits():
     
     # with TPF component which needs to be thrown away
     flc = from_path(pathk2TPF, mode="TPF", mission="K2")
+    flc.flux_err = flc.flux_err * 10. # otherwise K2SC errors.
     flc = flc.detrend("k2sc", de_niter=3)
     flc.to_fits(pathAltaiPony)
     flc = flc.find_flares()
