@@ -154,7 +154,7 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
 
         columns = ['istart', 'istop', 'cstart', 'cstop', 'tstart',
                    'tstop', 'ed_rec', 'ed_rec_err', 'ampl_rec', 
-                   'total_n_valid_data_points']
+                   'total_n_valid_data_points', 'dur']
 
         if detrended_flux is None:
             self.detrended_flux = np.full_like(time, np.nan)
@@ -386,7 +386,7 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
             lc = copy.deepcopy(self)
             #re-init flares
             columns = ['istart', 'istop', 'cstart', 'cstop', 'tstart',
-                       'tstop', 'ed_rec', 'ed_rec_err', 'ampl_rec']
+                       'tstop', 'ed_rec', 'ed_rec_err', 'ampl_rec', 'dur']
             lc.flares = pd.DataFrame(columns=columns)
             #find continuous observing periods
             lc = lc.find_gaps()
@@ -438,6 +438,11 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
         lc = find_iterative_median(lc)
         
         lc_ = copy.deepcopy(lc)
+        
+        columns =  ['istart', 'istop', 'cstart', 'cstop', 'tstart', 'tstop',
+                    'ed_rec', 'ed_rec_err', 'duration_d', 'amplitude', 'ed_inj',
+                    'peak_time', 'ampl_rec', 'dur']
+        
 
         widgets = [progressbar.Percentage(), progressbar.Bar()]
         bar = progressbar.ProgressBar(widgets=widgets, max_value=iterations).start()
@@ -463,7 +468,13 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
                 fake_lc.to_fits(f"{folder}after.fits")
                 print(f"saved {self.targetit} LC after detrending")
                 
-            injrec_results = merge_fake_and_recovered_events(injs, recs)
+            # The following line makes sure that column order is retained    
+            injrec_results = pd.DataFrame(columns=columns)
+            
+            # Merge injected and recovered flares
+            injrec_results = injrec_results.append(merge_fake_and_recovered_events(injs, recs),
+                                                   ignore_index=True)
+            
 
             bar.update(i + 1)
             

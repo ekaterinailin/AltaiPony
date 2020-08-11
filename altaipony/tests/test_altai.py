@@ -56,6 +56,7 @@ def test_detrend_savgol():
     assert f.istart == 4691
     assert f.istop == 4695
     assert f.total_n_valid_data_points == 1e4-309
+    assert f.dur == pytest.approx(f.tstop - f.tstart, rel=1e-4)
 
     
 def test_iterative_median():
@@ -79,6 +80,13 @@ def test_find_flares():
      with pytest.raises(TypeError):
          #raises error bc find_flares only works on detrended_flux
          find_flares(flc)
+     
+     # Check if all columns are created
+     flc = mock_flc(detrended=True)
+     for col in  ['istart', 'istop', 'cstart', 'cstop', 'tstart',
+                 'tstop', 'ed_rec', 'ed_rec_err', 'ampl_rec', 
+                 'total_n_valid_data_points', 'dur']:
+         assert col in flc.flares.columns
 
 def test_find_flares_in_cont_obs_period():
      """

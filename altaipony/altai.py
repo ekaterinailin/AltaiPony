@@ -151,16 +151,19 @@ def find_flares(flc, minsep=3, **kwargs):
         tstart = lc.time[istart]
         tstop = lc.time[istop]
 
-        lc.flares = lc.flares.append(pd.DataFrame({'ed_rec' : ed_rec,
-                                      'ed_rec_err' : ed_rec_err,
-                                      'ampl_rec' : ampl_rec,
-                                      'istart' : istart,
-                                      'istop' : istop,
-                                      'cstart' : cstart,
-                                      'cstop' : cstop,
-                                      'tstart' : tstart,
-                                      'tstop' : tstop,
-                                      'total_n_valid_data_points': lc.flux.shape[0]}),
+        lc.flares = lc.flares.append(pd.DataFrame(
+                                     {'ed_rec': ed_rec,
+                                      'ed_rec_err': ed_rec_err,
+                                      'ampl_rec': ampl_rec,
+                                      'istart': istart,
+                                      'istop': istop,
+                                      'cstart': cstart,
+                                      'cstop': cstop,
+                                      'tstart': tstart,
+                                      'tstop': tstop,
+                                      'total_n_valid_data_points': lc.flux.shape[0],
+                                      'dur': tstop - tstart
+                                      }),
                                       ignore_index=True)
 
     return lc
