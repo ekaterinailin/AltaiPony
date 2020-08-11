@@ -10,13 +10,7 @@ Installation
     cd AltaiPony
     python setup.py install
 
-You will also need to install **k2sc** (`Aigrain et al. 2016`_) from this fork_ of the original version:
-
-:: 
-   
-   git clone https://github.com/ekaterinailin/k2sc.git
-   cd k2sc
-   python3 setup.py install
+This package depends, on `lightkurve`, `k2sc`, `numpy`, `pandas` and some other packages, most of which will be installed automatically. Have a look at `requirements.txt` in the repository to see a more extensive list.
    
 
 Getting Started
