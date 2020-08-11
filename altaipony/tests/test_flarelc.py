@@ -267,12 +267,25 @@ def test_find_gaps():
     flc = flc.find_gaps()
     assert flc.gaps == [(0, 20), (20, 820)]
 
-def test_detrend(**kwargs):
+def test_detrend():
     
     # Test K2SC de-trending:
     flc = mock_flc()
     try:
-        flc = flc.detrend("k2sc", de_niter=2,**kwargs)
+        flc = flc.detrend("k2sc", de_niter=2,)
+        shape = flc.flux.shape
+        for att in ["detrended_flux", "detrended_flux_err",
+                    "flux_err", "flux", "time", "quality"]:
+            assert getattr(flc, att).shape == shape
+        assert flc.pv[0] == pytest.approx(-3.895176160613472, rel=0.1)
+    except np.linalg.linalg.LinAlgError:
+        warning.warn('Detrending of mock LC failed, this happens.')
+        pass
+    
+    # Test K2SC detrending with custom splits    
+    flc = mock_flc()
+    try:
+        flc = flc.detrend("k2sc", de_niter=2, splits=[1.4, 2.2, 5.4])
         shape = flc.flux.shape
         for att in ["detrended_flux", "detrended_flux_err",
                     "flux_err", "flux", "time", "quality"]:
