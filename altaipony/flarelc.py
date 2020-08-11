@@ -20,6 +20,7 @@ from .fakeflares import (merge_fake_and_recovered_events,
                          aflare,
                          )
 from .injrecanalysis import wrap_characterization_of_flares, _heatmap
+from .utils import split_gaps
 
 import time
 LOG = logging.getLogger(__name__)
@@ -219,7 +220,7 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
             copy_self.saturation = self.saturation[key]
         return copy_self
 
-    def find_gaps(self, maxgap=0.09, minspan=10):
+    def find_gaps(self, maxgap=0.09, minspan=10, splits=[]):
         '''
         Find gaps in light curve and stores them in the gaps attribute.
 
@@ -233,6 +234,8 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
         minspan : 10 or int
             minimum number of datapoints in continuous observation,
             i.e., w/o gaps as defined by maxgap
+        splits : list of floats or ints
+            additional places in which to slice the time series
 
         Returns
         --------
@@ -242,16 +245,22 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
         lc = copy.copy(self)
         dt = np.diff(lc.time)
         gap = np.where(np.append(0, dt) >= maxgap)[0]
+
         # add start/end of LC to loop over easily
         gap_out = np.append(0, np.append(gap, len(lc.time)))
 
         # left start, right end of data
         left, right = gap_out[:-1], gap_out[1:]
 
-        #drop too short observation periods
+        # drop too short observation periods
         too_short = np.where(np.diff(gap_out) < 10)
         left, right = np.delete(left,too_short), np.delete(right,(too_short))
-        lc.gaps = list(zip(left, right))
+
+        # get the gaps
+        gaps = list(zip(left, right))
+        
+        # split up the time series in additional place if needed
+        lc.gaps = np.array(split_gaps(gaps, splits))
 
         return lc
 

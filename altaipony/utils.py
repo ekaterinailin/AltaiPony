@@ -3,6 +3,70 @@ from numpy import isfinite, nan, median, abs, ones_like, where, rint, sqrt, rand
 
 LOG = logging.getLogger(__name__)
 
+def split_gaps(gaps, splits):
+    """Helper function that splices up a list
+    of tuples into more tuples at values defined by
+    splits, like:
+    ```
+    gaps = [(0., 20.), (21., 34.), (37., 41.)]
+    splits = [1.5, 14., 39.]
+    result = split_gaps(gaps, splits)
+    >>> result = [(0., 1.5), (1.5, 14.), (14., 20.), 
+    >>>           (21.0, 34.), (37., 39.), (39., 41.)]
+    
+    Parameters:
+    ------------
+    gaps : list of tuples of floats or ints
+        
+    splits: list of floats or ints
+    
+    Return:
+    -------
+    list of tuples of floats or ints - extended gaps
+    
+    """
+    try:
+        # transform gaps to an array
+        npgaps = np.array(gaps).T
+
+        # find where the existing gaps must be split up
+        splitloc = [np.where((s > npgaps[0]) & (s < npgaps[1]))[0][0] for s in splits]
+        
+    except IndexError:
+        raise IndexError(f"The splits you passed are wrong or NaN. "
+                         f"They should be values between {gaps[0][0]} and {gaps[-1][1]}.")
+
+    # sort the user's inputs
+    df = pd.DataFrame({"splits":splits,
+                       "splitlocs":splitloc})
+
+    # create an independent duplicate
+    gaps2 = copy.deepcopy(gaps)
+
+
+    # group splitting locations
+    for loc, g in df.groupby(splitloc):
+
+        # remove gaps that will be replaced by new ones
+        gaps2.remove(gaps[loc])
+
+        # take left boundary from old gap, 
+        # then append new splits that go inbetween, 
+        # and then add the right boundary
+        l = [gaps[loc][0]] + list(g.splits.values) + [gaps[loc][1]]
+
+        # reformat the list into a set of gaps
+        newgaps = [(i,j) for i, j in zip(l[:-1],l[1:])]
+
+        # insert new gaps into the new list of gaps
+        gaps2[loc:loc] = newgaps 
+
+    # sort in ascending order
+    gaps2.sort(key=lambda x: x[0])
+
+    return gaps2 
+
+
 def k2sc_quality_cuts(data):
     """
     Apply all the quality checks that K2SC (Aigrain et al. 2016) 
