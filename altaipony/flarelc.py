@@ -263,7 +263,7 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
         gaps = list(zip(left, right))
         
         # split up the time series in additional place if needed
-        lc.gaps = np.array(split_gaps(gaps, splits))
+        lc.gaps = split_gaps(gaps, splits)
 
         return lc
 
@@ -814,12 +814,15 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
                            'amplitude' : ampl_fake,  
                            'ed_inj' : ed_fake,
                            'peak_time' : t0_fake}
+
+        # the fake_flares attribute is a pandas DataFrame
         fake_lc.fake_flares = pd.DataFrame(injected_events)
         
         # Free up space
         del dur_fake
         del ampl_fake
         
+        # Return the FLC with the injected flares
         return fake_lc
 
     def load_injrec_data(self, path, **kwargs):
