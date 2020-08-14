@@ -412,7 +412,7 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
     def sample_flare_recovery(self, iterations=2000, inject_before_detrending=False,
                               mode=None, func=None, save_lc_to_file=False, folder="", 
                               fakefreq=0.05, save=False, path=None, detrend_kwargs={},
-                              **kwargs):
+			      show_progress=True, **kwargs):
         """
         Runs a number of injection recovery cycles and characterizes the light
         curve by recovery probability and equivalent duration underestimation.
@@ -430,6 +430,8 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
             number of flares per day, but at least one per continuous observation period will be injected
         detrend_kwargs : dict
             Keyword arguments to pass to FlareLightCurve.detrend
+        show_progress : bool
+            Choose to show a progress bar or not. Default True.
         kwargs : dict
             Keyword arguments to pass to inject_fake_flares
 
@@ -455,9 +457,9 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
                     'ed_rec', 'ed_rec_err', 'duration_d', 'amplitude', 'ed_inj',
                     'peak_time', 'ampl_rec', 'dur']
         
-
-        widgets = [progressbar.Percentage(), progressbar.Bar()]
-        bar = progressbar.ProgressBar(widgets=widgets, max_value=iterations).start()
+        if show_progress == True:
+            widgets = [progressbar.Percentage(), progressbar.Bar()]
+            bar = progressbar.ProgressBar(widgets=widgets, max_value=iterations).start()
         for i in range(iterations):
             fake_lc = lc.inject_fake_flares(inject_before_detrending=inject_before_detrending,
                                                  fakefreq=fakefreq,
@@ -487,8 +489,8 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
             injrec_results = injrec_results.append(merge_fake_and_recovered_events(injs, recs),
                                                    ignore_index=True)
             
-
-            bar.update(i + 1)
+            if show_progress == True:
+                bar.update(i + 1)
             
             if save == True:
             
@@ -519,7 +521,8 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
 
         
         # End monitoring
-        bar.finish()
+        if show_progress == True:
+            bar.finish()
         return lc, fake_lc
 
  
