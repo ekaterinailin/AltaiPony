@@ -156,25 +156,24 @@ def sigma_clip(a, max_iter=10, max_sigma=3.,
         
         # Safety check if the mask looks fine
         nm = mask.sum()
+        if nm > 1:
+            # Calculate median and MAD adjusted standard deviation
+            med, sig = medsig(a[mask])
+            mhigh[mexc] = a[mexc] - med <  max_sigma * sig #indices of okay values above median
+            mlow[mexc]  = a[mexc] - med > -max_sigma * sig #indices of okay values below median
         
-        # Calculate median and MAD adjusted standard deviation
-        med, sig = medsig(a[mask])
-    
-        mhigh[mexc] = a[mexc] - med <  max_sigma * sig #indices of okay values above median
-        mlow[mexc]  = a[mexc] - med > -max_sigma * sig #indices of okay values below median
-    
-        # Okay values are finite and not outliers
-        mask = mexc & mhigh & mlow
-    
-        LOG.debug(f"iteration {i} at normalized median flux {med:.5f} \pm {sig:.5f}")
-        LOG.debug(f"upper mask size before expansion = {mhigh.shape[0]}")
-    
-        # Expand the mask left and right
-        mhigh = expand_mask(mhigh)
-    
-        LOG.debug("upper mask size after expansion = {mhigh.shape[0]}\n Should be the same as before.")
+            # Okay values are finite and not outliers
+            mask = mexc & mhigh & mlow
+            
+            LOG.debug(f"iteration {i} at normalized median flux {med:.5f} \pm {sig:.5f}")
+            LOG.debug(f"upper mask size before expansion = {mhigh.shape[0]}")
         
-        i += 1
+            # Expand the mask left and right
+            mhigh = expand_mask(mhigh)
+        
+            LOG.debug("upper mask size after expansion = {mhigh.shape[0]}\n Should be the same as before.")
+            
+            i += 1
     
     if separate_masks:
         return mlow, mhigh
