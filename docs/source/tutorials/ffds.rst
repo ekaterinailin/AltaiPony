@@ -1,6 +1,8 @@
 Flare Frequency Distributions and Power Laws
 ==============================================
 
+*You can try out everything in this section in the tutorial notebook in the [Github] repository.*
+
 Once you have found all the flares, you can compute statistical measures using your flare table. 
 
 The `FFD` module allows you to compute Flare Frequency Distributions. You can use it to
@@ -39,7 +41,7 @@ Assume we have such a ``FlareLightCurve`` called ``flc`` with the required attri
 The unit is up to you, and you should know which one you are using. If you do not specify ``tot_obs_time``, the FFD frequencies will instead be the number counts, i.e. ``simple_ffd.tot_obs_time=1.``.
 
 Convert the flare table into a cumulative flare frequency distribution
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 The first method you apply before doing anything else is ``FFD.ed_and_freq()``. It gives you the sorted array of energies, their corresponding frequencies, and number counts for each event with a certain energy, that is the cumulative flare frequency distribution:
 
@@ -69,7 +71,7 @@ Next, let's fit a power law to this distribution. We can use a Modified Maximum 
 
     simple_ffd.fit_powerlaw("mmle")    
 
-The results can be accessed with `simple_ffd.alpha`, `simple_ffd.alpha_err`, `simple_ffd.beta`, and `simple_ffd.beta_err`, respectively.
+The results can be accessed with `simple_ffd.alpha`, `simple_ffd.alpha_err`, `simple_ffd.beta`, and `simple_ffd.beta_err`, respectively. The uncertainties on :math:`\beta` are bootstrapped.
 
 Alternatively, we can the Bayesian flare prediction approach explained in Wheatland (2004) [2]_ to find :math:`\alpha` and :math:`\beta` using the MCMC method:
 
@@ -79,9 +81,10 @@ Alternatively, we can the Bayesian flare prediction approach explained in Wheatl
 
 The results can be accessed with `simple_ffd.alpha`, `simple_ffd.alpha_up_err`, and `simple_ffd.alpha_low_err`; and `simple_ffd.beta`, `simple_ffd.beta_up_err`, and `simple_ffd.beta_low_err`, respectively. Upper and lower uncertainties represent the 16th and 84th percentiles of the marginalized posterior distributions for  :math:`\alpha` and :math:`\beta`.
 
+The MCMC method is preferable because it fit both :math:`\beta` and :math:`\alpha` simultaneously, but the sampling may be too costly for a quick estimate of the parameters.
 
 Plot the resulting function in the cumulative form
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Use `plot_powerlaw` to plot the result on top of the FFD with the code snippet below:
 
@@ -139,9 +142,11 @@ is demonstrated in this_ notebook on Github.
   
 .. rubric:: Footnotes
 
+.. [Github] https://github.com/ekaterinailin/AltaiPony/blob/master/notebooks/Beginner_Flare_Frequency_Distributions_and_Power_Laws.ipynb 
+
 .. [1] Thomas Maschberger, Pavel Kroupa, Estimators for the exponent and upper limit, and goodness-of-fit tests for (truncated) power-law distributions, Monthly Notices of the Royal Astronomical Society, Volume 395, Issue 2, May 2009, Pages 931–942, https://doi.org/10.1111/j.1365-2966.2009.14577.x
 
 .. [2] Wheatland, M. S. "A Bayesian approach to solar flare prediction." The Astrophysical Journal 609.2 (2004): 1134. https://doi.org/10.1086/421261
   
   
-  .. _this: https://github.com/ekaterinailin/AltaiPony/blob/master/notebooks/Flare_Frequency_Distributions_and_Power_Laws.ipynb
+  .. _this: https://github.com/ekaterinailin/AltaiPony/blob/master/notebooks/Advanced_Flare_Frequency_Distributions_and_Power_Laws.ipynb

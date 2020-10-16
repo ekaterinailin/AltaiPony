@@ -9,7 +9,7 @@ Flare science in Kepler, K2 and TESS light curves
 
 **AltaiPony** finds flares in Kepler, K2, and TESS photometry. You can create a ``FlareLightCurve``, remove systematics and photometric variability, and search it for flares. 
 
-K2 light curves are best de-trended using **k2sc_**. For TESS and Kepler we employ a Savitzky-Golay filter. You can use most methods from lightkurve_'s ``KeplerLightCurve`` and ``TessLightCurve`` classes. **AltaiPony** can be used to inject and recover synthetic flare signatures. Jump to the core class is here_. **AltaiPony** replaces the original Appaloosa_ (Davenport 2016). 
+K2 light curves are best de-trended using **K2SC** [5]. For TESS and Kepler we employ a Savitzky-Golay filter. You can use most methods from lightkurve_'s ``KeplerLightCurve`` and ``TessLightCurve`` classes. **AltaiPony** can be used to inject and recover synthetic flare signatures. Jump to the core class is here_. **AltaiPony** replaces the original **Appaloosa** [b]_. 
 
 .. _user-docs:
 
@@ -25,7 +25,7 @@ K2 light curves are best de-trended using **k2sc_**. For TESS and Kepler we empl
 Problems?
 ^^^^^^^^^
 
- Often, when something does not work in **AltaiPony** and this documentation is useless, troubleshooting can be done by diving into the extensive **lightkurve** docs_. Otherwise, you can always shoot Ekaterina an email_ or open an issue on GitHub_. Many foreseeable problems will be due to **AltaiPony** itself.
+ Often, when something does not work in **AltaiPony** and this documentation is useless, troubleshooting can be done by diving into the extensive **lightkurve** docs_. Otherwise, you can always shoot Ekaterina an email_ or directly open an issue on GitHub_. Many foreseeable problems will be due to bugs in **AltaiPony** or bad user instructions.
 
 
 How to cite this work
@@ -33,16 +33,16 @@ How to cite this work
 
 If you end up using this package for your science, please cite Ilin et al. (2020) [a]_ and Davenport (2016) [b]_.
 
-Please also cite `lightkurve` as indicated in their docs [1]_. 
+Please also cite **lightkurve** as indicated in their docs [1]_. 
 
 Depending on the methods you use, you may also want to cite 
 
   - Maschberger and Kroupa (2009) [2]_ (MMLE power law fit)
   - Wheatland (2004) [3]_ (MCMC power law fit)
-  - Aigrain et al. (2016) [4]_ and their softwar [5]_ (K2SC de-trending)
+  - Aigrain et al. (2016) [4]_ and their software [5]_ (**K2SC** de-trending)
 
 
-.. [a] Ekaterina Ilin, Sarah J. Schmidt, Katja Poppenhäger, James R. A. Davenport, Martti H. Kristiansen, Mark Omohundro (2020). https://arxiv.org/abs/2010.05576
+.. [a] Ekaterina Ilin, Sarah J. Schmidt, Katja Poppenhäger, James R. A. Davenport, Martti H. Kristiansen, Mark Omohundro (2020). "Flares in Open Clusters with K2. II. Pleiades, Hyades, Praesepe, Ruprecht 147, and M67" https://arxiv.org/abs/2010.05576
 
 .. [b] James R. A. Davenport "The Kepler Catalog of Stellar Flares" The Astrophysical Journal, Volume 829, Issue 1, article id. 23, 12 pp. (2016). https://doi.org/10.3847/0004-637X/829/1/23
 
