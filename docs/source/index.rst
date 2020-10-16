@@ -9,7 +9,7 @@ Flare science in Kepler, K2 and TESS light curves
 
 **AltaiPony** finds flares in Kepler, K2, and TESS photometry. You can create a ``FlareLightCurve``, remove systematics and photometric variability, and search it for flares. 
 
-K2 light curves are best de-trended using **K2SC** [5]. For TESS and Kepler we employ a Savitzky-Golay filter. You can use most methods from lightkurve_'s ``KeplerLightCurve`` and ``TessLightCurve`` classes. **AltaiPony** can be used to inject and recover synthetic flare signatures. Jump to the core class is here_. **AltaiPony** replaces the original **Appaloosa** [b]_. 
+K2 light curves are best de-trended using **K2SC** [5]_. For TESS and Kepler we employ a Savitzky-Golay filter. You can use most methods from lightkurve_'s ``KeplerLightCurve`` and ``TessLightCurve`` classes. **AltaiPony** can be used to inject and recover synthetic flare signatures. Jump to the core class is here_. **AltaiPony** replaces the original **Appaloosa** [b]_. 
 
 .. _user-docs:
 
