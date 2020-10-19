@@ -19,7 +19,7 @@
 .. image:: logo.png
    :height: 100px
    :width: 100px
-   :alt: Credit: Elizaveta Ilin, 2018
+   :alt: Logo credit: Elizaveta Ilin, 2018
 
 AltaiPony
 =========
