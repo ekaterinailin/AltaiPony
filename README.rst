@@ -1,5 +1,7 @@
-|ci-badge| |docs-badge| |license-badge| |requirements-badge|
+|ci-badge| |docs-badge| |license-badge| |requirements-badge| |zenodo-badge|
 
+.. |zenodo-badge|       image:: https://zenodo.org/badge/DOI/10.5281/zenodo.4095340.svg
+            :target: https://doi.org/10.5281/zenodo.4095340
 
 .. |ci-badge| image:: https://travis-ci.org/ekaterinailin/AltaiPony.svg?branch=master
               :target: https://travis-ci.org/ekaterinailin/AltaiPony
