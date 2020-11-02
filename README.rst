@@ -33,7 +33,12 @@ Find the documentation at altaipony.readthedocs.io_
 Installation
 ^^^^^^^^^^^^^
 
-Install from the repository:
+Use pip to install AltaiPony
+
+>>> pip install altaipony
+
+
+Or install directly from the repository:
 
 >>> git clone https://github.com/ekaterinailin/AltaiPony.git
 >>> cd AltaiPony
