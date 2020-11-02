@@ -33,16 +33,20 @@ Why do we want to study flares in optical light curves?
 There are many light curves, and flare statistics is a growing field, so...
 Kepler, K2, and TESS
 
-lightkurve offer versatile light curve handling, and AltaiPony can access most its features, which makes it an accessible tool for new users.
+`lightkurve` [@lightkurve2018] offer versatile light curve handling including visualization, tools for light curve de-trending, transit detection, and asteroseismology, and are the most widely used software for handling Kepler, K2, and TESS data. `AltaiPony` can access most its features, which makes it an accessible tool for new users who are already familiar with `lightkurve`.
 
-AltaiPony is a toolbox for statistical flares studies on photometric time series 
+`AltaiPony` is a toolbox for statistical flares studies on photometric time series 
 from Kepler, K2, and TESS, including flare search and characterization, injection/recovery diagnostics, 
 and statistical analysis of flare frequency distributions along with extensive documentation and tutorials.
 
-`AltaiPony` was designed to be used by astronomical researchers as a one stop shop 
-solution 
+The software includes functionality inherited from a flare finding solution for Kepler light curves (`Appaloosa`, `@davenport2016`).
 
-It has already been used in a number of scientific publications [@citation]
+`AltaiPony` was designed to be used by astronomical researchers as a one stop shop 
+solution that includes adaptations of common de-trending tools like the Savitzky-Golay filter and K2SC [@aigrain2016] that are suited to preserve flare signal and remove astrophysical and instrumental variability. 
+
+The design allows users to add custom de-trending functions to `AltaiPony`.
+
+It has already been used in a number of scientific publications [@ilin2019, @ilin2020, @ramsay2020, more...]
 
 For a quick reference, the following citation commands can be used:
 - `@author:2001`  ->  "Author et al. (2001)"
