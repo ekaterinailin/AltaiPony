@@ -33,7 +33,7 @@ signatures in the light curves $-$ repeated measurements of stellar brightness o
 uninterrupted periods of time $-$ of most stars. Their rates and energies provide
 unique insights to the nature of the stars that produce them. 
 
-Space missions like Kepler [@koch2010], K2 [@howell2014], and TESS [@ricker] have
+Space missions like Kepler [@koch2010], K2 [@howell2014], and TESS [@ricker2014] have
  collected light curves of hundreds of thousands of stars, for time spans ranging several weeks
 to multiple years, and continue to gather high-cadence, high-precision
 data. In response to the steady growth of this scientific treasury, and to aid
@@ -88,7 +88,8 @@ the Markov Chain Monte Carlo method.
 
 # Applications
 
-`AltaiPony` has already been used in peer-reviewed publications that studied flares in K2 [@ilin2019; @ilin2020] and TESS [@ramsay2020] light curves, and remains under active development.
+`AltaiPony` has already been used in peer-reviewed publications that studied flares 
+in K2 [@ilin2019; @ilin2020] and TESS [@ramsay2020] light curves, and remains under active development.
 
 # Acknowledgements
 
