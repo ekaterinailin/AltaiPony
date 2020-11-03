@@ -9,7 +9,7 @@ tags:
   - K2
   - stellar flares
 authors:
-  - name: Ekaterina Ilin^[eilin@aip.de]
+  - name: Ekaterina Ilin
     orcid: 0000-0002-6299-7542
     affiliation: "1, 2" # (Multiple affiliations must be quoted)
 
