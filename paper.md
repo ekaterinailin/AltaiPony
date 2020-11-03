@@ -52,7 +52,7 @@ K2, and TESS data.
 
 `AltaiPony` was designed to be used by astronomical researchers as a one stop shop 
 solution with adaptations of common de-trending tools like the Savitzky-Golay filter
-from `lightkurve.flatten()`, and K2SC [@aigrain2016, @k2sc2016] that are suited 
+from `lightkurve.flatten()`, and K2SC [@aigrain2016; @k2sc2016] that are suited 
 to preserve flare signal and remove astrophysical and instrumental variability. 
 The design also allows users to add custom de-trending functions to `AltaiPony`. 
 An example can be found in `@ilin2020`.
@@ -78,7 +78,7 @@ to analyse flare frequency distributions adapted from a solar model [@wheatland2
 that uses emcee [@emcee2013] to sample from the posterior distribution using 
 the Markov Chain Monte Carlo method.
 
-`AltaiPony` has already been used in peer-reviewed publications [@ilin2019, @ilin2020, @ramsay2020], 
+`AltaiPony` has already been used in peer-reviewed publications [@ilin2019; @ilin2020; @ramsay2020], 
 and remains under active development.
 
 # Figures
