@@ -29,8 +29,8 @@ Flares are unmistakeable signs of stellar magnetic activity, and a key to our un
 of stellar properties and evolution. They are violent explosions that penetrate 
 all layers of a star’s atmosphere, and enhance the overall stellar
 brightness by up to orders of magnitude within minutes. We observe them as distinct
-signatures in the light curves $-$ repeated measurements of stellar brightness over 
-uninterrupted periods of time $-$ of most solar-type and low mass stars. Their rates and energies provide
+signatures in the light curves $-$ time series of photometric measurements $-$ of 
+most solar-type and low mass stars. Their rates and energies provide
 unique insights to the nature of the stars that produce them. 
 
 Space missions like Kepler [@koch2010], K2 [@howell2014], and TESS [@ricker2014] have
@@ -45,7 +45,7 @@ documentation and Jupyter-based tutorials.
 # Functionality
 
 `AltaiPony` is based on `lightkurve` [@lightkurve2018], and can access most 
-features that are implemented in it, which makes it an accessible tool for new 
+methods that are implemented in it, which makes it an accessible tool for new 
 users who are already familiar with the software. `lightkurve` is a versatile
 Python package for light curve handling that includes visualization, basic tools for 
 de-trending, transit detection, and asteroseismology. It is the most widely 
@@ -62,16 +62,16 @@ The design also allows users to add their own custom de-trending functions to `F
 
 After de-trending, `FlareLightCurve.find_flares()` returns the occurrence times, amplitudes, durations, 
 and relative energies of all flares above the detection threshold in the residual light curve using an adjustable iterative 
-sigma-clipping procedure to identify candidate events[@davenport2016]. 
+sigma-clipping procedure to identify candidate events [@davenport2016]. 
 
 Usually, the measured flare amplitudes and durations differ systematically from their intrinsic properties 
-due to the astrophysical and instrumental properties of the light curves in which they were found. 
+due to the astrophysical and instrumental characteristics of the light curves in which they were found. 
 Therefore, `AltaiPony` features an injection-recovery pipeline for 
-synthetic flares with visualization aids that quantifies the cumulated effects
+synthetic flares that quantifies the cumulated effects
  of noise patterns, time sampling, de-trending and flare finding procedure of choice. 
 `FlareLightCurve.sample_flare_recovery()` generates the synthetic data and performs
 the full flare search. The resulting sample can be used to determine the recovery 
-probability and energy bias of the candidates in the original light curve.
+probability and energy bias of candidate events in the original light curve.
 
 Flare frequency distributions (FFDs) follow a power law in energy $E$:
 
@@ -79,11 +79,12 @@ Flare frequency distributions (FFDs) follow a power law in energy $E$:
 f(>E) = \dfrac{\beta}{\alpha - 1}E^{-\alpha + 1}
 \end{equation}
 
-To estimate $\alpha$ and $\beta$ and their respective uncertainties for a given sample
- of flares, `AltaiPony` includes the analysis class `FFD` that includes a fully Bayesian framework [@wheatland2004] that 
-incorporates both the power law nature of FFDs, and the exponential flare waiting times 
+The free parameters $\alpha$ and $\beta$ are essential indicators of stellar magnetic activity.
+ To estimate their values and uncertainties for a given sample
+ of flares, `AltaiPony` provides the analysis class `FFD`. It includes a fully Bayesian framework [@wheatland2004] that 
+combines the power law nature of FFDs, and the exponential flare waiting times 
 to predict flare frequencies, and uses emcee [@emcee2013] to sample from the posterior distribution using 
-the Markov Chain Monte Carlo method. As a quick alternative, we also implemented a modified maximum likelihood estimator 
+the Markov Chain Monte Carlo method. As a fast alternative, we also implemented a modified maximum likelihood estimator 
 [@maschberger2009] for $\alpha$, and a least-squares fit to $\beta$ with 
 bootstrapped uncertainties.
 
