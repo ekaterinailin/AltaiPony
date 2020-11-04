@@ -72,7 +72,7 @@ synthetic flares that quantifies the cumulated effects
 the full flare search. The resulting sample can be used to determine the recovery 
 probability and energy bias of candidate events in the original light curve.
 
-Flare frequency distributions (FFDs) follow a power law in energy $E$:
+Flare frequency distributions (FFDs), that is, the rates $f$ of flares above a given energy $E$ follow a power law:
 
 \begin{equation}
 f(>E) = \dfrac{\beta}{\alpha - 1}E^{-\alpha + 1}
@@ -82,18 +82,18 @@ The free parameters $\alpha$ and $\beta$ are essential indicators of stellar mag
  To estimate their values and uncertainties for a given sample
  of flares, `AltaiPony` provides the analysis class `FFD`. It includes a fully Bayesian framework [@wheatland2004] that 
 combines the power law nature of FFDs, and the exponential flare waiting times 
-to predict flare frequencies, and uses emcee [@emcee2013] to sample from the posterior distribution using 
+to predict flare frequencies, and uses `emcee` [@emcee2013] to sample from the posterior distribution using 
 the Markov Chain Monte Carlo method. As a fast alternative, we also implemented a modified maximum likelihood estimator 
 [@maschberger2009] for $\alpha$, and a least-squares fit to $\beta$ with 
 bootstrapped uncertainties.
 
 # Other Software
 
-Other software packages for flare science in the field offer alternative methods, as well as complementing functions. `Appaloosa` [@davenport2016] was designed with Kepler light curves in mind, and is this software's predecessor as many of its functions, such as the empirical flare model `aflare`, have been ingested into `AltaiPony`. `stella` [@stella2020] uses Convolutional Neural Networks to detect flares along with their detection probabilities in TESS light curves, and `allesfitter` [@allesfitter] offers a Bayesian framework to fit multiple features of stellar variability at once, including flares.
+Other software packages for flare science in the field offer alternative methods, as well as complementing functions. `Appaloosa` [@davenport2016] was designed with Kepler light curves in mind. `Appaloosa` is this software's predecessor as many of its functions, such as the empirical flare model `aflare`, have been ingested into `AltaiPony`. `stella` [@stella2020] uses Convolutional Neural Networks to detect flares along with their detection probabilities in TESS light curves, and `allesfitter` [@allesfitter2019] offers a Bayesian framework to fit multiple features of stellar variability at once, including flares.
 
 # Applications
 
-`AltaiPony` has already been used in peer-reviewed publications. The software was used to study flaring activity as a function of stellar age, mass, and rotation in K2 open cluster members [@ilin2019; @ilin2020], and TESS light curves of ultrafast rotating M dwarfs [@ramsay2020], and remains under active development.
+`AltaiPony` has already been used in peer-reviewed publications to study flaring activity as a function of stellar age, mass, and rotation in K2 open cluster members [@ilin2019; @ilin2020], and TESS light curves of ultrafast rotating M dwarfs [@ramsay2020]. The software remains under active development.
 
 # Acknowledgements
 
