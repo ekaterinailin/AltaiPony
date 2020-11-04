@@ -25,12 +25,12 @@ bibliography: paper.bib
 
 # Summary 
 
-Flares are unmistakeable signs of stellar magnetic activity and a key to our understanding
+Flares are unmistakeable signs of stellar magnetic activity, and a key to our understanding
 of stellar properties and evolution. They are violent explosions that penetrate 
 all layers of a star’s atmosphere, and enhance the overall stellar
 brightness by up to orders of magnitude within minutes. We observe them as distinct
 signatures in the light curves $-$ repeated measurements of stellar brightness over 
-uninterrupted periods of time $-$ of most solar-type and low-mass stars. Their rates and energies provide
+uninterrupted periods of time $-$ of most solar-type and low mass stars. Their rates and energies provide
 unique insights to the nature of the stars that produce them. 
 
 Space missions like Kepler [@koch2010], K2 [@howell2014], and TESS [@ricker2014] have
@@ -47,31 +47,31 @@ documentation and Jupyter-based tutorials.
 `AltaiPony` is based on `lightkurve` [@lightkurve2018], and can access most 
 features that are implemented in it, which makes it an accessible tool for new 
 users who are already familiar with the software. `lightkurve` is a versatile
-Python package for light curve handling that includes visualization, basic tools for  
+Python package for light curve handling that includes visualization, basic tools for 
 de-trending, transit detection, and asteroseismology. It is the most widely 
-used software for handling Kepler, K2, and TESS data. `AltaiPony` derives its main
-class `FlareLightCurve` directly from `lightkurve`'s `LightCurve` and its mission-specific
-versions.
+used software for handling Kepler, K2, and TESS data. `AltaiPony` inherits its main
+class `FlareLightCurve` directly from `lightkurve`'s `LightCurve`, and its mission-specific
+derivatives.
 
 `AltaiPony` was designed to be used by astronomers as a one stop shop 
 solution that covers the essential steps of a typical flare study. We begin with
 adaptations of common de-trending tools like the Savitzky-Golay filter
-from `lightkurve.flatten()`, and K2SC [@aigrain2016; @k2sc2016]. We tailored them 
+from `lightkurve.flatten()`, and K2SC [@aigrain2016]. We tailored them 
 to preserve flare signal, and remove astrophysical and instrumental variability. 
 The design also allows users to add their own custom de-trending functions to `FlareLightCurve.detrend()`.
 
-After de-trending, `FlareLightCurve.find_flares()` returns the occurrence times of
- all flares found in the residual light curve using a adjustable iterative 
-sigma-clipping procedure [@davenport2016], along with amplitude, duration, and relative
-flare energy. 
+After de-trending, `FlareLightCurve.find_flares()` returns the occurrence times, amplitudes, durations, 
+and relative energies of all flares above the detection threshold in the residual light curve using an adjustable iterative 
+sigma-clipping procedure to identify candidate events[@davenport2016]. 
 
-As measured flare amplitudes and durations are different from their intrinsic properties 
-due to various astrophysical and instrumental effects, `AltaiPony` features an 
-injection-recovery pipeline for synthetic flares with visualization aids to quantify 
-the cumulated effects introduced by light curve specific noise patterns, time sampling,
- and the de-trending and flare finding procedure of choice. `FlareLightCurve.sample_flare_recovery()` 
-yields the synthetic data that `FlareLightCurve.characterize_flares()` uses to determine the
-recovery probability and energy bias of the candidates in the original light curves.
+Usually, the measured flare amplitudes and durations differ systematically from their intrinsic properties 
+due to the astrophysical and instrumental properties of the light curves in which they were found. 
+Therefore, `AltaiPony` features an injection-recovery pipeline for 
+synthetic flares with visualization aids that quantifies the cumulated effects
+ of noise patterns, time sampling, de-trending and flare finding procedure of choice. 
+`FlareLightCurve.sample_flare_recovery()` generates the synthetic data and performs
+the full flare search. The resulting sample can be used to determine the recovery 
+probability and energy bias of the candidates in the original light curve.
 
 Flare frequency distributions (FFDs) follow a power law in energy $E$:
 
@@ -80,7 +80,7 @@ f(>E) = \dfrac{\beta}{\alpha - 1}E^{-\alpha + 1}
 \end{equation}
 
 To estimate $\alpha$ and $\beta$ and their respective uncertainties for a given sample
- of flares, `AltaiPony` includes the analysis class `FFD` that offers a class based fully Bayesian framework [@wheatland2004] that 
+ of flares, `AltaiPony` includes the analysis class `FFD` that includes a fully Bayesian framework [@wheatland2004] that 
 incorporates both the power law nature of FFDs, and the exponential flare waiting times 
 to predict flare frequencies, and uses emcee [@emcee2013] to sample from the posterior distribution using 
 the Markov Chain Monte Carlo method. As a quick alternative, we also implemented a modified maximum likelihood estimator 
