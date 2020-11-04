@@ -30,7 +30,7 @@ of stellar properties and evolution. They are violent explosions that penetrate
 all layers of a star’s atmosphere, and enhance the overall stellar
 brightness by up to orders of magnitude within minutes. We observe them as distinct
 signatures in the light curves $-$ time series of photometric measurements $-$ of 
-most solar-type and low mass stars. Their rates and energies provide
+most stars. Their rates and energies provide
 unique insights to the nature of the stars that produce them. 
 
 Space missions like Kepler [@koch2010], K2 [@howell2014], and TESS [@ricker2014] have
@@ -38,9 +38,8 @@ Space missions like Kepler [@koch2010], K2 [@howell2014], and TESS [@ricker2014]
 to multiple years. As TESS continues to gather high-cadence data, we developed `AltaiPony` to aid
 astronomers who require accurately characterized flare samples for their research. 
 `AltaiPony` is a toolbox for statistical flares studies on photometric time series from these missions, including flare search 
-and characterization, injection-recovery diagnostics, and statistical analysis 
-of flare frequency distributions along with extensive 
-documentation and Jupyter-based tutorials.
+and characterization, a framework to determine the algorithm's efficiency, and statistical analysis 
+of flaring rates along with extensive documentation and Jupyter-based tutorials.
 
 # Functionality
 
@@ -88,15 +87,19 @@ the Markov Chain Monte Carlo method. As a fast alternative, we also implemented 
 [@maschberger2009] for $\alpha$, and a least-squares fit to $\beta$ with 
 bootstrapped uncertainties.
 
+# Other Software
+
+Other software packages for flare science in the field offer alternative methods, as well as complementing functions. `Appaloosa` [@davenport2016] was designed with Kepler light curves in mind, and is this software's predecessor as many of its functions, such as the empirical flare model `aflare`, have been ingested into `AltaiPony`. `stella` [@stella2020] uses Convolutional Neural Networks to detect flares along with their detection probabilities in TESS light curves, and `allesfitter` [@allesfitter] offers a Bayesian framework to fit multiple features of stellar variability at once, including flares.
+
 # Applications
 
-`AltaiPony` has already been used in peer-reviewed publications that studied flares 
-in K2 [@ilin2019; @ilin2020] and TESS [@ramsay2020] light curves, and remains under active development.
+`AltaiPony` has already been used in peer-reviewed publications. The software was used to study flaring activity as a function of stellar age, mass, and rotation in K2 open cluster members [@ilin2019; @ilin2020], and TESS light curves of ultrafast rotating M dwarfs [@ramsay2020], and remains under active development.
 
 # Acknowledgements
 
-I acknowledge valuable contributions from Michael Gully-Santiago and Geert Barentsen,
+EI acknowledges valuable contributions from Michael Gully-Santiago and Geert Barentsen,
 who offered advice and hands-on support in the early development
-stages of the project.
+stages of the project. EI is thankful to Yori Fournier for helpful comments on the paper
+and for his support while bringing the software to maturity.
 
 # References
