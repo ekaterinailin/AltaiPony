@@ -27,11 +27,10 @@ bibliography: paper.bib
 
 Flares are unmistakeable signs of stellar magnetic activity, and a key to our understanding
 of stellar properties and evolution. They are violent explosions that penetrate 
-all layers of a star’s atmosphere, and enhance the overall stellar
-brightness by up to orders of magnitude within minutes. We observe them as distinct
-signatures in the light curves $-$ time series of photometric measurements $-$ of 
-most stars. Their rates and energies provide
-unique insights to the nature of the stars that produce them. 
+all layers of a star’s atmosphere, and enhance its overall
+brightness by up to orders of magnitude within minutes. We observe flares as distinct
+signatures in time series of stellar photometric observations that we call light curves. 
+Flaring rates and energies provide unique insights into the nature of the stars that produce them. 
 
 Space missions like Kepler [@koch2010], K2 [@howell2014], and TESS [@ricker2014] have
  collected light curves of tens of thousands of flaring stars, for timespans ranging from several weeks
@@ -55,9 +54,9 @@ derivatives.
 `AltaiPony` was designed to be used by astronomers as a one stop shop 
 solution that covers the essential steps of a typical flare study. We begin with
 adaptations of common de-trending tools like the Savitzky-Golay filter
-from `lightkurve.flatten()`, and K2SC [@aigrain2016]. We tailored them 
-to preserve flare signal, and remove astrophysical and instrumental variability. 
-The design also allows users to add their own custom de-trending functions to `FlareLightCurve.detrend()`.
+from `lightkurve.flatten()`, and `K2SC` [@aigrain2016]. We tailored them 
+to preserve flare signal, while removing astrophysical and instrumental variability. 
+`FlareLightCurve.detrend()` also allows users to add their own custom de-trending functions.
 
 After de-trending, `FlareLightCurve.find_flares()` returns the occurrence times, amplitudes, durations, 
 and relative energies of all flares above the detection threshold in the residual light curve using an adjustable iterative 
@@ -89,7 +88,7 @@ bootstrapped uncertainties.
 
 # Other Software
 
-Other software packages for flare science in the field offer alternative methods, as well as complementing functions. `Appaloosa` [@davenport2016] was designed with Kepler light curves in mind. `Appaloosa` is this software's predecessor as many of its functions, such as the empirical flare model `aflare`, have been ingested into `AltaiPony`. `stella` [@stella2020] uses Convolutional Neural Networks to detect flares along with their detection probabilities in TESS light curves, and `allesfitter` [@allesfitter2019] offers a Bayesian framework to fit multiple features of stellar variability at once, including flares.
+Other software packages for flare science in the field offer alternative methods, as well as complementing functions. `Appaloosa` [@davenport2016] was designed with Kepler light curves in mind. `Appaloosa` is this software's predecessor as many of its functions, such as the empirical flare model `aflare`, have been ingested into `AltaiPony`. `stella` [@stella2020] uses Convolutional Neural Networks to find flares and return their detection probabilities in TESS light curves. For individual events, `allesfitter` [@allesfitter2019] offers a Bayesian framework to fit multiple aspects of stellar variability at once, including flares.
 
 # Applications
 
