@@ -126,6 +126,7 @@ def find_flares(flc, minsep=3, **kwargs):
         # run final flare-find on DATA - MODEL
 
         isflare = find_flares_in_cont_obs_period(flux, median, error, **kwargs)
+  
 
         # now pick out final flare candidate indices
         candidates = np.where( isflare > 0)[0]

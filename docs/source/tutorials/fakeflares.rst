@@ -25,6 +25,7 @@ To run a series of injections, call the ``sample_flare_recovery()`` method on a 
 ``fake_flc`` is just like the original one, but without the ``fake_flares`` attribute. Instead, its flux contains synthetic flares from the last iteration run by ``sample_flare_recovery``. We return it because it is often useful to see what one actually injects:
 
 ::  
+
     import matplotlib.pyplot as plt
     fig, ax = plt.subplots(figsize=(12,5))
     fakeflc.plot(ax=ax, c="r", label="TIC 29780677 with injected flares")

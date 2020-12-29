@@ -4,16 +4,20 @@ Finding Flares
 First you'll need a de-trended light curve (more details on de-trending here_.). Let's pick a TESS light curve:
 
 ::
-    rawflc = from_mast("TIC 29780677", mode="LC", c=2, mission="TESS")
+   
+     rawflc = from_mast("TIC 29780677", mode="LC", c=2, mission="TESS")
 
 If you have a raw ``FlareLightCurve`` we can call ``rawflc``, for Kepler and TESS light curves use:
+
+::
 
     flc = rawflc.detrend("savgol")
 
 The following snippet shows the difference: The raw flux is still stored in ``flc.flux``, the de-trended flux is in ``flc.detrended_flux``
 
 ::
-    import matplotlib.pyplot as plt
+   
+     import matplotlib.pyplot as plt
     plt.figure(figsize=(12,5))
     plt.plot(flc.time, flc.flux / np.nanmedian(flc.flux)+0.1, c="r", label="PDCSAP_FLUX")
     plt.plot(flc.time, flc.detrended_flux / np.nanmedian(flc.detrended_flux), "b", label="detrended flux")
@@ -30,11 +34,13 @@ The following snippet shows the difference: The raw flux is still stored in ``fl
 **Note:** K2 is more difficult, and computationally intense, but doable with:
 
 ::
+    
     flc = rawflc.detrend("k2sc")
 
 Now you have a de-trended light curve ``flc``, and you can search it for flares:
 
 ::
+    
     flc = flc.find_flares()
 
 This will return the initial light curve with a new attribute - ``flares``, which is a DataFrame_ with the following columns:
@@ -62,7 +68,14 @@ In ``FlareLightCurve.find_flares()``, the flare candidate definition follows the
 * The positive offset + ``FlareLightCurve.detrended_flux_err`` must be at least :math:`N_2` :math:`\sigma` above the local scatter.
 * The number of consecutive data points fulfilling the above criteria must be at least :math:`N_3`.
 
-You can pass :math:`N_{1,2,3}` and ``sigma`` explicitly like ``FlareLightCurve.find_flares(N1=3, N2=2, N3=3, sigma=<local_scatter_array>)``. The default settings are: ``N1=3``, ``N2=2``, ``N3=3``. ``sigma`` defaults to ``FlareLightCurve.detrended_flux_err``.  So, if you do not want to pass an array of local scatter values with the keyword argument ``sigma`` to ``find_flares()``, the :math:`N_2` specification  automatically becomes the more restrictive criterion. In this scenario, choosing ``N1=3`` and ``N2=2`` check for the same criterion.
+You can pass :math:`N_{1,2,3}` and ``sigma`` explicitly like 
+
+::
+
+    FlareLightCurve.find_flares(N1=3, N2=2, N3=3, sigma=<local_scatter_array>)
+
+
+The default settings are: ``N1=3``, ``N2=2``, ``N3=3``. ``sigma`` defaults to ``FlareLightCurve.detrended_flux_err``.  So, if you do not want to pass an array of local scatter values with the keyword argument ``sigma`` to ``find_flares()``, the :math:`N_2` specification  automatically becomes the more restrictive criterion. In this scenario, choosing ``N1=3`` and ``N2=2`` check for the same criterion.
 
 **Note 1:** You can only apply the ``find_flares()`` method once to each de-trended light curve to avoid accidently listing flare candidates obtained with diffent sets of criteria in a single table. If you want to try different sets you have to create a copy of your ``FlareLightCurve`` for each set.
 
