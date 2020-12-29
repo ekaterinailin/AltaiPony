@@ -15,7 +15,7 @@ Then, calling
 will show
 
 .. image:: ticplot.png
-  :width: 400
+  :width: 600
   :alt: TESS flare light curve
 
 Or a K2 target pixel file, and convert it to a ``FlareLightCurve`` using some extra arguments like ``flux_type``, ``cadence``, and ``aperture_mask`` :
@@ -24,7 +24,7 @@ Or a K2 target pixel file, and convert it to a ``FlareLightCurve`` using some ex
 >>> flc.plot()
 
 .. image:: epicplot.png
-  :width: 400
+  :width: 600
   :alt: K2 flare light curve
 
 You can also fetch some remote file, de-trend it, store it as an AltaiPony light curve, and read it back in again, like so:

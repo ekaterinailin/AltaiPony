@@ -1,11 +1,30 @@
 Finding Flares
 =====
 
-First you'll need a de-trended light curve (find out how here_.). If you have a raw ``FlareLightCurve`` we can call ``rawflc``, for Kepler and TESS light curves use:
+First you'll need a de-trended light curve (more details on de-trending here_.). Let's pick a TESS light curve:
+
+>>> rawflc = from_mast("TIC 29780677", mode="LC", c=2, mission="TESS")
+
+If you have a raw ``FlareLightCurve`` we can call ``rawflc``, for Kepler and TESS light curves use:
 
 >>> flc = rawflc.detrend("savgol")
 
-K2 is more difficult, and computationally intense, but doable with:
+The following snippet shows the difference: The raw flux is still stored in ``flc.flux``, the de-trended flux is in ``flc.detrended_flux``
+
+>>> plt.figure(figsize=(12,5))
+>>> plt.plot(flc.time, flc.flux / np.nanmedian(flc.flux)+0.1, c="r", label="PDCSAP_FLUX")
+>>> plt.plot(flc.time, flc.detrended_flux / np.nanmedian(flc.detrended_flux), "b", label="detrended flux")
+>>> plt.xlabel("Time - 2457000 [BKJD days]")
+>>> plt.ylabel(r"Flux [e$^-$s$^{-1}$]")
+>>> plt.xlim(flc.time[0], flc.time[-1])
+>>> plt.ylim(.95,1.30)
+>>> plt.legend(loc=2,fontsize=13);
+
+.. image:: ticplotdetrend.png
+  :width: 600
+  :alt: de-trended TESS flare light curve
+
+**Note:** K2 is more difficult, and computationally intense, but doable with:
 
 >>> flc = rawflc.detrend("k2sc")
 
@@ -19,6 +38,14 @@ This will return the initial light curve with a new attribute - ``flares``, whic
 * ``ed_rec`` - recovered equivalent duration of the flare, that is, the are under the light curve with quiescent flux subtracted.
 * ``ed_rec_err`` - the minimum uncertainty on equivalent duration derived from the uncertainty on the flare flux values (see `Davenport (2016)`_ for details, Eq. (2)).
 * ``cstart, cstop, istart, istop, tstart, tstop`` - start and end of flare candidates in units of cadence, array index and actual time in days.
+* ``dur`` - which is ``tstop-tstart``
+* ``total_n_valid_data_points`` -  number of data points search for flare epochs in the de-trended light curve.
+
+In our case, it should look like this:
+
+.. image:: flaretable.png
+  :width: 700
+  :alt: de-trended TESS flare light curve flares
 
 Defining flare candidates
 ^^^^^^^^^^^^^^^^^^^^^^^^^
