@@ -1,7 +1,9 @@
 Synthetic Flare Injection and Recovery
 =====
 
-These are the functions that inject synthetic flare events and manage the output. To run a series of iterations with synthetic flares, call the ``sample_flare_recovery()`` method on a ``FlareLightCurve``.
+To characterize how well the de-trending and flare finding procedures actually find and characterized flares in a light curve you can inject synthetic flares into it and run the procedures to compare the recovered events to the injected ones. In **AltaiPony**, the shapes of the flares are generated using the emprical flare model from `Davenport et al. (2014)`_.
+
+To run a series of injections, call the ``sample_flare_recovery()`` method on a ``FlareLightCurve``.
 
 ::
 
@@ -20,14 +22,64 @@ These are the functions that inject synthetic flare events and manage the output
 * ``peak_time``: time at which the synthetic flare flux peaks 	
 * all columns that appear in the `flares` attribute of `FlareLightCurve`, see here_. If the respective row has a value, the synthetic flare was recovered with some results, otherwise **AltaiPony** could not re-discover this flare at all.
 
-``fake_flc`` is just like the original one, but without the ``fake_flares`` attribute. Instead, its flux contains synthetic flares from the last iteration run by ``sample_flare_recovery``. We return it because it is often useful to see what one actually injects.
+``fake_flc`` is just like the original one, but without the ``fake_flares`` attribute. Instead, its flux contains synthetic flares from the last iteration run by ``sample_flare_recovery``. We return it because it is often useful to see what one actually injects:
+
+::  
+    import matplotlib.pyplot as plt
+    fig, ax = plt.subplots(figsize=(12,5))
+    fakeflc.plot(ax=ax, c="r", label="TIC 29780677 with injected flares")
+    flc.plot(ax=ax, c="k")
+
+.. image:: ticplotinjected.png
+  :width: 700
+  :alt: TESS flare light curve with injected flares
+
+
+Visualizing results
+--------------------
+
+Let's pick GJ 1243, a famous flare star, inject and recover some flares and look at the results. We follow the same step as before, but inject about 1000 synthetic flares. The setup below produces the minimum number of 1 flare per light curve chunk per iteration, and the TESS light curve of GJ 1243 is split into two uniterrupted segments, therefore, we run 500 iterations. You can get faster results by increasing ``fakefreq``. 
+
+::
+
+    from altaipony.lcio import from_mast
+    flc = from_mast("GJ 1243", mode="LC", c=15, mission="TESS")
+    flc = flc.detrend("savgol")
+    flc, fake_flc = flc.sample_flare_recovery(inject_before_detrending=True, mode="savgol", 
+                                              iterations=500, fakefreq=.01, ampl=[1e-4, 0.5], 
+                                              dur=[.001/6., 0.1/6.])
+
+
+We can now look at what fraction of the injected equivalent duration of flares with different recovered amplitudes and durations is recovered:
+
+::
+    fig = flc.plot_ed_ratio_heatmap(flares_per_bin=.3)
+    plt.title("GJ 1243")
+
+
+.. image:: edratio.png
+  :width: 500
+  :alt: ED ratio of recovered flares in GJ 1243
+
+Similarly, we can illustrate what fraction of flares with different injected amplitudes and full-width-at-half-maximum values (:math:`t_{1/2}` in `Davenport et al. (2014)`_) is recovered:
+
+::
+    fig = flc.plot_recovery_probability_heatmap(flares_per_bin=.3)
+    plt.title("GJ 1243");
+
+
+.. image:: recprob.png
+  :width: 500
+  :alt: recovery probability of synthetic flares in GJ 1243
+
 
 Flare characterization
 -----------------------
 
 What can we do with all these synthetic flares? We can use them to characterize the flare candidates in the original light curve. To do this, call the ``characterize_flares`` method on your ``FlareLightCurve``:
 
->>> flc = flc.characterize_flares(ampl_bins=20, dur_bins=30)
+::
+    flc = flc.characterize_flares(ampl_bins=20, dur_bins=30)
 
 This method will tile up your sample of fake flares into amplitude and duration bins twice. First, it will tile up the sample into a matrix based on the *recovered* amplitude and durations. Second, it will do the same with the *injected* properties, and so include also those injected flares that were not recovered. 
 
@@ -84,3 +136,4 @@ As in the columns but now for recovery probability:
 
 .. _DataFrame: https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.html
 .. _here: https://altaipony.readthedocs.io/en/latest/api/altai.html
+.. _Davenport et al. (2014): https://ui.adsabs.harvard.edu/abs/2014ApJ...797..122D/abstract

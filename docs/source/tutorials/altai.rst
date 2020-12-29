@@ -3,22 +3,25 @@ Finding Flares
 
 First you'll need a de-trended light curve (more details on de-trending here_.). Let's pick a TESS light curve:
 
->>> rawflc = from_mast("TIC 29780677", mode="LC", c=2, mission="TESS")
+::
+    rawflc = from_mast("TIC 29780677", mode="LC", c=2, mission="TESS")
 
 If you have a raw ``FlareLightCurve`` we can call ``rawflc``, for Kepler and TESS light curves use:
 
->>> flc = rawflc.detrend("savgol")
+    flc = rawflc.detrend("savgol")
 
 The following snippet shows the difference: The raw flux is still stored in ``flc.flux``, the de-trended flux is in ``flc.detrended_flux``
 
->>> plt.figure(figsize=(12,5))
->>> plt.plot(flc.time, flc.flux / np.nanmedian(flc.flux)+0.1, c="r", label="PDCSAP_FLUX")
->>> plt.plot(flc.time, flc.detrended_flux / np.nanmedian(flc.detrended_flux), "b", label="detrended flux")
->>> plt.xlabel("Time - 2457000 [BKJD days]")
->>> plt.ylabel(r"Flux [e$^-$s$^{-1}$]")
->>> plt.xlim(flc.time[0], flc.time[-1])
->>> plt.ylim(.95,1.30)
->>> plt.legend(loc=2,fontsize=13);
+::
+    import matplotlib.pyplot as plt
+    plt.figure(figsize=(12,5))
+    plt.plot(flc.time, flc.flux / np.nanmedian(flc.flux)+0.1, c="r", label="PDCSAP_FLUX")
+    plt.plot(flc.time, flc.detrended_flux / np.nanmedian(flc.detrended_flux), "b", label="detrended flux")
+    plt.xlabel("Time - 2457000 [BKJD days]")
+    plt.ylabel(r"Flux [e$^-$s$^{-1}$]")
+    plt.xlim(flc.time[0], flc.time[-1])
+    plt.ylim(.95,1.30)
+    plt.legend(loc=2,fontsize=13);
 
 .. image:: ticplotdetrend.png
   :width: 600
@@ -26,11 +29,13 @@ The following snippet shows the difference: The raw flux is still stored in ``fl
 
 **Note:** K2 is more difficult, and computationally intense, but doable with:
 
->>> flc = rawflc.detrend("k2sc")
+::
+    flc = rawflc.detrend("k2sc")
 
 Now you have a de-trended light curve ``flc``, and you can search it for flares:
 
->>> flc = flc.find_flares()
+::
+    flc = flc.find_flares()
 
 This will return the initial light curve with a new attribute - ``flares``, which is a DataFrame_ with the following columns:
 
