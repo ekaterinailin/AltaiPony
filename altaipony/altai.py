@@ -13,11 +13,12 @@ from .detrend import MultiBoxcar
 
 LOG = logging.getLogger(__name__)
 
-def find_flares_in_cont_obs_period(flux, median, error, N1=3, N2=2, N3=3):
+def find_flares_in_cont_obs_period(flux, median, error, N1=3, N2=2, N3=3, 
+                                   sigma=None):
     '''
     The algorithm for local changes due to flares defined by
     S. W. Chang et al. (2015), Eqn. 3a-d
-    http://arxiv.org/abs/1510.01005
+    https://ui.adsabs.harvard.edu/abs/2015ApJ...814...35C/abstract
 
     Note: these equations were originally in magnitude units, i.e. smaller
     values are increases in brightness. The signs have been changed, but
@@ -30,14 +31,17 @@ def find_flares_in_cont_obs_period(flux, median, error, N1=3, N2=2, N3=3):
     error : numpy array
         errors corresponding to data.
     N1 : int, optional
-        Coefficient from original paper (Default is 3 in paper, 3 here)
+        Coefficient from original paper (Default is 3)
         How many times above the stddev is required.
     N2 : int, optional
-        Coefficient from original paper (Default is 1 in paper, 2 here)
+        Coefficient from original paper (Default is 2)
         How many times above the stddev and uncertainty is required
     N3 : int, optional
         Coefficient from original paper (Default is 3)
         The number of consecutive points required to flag as a flare
+    sigma : numpy array
+        local scatter of the flux. Array should be the same length as flux
+        and error. If sigma=None, error is used instead.
 
 
     Return:
@@ -46,17 +50,19 @@ def find_flares_in_cont_obs_period(flux, median, error, N1=3, N2=2, N3=3):
         datapoints are flagged with 1 if they belong to a flare candidate
     '''
     isflare = np.zeros_like(flux, dtype='bool')
-    
-    sigma = error#np.nanstd(flux[~isflare])
+  
+    # If no local scatter characteristics are given, use formal error as sigma    
+    if sigma is None:
+        sigma = error
     T0 = flux - median # excursion should be positive #"N0"
     T1 = np.abs(flux - median) / sigma #N1
     T2 = np.abs(flux - median + error) / sigma #N2
     
     # apply thresholds N0-N2:
-    LOG.debug('Factor above standard deviation: N1 = {},\n'
-                'Factor above standard deviation + uncertainty N2 = {},\n'
-                'Minimum number of consecutive data points for candidate N3 = {}'
-                .format(N1,N2,N3))
+    LOG.debug(f'Factor above standard deviation: N1 = {N1},\n'
+              f'Factor above standard deviation + uncertainty N2 = {N2},\n'
+              f'Minimum number of consecutive data points for candidate N3 = {N3}')
+              
     pass_thresholds = np.where((T0 > 0) & (T1 > N1) & (T2 > N2))
     
     #array of indices where thresholds are exceeded:

@@ -405,7 +405,7 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
             #find the true median value iteratively
             lc = find_iterative_median(lc)
             #find flares
-            lc = find_flares(lc, **kwargs)
+            lc = find_flares(lc, minsep=minsep, **kwargs)
 
         return lc
 
