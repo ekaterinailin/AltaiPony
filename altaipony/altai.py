@@ -13,8 +13,8 @@ from .detrend import MultiBoxcar
 
 LOG = logging.getLogger(__name__)
 
-def find_flares_in_cont_obs_period(flux, median, error, N1=3, N2=2, N3=3, 
-                                   sigma=None):
+def find_flares_in_cont_obs_period(flux, median, error, sigma=None, 
+                                   N1=3, N2=2, N3=3):
     '''
     The algorithm for local changes due to flares defined by
     S. W. Chang et al. (2015), Eqn. 3a-d
@@ -28,20 +28,20 @@ def find_flares_in_cont_obs_period(flux, median, error, N1=3, N2=2, N3=3,
     ----------
     flux : numpy array
         data to search over
+    median : float or numpy array
+        median value of quiescent stellar flux
     error : numpy array
         errors corresponding to data.
-    N1 : int, optional
-        Coefficient from original paper (Default is 3)
-        How many times above the stddev is required.
-    N2 : int, optional
-        Coefficient from original paper (Default is 2)
-        How many times above the stddev and uncertainty is required
-    N3 : int, optional
-        Coefficient from original paper (Default is 3)
-        The number of consecutive points required to flag as a flare
     sigma : numpy array
-        local scatter of the flux. Array should be the same length as flux
-        and error. If sigma=None, error is used instead.
+        local scatter of the flux. Array should be the same length as the
+        detrended flux array. 
+        If sigma=None, error is used instead.
+    N1 : int (default is 3)
+        How many times above sigma is required.
+    N2 : int (Default is 2)
+        How many times above sigma and detrended_flux_err is required
+    N3 : int (Default is 3)
+        The number of consecutive points required to flag as a flare.
 
 
     Return:

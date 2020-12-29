@@ -387,7 +387,20 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
             Minimum distance between two candidate start times in datapoints.
         kwargs : dict
             keyword arguments to pass to :func:`find_flares_in_cont_obs_period`
-
+        
+        Possible keyword arguments: 
+   	    
+        sigma : numpy array
+            local scatter of the flux. Array should be the same length as the
+            detrended flux array. 
+            If sigma=None, error is used instead.
+        N1 : int (default is 3)
+            How many times above sigma is required.
+        N2 : int (Default is 2)
+            How many times above sigma and detrended_flux_err is required
+        N3 : int (Default is 3)
+            The number of consecutive points required to flag as a flare.
+        
         Returns
         ----------
         FlareLightCurve
