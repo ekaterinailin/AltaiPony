@@ -1,4 +1,4 @@
-Finding flares
+Finding Flares
 =====
 
 First you'll need a de-trended light curve (find out how here_.). If you have a raw ``FlareLightCurve`` we can call ``rawflc``, for Kepler and TESS light curves use:

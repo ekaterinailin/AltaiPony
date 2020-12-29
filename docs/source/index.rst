@@ -7,9 +7,9 @@
 Flare science in Kepler, K2 and TESS light curves
 ======================================================
 
-**AltaiPony** finds flares in Kepler, K2, and TESS photometry. You can create a ``FlareLightCurve``, remove systematics and photometric variability, and search it for flares. 
+**AltaiPony** is a toolbox for statistical flare studies in photometric time series from Kepler, K2, and TESS, including flare search and characterization, injection/recovery diagnostics, and statistical analysis of flare frequency distributions along with extensive documentation and tutorials.
 
-K2 light curves are best de-trended using **K2SC** [5]_. For TESS and Kepler we employ a Savitzky-Golay filter. You can use most methods from lightkurve_'s ``KeplerLightCurve`` and ``TessLightCurve`` classes. **AltaiPony** can be used to inject and recover synthetic flare signatures. Jump to the core class is here_. **AltaiPony** replaces the original **Appaloosa** [b]_. 
+.. K2 light curves are best de-trended using **K2SC** [5]_. For TESS and Kepler we employ a Savitzky-Golay filter. You can use most methods from lightkurve_'s ``KeplerLightCurve`` and ``TessLightCurve`` classes. **AltaiPony** can be used to inject and recover synthetic flare signatures. Jump to the core class here_. **AltaiPony** features the flare candidate definition from **Appaloosa** [b]_. 
 
 .. _user-docs:
 
@@ -25,7 +25,7 @@ K2 light curves are best de-trended using **K2SC** [5]_. For TESS and Kepler we 
 Problems?
 ^^^^^^^^^
 
- Often, when something does not work in **AltaiPony** and this documentation is useless, troubleshooting can be done by diving into the extensive **lightkurve** docs_. Otherwise, you can always shoot Ekaterina an email_ or directly open an issue on GitHub_. Many foreseeable problems will be due to bugs in **AltaiPony** or bad user instructions.
+ Often, when something does not work in **AltaiPony**, and this documentation is useless, troubleshooting can be done by diving into the extensive **lightkurve** docs_. Otherwise, you can always shoot Ekaterina an email_ or directly open an issue on GitHub_. Many foreseeable problems will be due to bugs in **AltaiPony** or bad instructions on this website.
 
 
 How to cite this work

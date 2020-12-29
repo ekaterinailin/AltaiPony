@@ -4,6 +4,16 @@ Quickstart
 Installation
 ^^^^^^^^^^^^
 
+
+Use pip to install AltaiPony
+
+::
+	
+    pip install altaipony
+
+
+Or install directly from the repository:
+
 ::
     
     git clone https://github.com/ekaterinailin/AltaiPony.git
@@ -16,7 +26,7 @@ This package depends, on `lightkurve`, `k2sc`, `numpy`, `pandas` and some other 
 Getting Started
 ^^^^^^^^^^^^^^^^
 
-Working with Kepler and TESS light curves is similar, K2 light curves need extra love, so we treat them separately. For each mission, there is a notebook that will guide you through the basic applications.
+Working with Kepler and TESS light curves is similar, K2 light curves need extra attention, so we treat them separately. For each mission, there is a notebook that will guide you through the basic applications. Taking a look at the `Finding Data`_
 
 Kepler Light Curves
 ...................
@@ -34,6 +44,16 @@ K2 Light Curves
 If you are working with ``KeplerLightCurve`` objects, i.e. light curves from the K2 mission, this last notebook_ is for you. It will run **k2sc**'s GP de-trending and find flares in a typical K2 long cadence light curve despite its heavy instrumental artifacts.
 
 
+Next Steps
+^^^^^^^^^^^
+
+Once you have tried basic **AltaiPony** on your light curves, you can start to adjust the flare finding parameters to your application, as explained in the `Finding Flares`_ tutorial.
+
+You may then want to test the perfomance of your chosen flare finding setup by injecting and recoving synthetic flares into your light curves. **AltaiPony** provides a framework to do so, explained in the `Synthetic Flare Injection and Recovery`_ tutorial. Check out the `Visualize_Injection_Recovery`_ notebook for nice plots.
+
+For a statistical analysis of your flares, **AltaiPony** also features a set of tools for the analysis of flare frequency distributions, including visualization, and different methods for power law fitting. For starters, check out the tutorial on `Flare Frequency Distributions and Power Laws`_. If you want to go hands on, start with the `Beginner_Flare_Frequency_Distributions_and_Power_Laws`_ notebook. For more advanced tool, like working with samples of multiple stars and their flares, go to `Advanced_Flare_Frequency_Distributions_and_Power_Laws`_. 
+
+
 .. _Aigrain et al. 2016: http://ascl.net/1605.012
 .. _fork: https://github.com/ekaterinailin/k2sc
 .. _notebook: https://github.com/ekaterinailin/AltaiPony/blob/master/notebooks/Getting_Started.ipynb
@@ -41,3 +61,10 @@ If you are working with ``KeplerLightCurve`` objects, i.e. light curves from the
 .. _Savitzky-Golay: http://www.statistics4u.info/fundstat_eng/cc_filter_savgolay.html
 .. _scipy: https://docs.scipy.org/doc/scipy-0.15.1/reference/generated/scipy.signal.savgol_filter.html
 .. _other: https://github.com/ekaterinailin/AltaiPony/blob/master/notebooks/TESS_Light_Curves_With_Flares.ipynb
+.. _in this tutorial: https://altaipony.readthedocs.io/en/latest/tutorials/altai.html
+.. _Finding Data: https://altaipony.readthedocs.io/en/latest/tutorials/lcio.html
+.. _Synthetic Flare Injection and Recovery: https://altaipony.readthedocs.io/en/latest/tutorials/fakeflares.html
+.. _Visualize_Injection_Recovery.ipynb: https://github.com/ekaterinailin/AltaiPony/blob/master/notebooks/Visualize_Injection_Recovery.ipynb
+.. _Beginner_Flare_Frequency_Distributions_and_Power_Laws: https://github.com/ekaterinailin/AltaiPony/blob/master/notebooks/Beginner_Flare_Frequency_Distributions_and_Power_Laws.ipynb
+.. _Advanced_Flare_Frequency_Distributions_and_Power_Laws: https://github.com/ekaterinailin/AltaiPony/blob/master/notebooks/Advanced_Flare_Frequency_Distributions_and_Power_Laws.ipynb
+.. _Flare Frequency Distributions and Power Laws: https://altaipony.readthedocs.io/en/latest/tutorials/ffds.html
