@@ -297,7 +297,7 @@ def _heatmap(flcd, typ, ampl_bins, dur_bins, flares_per_bin):
                        ylabel=f"{typ_map[typ][0]} amplitude", 
                        xlabel=f"{typ_map[typ][0]} {typ_map[typ][1]} [d]");
     
-    return
+    return fig
     
     
 def plot_heatmap(df, val, label=None,
