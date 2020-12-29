@@ -53,6 +53,7 @@ Let's pick GJ 1243, a famous flare star, inject and recover some flares and look
 We can now look at what fraction of the injected equivalent duration of flares with different recovered amplitudes and durations is recovered:
 
 ::
+
     fig = flc.plot_ed_ratio_heatmap(flares_per_bin=.3)
     plt.title("GJ 1243")
 
@@ -64,6 +65,7 @@ We can now look at what fraction of the injected equivalent duration of flares w
 Similarly, we can illustrate what fraction of flares with different injected amplitudes and full-width-at-half-maximum values (:math:`t_{1/2}` in `Davenport et al. (2014)`_) is recovered:
 
 ::
+
     fig = flc.plot_recovery_probability_heatmap(flares_per_bin=.3)
     plt.title("GJ 1243");
 
@@ -79,7 +81,9 @@ Flare characterization
 What can we do with all these synthetic flares? We can use them to characterize the flare candidates in the original light curve. To do this, call the ``characterize_flares`` method on your ``FlareLightCurve``:
 
 ::
-    flc = flc.characterize_flares(ampl_bins=20, dur_bins=30)
+  
+   flc = flc.characterize_flares(ampl_bins=10, dur_bins=10)
+
 
 This method will tile up your sample of fake flares into amplitude and duration bins twice. First, it will tile up the sample into a matrix based on the *recovered* amplitude and durations. Second, it will do the same with the *injected* properties, and so include also those injected flares that were not recovered. 
 
@@ -126,7 +130,13 @@ As in the columns but now for recovery probability:
 * ``recovery_probability_std``
 
 
-"Properties" always refers to amplitude and duration.
+"Properties" always refers to amplitude and duration or FWHM.
+
+For a subset of these parameters, ``flc.flares`` could look like this:
+
+.. image:: characterized.png
+  :width: 700
+  :alt: characterized flares
 
 
 .. rubric:: Footnotes

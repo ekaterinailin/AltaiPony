@@ -67,3 +67,4 @@ Depending on the methods you use, you may also want to cite
 .. _GitHub: https://github.com/ekaterinailin/AltaiPony
 .. _here: https://altaipony.readthedocs.io/en/latest/api/altaipony.flarelc.FlareLightCurve.html
 .. _Quickstart: https://altaipony.readthedocs.io/en/latest/install.html
+.. _Getting Started: https://altaipony.readthedocs.io/en/latest/install.html#getting-started
