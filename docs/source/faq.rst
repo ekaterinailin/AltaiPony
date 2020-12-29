@@ -10,7 +10,7 @@ A flare in a Kepler or TESS light curve is a series of data points that fullfils
 What are the default settings for flare detection? 
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Yes, details are explained in the section on `Defining Flare Candidates`_.
+Default settings for flare detection are explained in the section on `Defining Flare Candidates`_.
 
 How does **AltaiPony** handle the ramp ups at the end of TESS orbits? 
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
