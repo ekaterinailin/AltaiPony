@@ -9,6 +9,8 @@ Flare science in Kepler, K2 and TESS light curves
 
 **AltaiPony** is a toolbox for statistical flare studies in photometric time series from Kepler, K2, and TESS, including flare search and characterization, injection/recovery diagnostics, and statistical analysis of flare frequency distributions along with extensive documentation and tutorials.
 
+Jump to `Getting Started`_ to get an overview!
+
 .. K2 light curves are best de-trended using **K2SC** [5]_. For TESS and Kepler we employ a Savitzky-Golay filter. You can use most methods from lightkurve_'s ``KeplerLightCurve`` and ``TessLightCurve`` classes. **AltaiPony** can be used to inject and recover synthetic flare signatures. Jump to the core class here_. **AltaiPony** features the flare candidate definition from **Appaloosa** [b]_. 
 
 .. _user-docs:
@@ -64,3 +66,4 @@ Depending on the methods you use, you may also want to cite
 .. _email: eilin@aip.de
 .. _GitHub: https://github.com/ekaterinailin/AltaiPony
 .. _here: https://altaipony.readthedocs.io/en/latest/api/altaipony.flarelc.FlareLightCurve.html
+.. _Quickstart: https://altaipony.readthedocs.io/en/latest/install.html

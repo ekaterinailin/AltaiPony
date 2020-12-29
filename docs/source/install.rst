@@ -47,11 +47,21 @@ If you are working with ``KeplerLightCurve`` objects, i.e. light curves from the
 Next Steps
 ^^^^^^^^^^^
 
+Define your own flare finding
+.............................
+
 Once you have tried basic **AltaiPony** on your light curves, you can start to adjust the flare finding parameters to your application, as explained in the `Finding Flares`_ tutorial.
+
+
+Test the performance of your flare finding algorithm
+.....................................................
 
 You may then want to test the perfomance of your chosen flare finding setup by injecting and recoving synthetic flares into your light curves. **AltaiPony** provides a framework to do so, explained in the `Synthetic Flare Injection and Recovery`_ tutorial. Check out the `Visualize_Injection_Recovery`_ notebook for nice plots.
 
-For a statistical analysis of your flares, **AltaiPony** also features a set of tools for the analysis of flare frequency distributions, including visualization, and different methods for power law fitting. For starters, check out the tutorial on `Flare Frequency Distributions and Power Laws`_. If you want to go hands on, start with the `Beginner_Flare_Frequency_Distributions_and_Power_Laws`_ notebook. For more advanced tool, like working with samples of multiple stars and their flares, go to `Advanced_Flare_Frequency_Distributions_and_Power_Laws`_. 
+Analyze flare frequency distributions
+......................................
+
+For a statistical analysis of your flares, **AltaiPony** also features a set of tools for the analysis of flare frequency distributions, including visualization, and different methods for power law fitting. For starters, check out the tutorial on `Flare Frequency Distributions and Power Laws`_. If you want to go hands on, start with the `beginner`_ notebook. For more advanced application, like working with samples of multiple stars and their flares, go to `advanced`_. 
 
 
 .. _Aigrain et al. 2016: http://ascl.net/1605.012
@@ -65,6 +75,6 @@ For a statistical analysis of your flares, **AltaiPony** also features a set of 
 .. _Finding Data: https://altaipony.readthedocs.io/en/latest/tutorials/lcio.html
 .. _Synthetic Flare Injection and Recovery: https://altaipony.readthedocs.io/en/latest/tutorials/fakeflares.html
 .. _Visualize_Injection_Recovery.ipynb: https://github.com/ekaterinailin/AltaiPony/blob/master/notebooks/Visualize_Injection_Recovery.ipynb
-.. _Beginner_Flare_Frequency_Distributions_and_Power_Laws: https://github.com/ekaterinailin/AltaiPony/blob/master/notebooks/Beginner_Flare_Frequency_Distributions_and_Power_Laws.ipynb
-.. _Advanced_Flare_Frequency_Distributions_and_Power_Laws: https://github.com/ekaterinailin/AltaiPony/blob/master/notebooks/Advanced_Flare_Frequency_Distributions_and_Power_Laws.ipynb
+.. _beginner: https://github.com/ekaterinailin/AltaiPony/blob/master/notebooks/Beginner_Flare_Frequency_Distributions_and_Power_Laws.ipynb
+.. _advanced: https://github.com/ekaterinailin/AltaiPony/blob/master/notebooks/Advanced_Flare_Frequency_Distributions_and_Power_Laws.ipynb
 .. _Flare Frequency Distributions and Power Laws: https://altaipony.readthedocs.io/en/latest/tutorials/ffds.html
