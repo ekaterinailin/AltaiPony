@@ -353,11 +353,12 @@ def plot_heatmap(df, val, label=None,
                          index=['Amplitude'], 
                          columns=['Duration'])
 
+
     try:
         heatmap = seaborn.heatmap(heatmap1_data, cmap=cmap,cbar_kws={'label': label},
-                              vmin=valcbr[0], vmax=valcbr[1], annot=False, ax=ax,
-                              yticklabels=["{:.2f}".format(x) for x in heatmap1_data.index.values],
-                              xticklabels=["{:.3f}".format(x) for x in heatmap1_data.columns.values])
+                                  vmin=valcbr[0], vmax=valcbr[1], annot=False, ax=ax,
+                                  yticklabels=["{:.2f}".format(x) for x in heatmap1_data.index.values],
+                                  xticklabels=["{:.3f}".format(x) for x in heatmap1_data.columns.values])
     except AttributeError:
         heatmap = seaborn.heatmap(heatmap1_data, cmap=cmap,cbar_kws={'label': label},
                               vmin=valcbr[0], vmax=valcbr[1], annot=False, ax=ax,

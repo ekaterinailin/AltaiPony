@@ -13,8 +13,8 @@ setuptools.setup(
     long_description_content_type="text/x-rst",
     url="https://github.com/ekaterinailin/AltaiPony",
     packages=setuptools.find_packages(),
-    install_requires = ['numpy>=1.15.1', 'pybind11','lightkurve==1.9.1','pandas>=1.0',
-                        'progressbar2','seaborn',  'k2sc==1.0.1.4', 'emcee','corner'],
+    install_requires = ['numpy>=1.15.1', 'pybind11','lightkurve>=1.9.1','pandas==1.1.4, !=1.1.5',
+                        'progressbar2>=3.51.4','seaborn',  'k2sc==1.0.1.4', 'emcee','corner'],
 
     include_package_data=True,
     package_data={
