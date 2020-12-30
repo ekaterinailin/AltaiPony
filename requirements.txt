@@ -6,7 +6,7 @@ lightkurve>=1.9.1
 k2sc==1.0.1.4
 emcee
 corner
-progressbar2
+progressbar2>=3.51.4
 gatspy
 seaborn
 
