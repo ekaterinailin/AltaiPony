@@ -22,6 +22,7 @@ Jump to `Getting Started`_ to get an overview!
 	install
         tutorials/index
    	api/index
+        faq
 	
 	
 Problems?
