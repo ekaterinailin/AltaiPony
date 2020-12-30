@@ -59,8 +59,8 @@ to preserve flare signal, while removing astrophysical and instrumental variabil
 `FlareLightCurve.detrend()` also allows users to add their own custom de-trending functions.
 
 After de-trending, `FlareLightCurve.find_flares()` returns the occurrence times, amplitudes, durations, 
-and relative energies of all flares above the detection threshold in the residual light curve using an adjustable iterative 
-sigma-clipping procedure to identify candidate events [@davenport2016]. 
+and relative energies of all flares above a defined noise threshold in the residual light curve using an adjustable iterative 
+sigma-clipping procedure to identify candidate events as series of positive outliers [@davenport2016]. 
 
 Usually, the measured flare amplitudes and durations differ systematically from their intrinsic properties 
 due to the astrophysical and instrumental characteristics of the light curves in which they were found. 
