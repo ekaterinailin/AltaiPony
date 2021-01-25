@@ -176,7 +176,7 @@ def find_flares(flc, minsep=3, **kwargs):
     return lc
 
 
-def detrend_savgol(lc, window_length=None, pad=3, **kwargs):
+def detrend_savgol(lc, window_length=None, pad=3, printwl=False, **kwargs):
     '''Construct a model light curve.
     Based on original Apppaloosa (Davenport 2016)
     with Savitzky-Golay filtering from scipy,
@@ -196,6 +196,8 @@ def detrend_savgol(lc, window_length=None, pad=3, **kwargs):
         mask this number of data points before and
         after each outlier. Note that sigma_clip
         already expands the mask 
+    printwl : bool
+        if True will print final window_length
     kwargs : dict
         keyword arguments to pass to :func:`utils.sigma_clip`
     
@@ -240,6 +242,8 @@ def detrend_savgol(lc, window_length=None, pad=3, **kwargs):
         
         # args are flux, window_length, polyorder, mode is 
         wl = max(wl, 5) #wl must be larger than polyorder
+        if printwl: 
+            print(f"window length: {wl}")
         flux_model_i = savgol_filter(flux, wl, 3, mode='nearest')
         
         flux_diff = flux - flux_model_i + np.nanmean(flux_model_i)
@@ -292,7 +296,14 @@ def detrend_savgol(lc, window_length=None, pad=3, **kwargs):
                 k = j + 2
             k = min(len(lc.flux_model[le:ri]), k)
 
-            upper = min(j+d-i+off, len(flux_model_j))
+            upper = min(j + d - i + off, len(flux_model_j))
+
+            # work around a bug that sometimes occurs, not sure why
+            # ----------------------------------
+            if k == len(lc.flux_model[le:ri]): 
+                k-=1
+            # ----------------------------------
+
             flux_model_j[off:upper] = np.nanmean(lc.flux_model[le:ri][[i,k]])
             off += j + d - i
             
