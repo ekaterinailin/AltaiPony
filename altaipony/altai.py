@@ -14,7 +14,8 @@ from .detrend import MultiBoxcar
 LOG = logging.getLogger(__name__)
 
 def find_flares_in_cont_obs_period(flux, median, error, sigma=None, 
-                                   N1=3, N2=2, N3=3):
+                                   N1=3, N2=2, N3=3, addtail=False,
+                                   tailthreshdiff=1.):
     '''
     The algorithm for local changes due to flares defined by
     S. W. Chang et al. (2015), Eqn. 3a-d
@@ -36,12 +37,18 @@ def find_flares_in_cont_obs_period(flux, median, error, sigma=None,
         local scatter of the flux. Array should be the same length as the
         detrended flux array. 
         If sigma=None, error is used instead.
-    N1 : int (default is 3)
+    N1 : int or float (default is 3)
         How many times above sigma is required.
-    N2 : int (Default is 2)
+    N2 : int or float (Default is 2)
         How many times above sigma and detrended_flux_err is required
-    N3 : int (Default is 3)
+    N3 : int or float (Default is 3)
         The number of consecutive points required to flag as a flare.
+    addtail : bool (Default is False)
+        Optionally, add data points to the flares with a lower threshold
+    tailthreshdiff: int ot float (Default is 1)
+        relaxes the detection threshold for datapoints that are added to
+        the decay tails of flare candidates. Tailthreshdiff is subtracted
+        from N1 and N2, and should not be larger than either of the two.
 
 
     Return:
@@ -86,10 +93,35 @@ def find_flares_in_cont_obs_period(flux, median, error, sigma=None,
                         
     # use the value of reverse_counts to determine how many points away stop is
     istop_i = istart_i + (reverse_counts[istart_i])
+    
+    # OPTION: add decay phase data point with a lower detection threshold
+    if addtail == True:
+        
+        # check for bad values of tailthreshdiff
+        if ((tailthreshdiff > N1) | (tailthreshdiff > N2)):
+            raise ValueError("The threshold on the decay tail should be "
+                             ">0. Note N1tail = N1-tailthreshdiff and "
+                             "same for N2.")
+        
+        # calculate new N1 and N2 for the tails
+        N1tail, N2tail = N1 - tailthreshdiff, N2 - tailthreshdiff
+
+        # add data points from tail until threshold no longer satisfied
+        newstops = []
+        for s in istop_i:
+            while ((T0[s] > 0) & (T1[s] > N1tail) & (T2[s] > N2tail)):
+                s += 1
+            newstops.append(s)
+        
+        # overwrite old flare stop indices
+        istop_i = newstops
+
+    # Create boolean flare mask
     isflare = np.zeros_like(flux, dtype='bool')
     
-    for (l,r) in list(zip(istart_i,istop_i)):
+    for (l,r) in list(zip(istart_i, istop_i)):
         isflare[l:r+1] = True
+        
     return isflare
 
 def find_flares(flc, minsep=3, **kwargs):
