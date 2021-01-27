@@ -15,11 +15,12 @@ def test_expand_mask():
     a[[15,16]] = 0
 
     # check result
-    assert (expand_mask(copy.deepcopy(a)) == np.array([1, 1, 1, 0, 1,
-                                        1, 1, 1, 1, 1,
-                                        1, 1, 0, 0, 0,
-                                        0, 0, 0, 0, 0,
-                                        0, 0, 0, 1, 1])).all()
+    assert (expand_mask(copy.deepcopy(a), longdecay=2) == 
+            np.array([1, 1, 1, 0, 1,
+                      1, 1, 1, 1, 1,
+                      1, 1, 0, 0, 0,
+                      0, 0, 0, 0, 0,
+                      0, 0, 0, 1, 1])).all()
 
     # this breaks the function:
     a[7] = np.nan

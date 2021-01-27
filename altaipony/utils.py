@@ -182,18 +182,20 @@ def sigma_clip(a, max_iter=10, max_sigma=3.,
         return mlow & mhigh
 
 
-def expand_mask(a, divval=1):
+def expand_mask(a, longdecay=1):
     """Expand the mask if multiple outliers occur in a row.
     Add 3 x sqrt(#outliers in a row / divval) masked points
     before and after the outlier sequence.
+    
+    Yes the code looks is ugly, but it's faster than 
     
     Parameters:
     -----------
     a : bool array
         mask
-    divval : float
-        optional parameter to set the length of the
-        expanded mask
+    longdecay : int
+        optional parameter to expand the mask more by 
+        this factor after the series of outliers 
      
     Return:
     -------
@@ -217,17 +219,16 @@ def expand_mask(a, divval=1):
         
         elif (v==1) & (j==1):
             if k >= 2:
-                addto = int(np.rint(3 * np.sqrt(k/divval)))
+                addto = int(np.rint(2 * np.sqrt(k)))
                 a[i - k - addto : i - k] = 0
-                a[i : i + addto] = 0
-                i += addto
+                a[i : i + longdecay * addto] = 0
+                i += longdecay * addto
             else:
                 i += 1
             j = 0
             k = 0
                  
     return a
-
 def generate_random_power_law_distribution(a, b, g, size=1, seed=None):
     """Power-law generator for pdf(x)\propto x^{g-1}
     for a<=x<=b
