@@ -54,7 +54,7 @@ See this notebook_ for an easy introduction, also docs_.
 How to cite this work
 ^^^^^^^^^^^^^^^^^^^^^
 
-If you end up using this package for your science, please cite Ilin et al. (2020) [a]_ and Davenport (2016) [b]_.
+If you end up using this package for your science, please cite Ilin et al. (2021) [a]_ and Davenport (2016) [b]_.
 
 Please also cite `lightkurve` as indicated in their docs [1]_. 
 
@@ -65,7 +65,7 @@ Depending on the methods you use, you may also want to cite
   - Aigrain et al. (2016) [4]_ and their softwar [5]_ (K2SC de-trending)
 
 
-.. [a] Ekaterina Ilin, Sarah J. Schmidt, Katja Poppenhäger, James R. A. Davenport, Martti H. Kristiansen, Mark Omohundro (2020). "Flares in Open Clusters with K2. II. Pleiades, Hyades, Praesepe, Ruprecht 147, and M67" https://arxiv.org/abs/2010.05576
+.. [a] Ekaterina Ilin, Sarah J. Schmidt, Katja Poppenhäger, James R. A. Davenport, Martti H. Kristiansen, Mark Omohundro (2021). "Flares in Open Clusters with K2. II. Pleiades, Hyades, Praesepe, Ruprecht 147, and M67" Astronomy & Astrophysics, Volume 645, id.A42, 25 pp.  	https://doi.org/10.1051/0004-6361/202039198 
 
 .. [b] James R. A. Davenport "The Kepler Catalog of Stellar Flares" The Astrophysical Journal, Volume 829, Issue 1, article id. 23, 12 pp. (2016). https://doi.org/10.3847/0004-637X/829/1/23
 
