@@ -49,10 +49,10 @@ def test_detrend_savgol():
     # the outcome of this one. It should only recover the one flare we intro-
     # duced above around t=2025
     flares = flcd.find_flares().flares
-    print(flares)
+    
     f = flares.iloc[0,:]
     assert f.tstart == pytest.approx(2025, abs=5e-3)
-    assert f.ed_rec == pytest.approx(8.46336,abs=f.ed_rec_err)
+    assert f.ed_rec == pytest.approx(8.31358,abs=f.ed_rec_err)
     assert f.istart == 4691
     assert f.istop == 4695
     assert f.total_n_valid_data_points == 1e4-309
@@ -71,29 +71,78 @@ def test_iterative_median():
     assert np.median(lc1.it_med) == np.median(lc2.it_med)
 
 def test_find_flares():
-     """
-     Integration test of a mock example light curve is given in test_flarelc.
-     Add unit tests!
-     """
-
-     flc = mock_flc(detrended=False)
-     with pytest.raises(TypeError):
-         #raises error bc find_flares only works on detrended_flux
-         find_flares(flc)
+    """
+    Integration test of a mock example light curve is given in test_flarelc.
+    Add unit tests!
+    """
+    flc = mock_flc(detrended=False)
+    with pytest.raises(TypeError):
+        #raises error bc find_flares only works on detrended_flux
+        find_flares(flc)
      
-     # Check if all columns are created
-     flc = mock_flc(detrended=True)
-     for col in  ['istart', 'istop', 'cstart', 'cstop', 'tstart',
+    # Check if all columns are created
+    flc = mock_flc(detrended=True)
+    for col in  ['istart', 'istop', 'cstart', 'cstop', 'tstart',
                  'tstop', 'ed_rec', 'ed_rec_err', 'ampl_rec', 
                  'total_n_valid_data_points', 'dur']:
-         assert col in flc.flares.columns
+        assert col in flc.flares.columns
 
 def test_find_flares_in_cont_obs_period():
-     """
-     Integration test of a mock example light curve is given in test_flarelc.
-     Add unit tests!
-     """
-     pass
+    """
+    Integration test of a mock example light curve is given in test_flarelc.
+    Add unit tests!
+    """
+    # Set up a light curve with a flare
+    
+    # time series (not needed but helpful for debugging)
+    time = np.linspace(30,40,100)
+    
+    # flux array
+    flux = 400 + np.random.normal(0,30,100)
+    
+    # add the flare
+    flux[30:41] = [800, 660, 500, 490, 480, 470, 460, 455, 450, 445, 440]
+    
+    # give the LC characteristics
+    median, error, sigma = 400., 1., 30.,
+
+    # find the flare
+    isflare = find_flares_in_cont_obs_period(flux, median, error, 
+                                             sigma=sigma, N1=3, N2=2,
+                                             N3=3, addtail=False)
+    # check if found
+    assert (np.where(isflare)[0] == np.array([30, 31, 32, 33])).all()
+
+    # add flare decay phase to search
+    isflare = find_flares_in_cont_obs_period(flux, median, error, 
+                                             sigma=sigma, N1=3, N2=2,
+                                             N3=3, addtail=True)
+
+
+    # check if found
+    assert (np.where(isflare)[0] == np.array([30, 31, 32, 33, 34, 35, 36])).all()
+
+    # add a second flare
+    flux[40:49] = [510, 500, 491, 470, 460, 455, 450, 445, 440]
+
+    # find with tails
+    isflare = find_flares_in_cont_obs_period(flux, median, error, 
+                                             sigma=sigma, N1=3, N2=2, 
+                                             N3=3, addtail=True)
+
+    # check if found
+    assert (np.where(isflare)[0] ==  np.array([30, 31, 32, 33, 34, 35, 
+											   36, 40, 41, 42, 43, 
+											   44])).all()
+
+    # bad value for tailthreshdiff throws error
+    with pytest.raises(ValueError):
+        isflare = find_flares_in_cont_obs_period(flux, median, error, 
+                                             sigma=sigma, N1=3, N2=2, 
+                                             N3=3, addtail=True, tailthreshdiff=3)
+
+
+
 
 def test_chi_square():
     """Test an abvious example"""

@@ -860,7 +860,7 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
 	        self.fake_flares = df
 
     def plot_recovery_probability_heatmap(self, ampl_bins=None, 
-                                          dur_bins=None, flares_per_bin=20):
+                                          dur_bins=None, flares_per_bin=20, **kwargs):
         """Plot injected amplitude and injected
         FWHM vs. the fraction of recovered flares.
         
@@ -876,9 +876,9 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
 
         flc = copy.deepcopy(self)
         return _heatmap(flc, "recovery_probability", 
-                        ampl_bins, dur_bins, flares_per_bin)
+                        ampl_bins, dur_bins, flares_per_bin, **kwargs)
 
-    def plot_ed_ratio_heatmap(self, ampl_bins=None, dur_bins=None, flares_per_bin=20):
+    def plot_ed_ratio_heatmap(self, ampl_bins=None, dur_bins=None, flares_per_bin=20, **kwargs):
         """Plot recovered amplitude and recovered
         duration vs. the ratio of recovered ED to
         injected ED.
@@ -894,7 +894,7 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
         """
         flc = copy.deepcopy(self)
         return _heatmap(flc, "ed_ratio", 
-                        ampl_bins, dur_bins, flares_per_bin)
+                        ampl_bins, dur_bins, flares_per_bin, **kwargs)
 
     def characterize_flares(self, flares_per_bin=30, ampl_bins=None, dur_bins=None):
         """Use results from injection recovery to determine

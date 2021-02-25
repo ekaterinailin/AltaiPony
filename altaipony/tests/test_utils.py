@@ -1,8 +1,26 @@
+
 import pytest
 
 import numpy as np
+
 from ..flarelc import FlareLightCurve
-from ..utils import k2sc_quality_cuts, split_gaps
+from ..utils import k2sc_quality_cuts, split_gaps, expand_mask
+
+import copy
+
+def test_expand_mask():
+    # set up a test array with a single outlier and a sequence
+    a = np.ones(25).astype(int)
+    a[3] = 0
+    a[[15,16]] = 0
+
+    # check result
+    assert (expand_mask(copy.deepcopy(a), longdecay=2) == 
+            np.array([1, 1, 1, 0, 1,
+                      1, 1, 1, 1, 1,
+                      1, 1, 1, 1, 0,
+                      0, 0, 0, 0, 1,
+                      1, 1, 1, 1, 1])).all()
 
 
 def test_k2sc_quality_cuts():

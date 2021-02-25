@@ -252,7 +252,7 @@ def percentile(x, q):
     else:
         return np.percentile(x.dropna(), q=q)
 
-def _heatmap(flcd, typ, ampl_bins, dur_bins, flares_per_bin):
+def _heatmap(flcd, typ, ampl_bins, dur_bins, flares_per_bin, **kwargs):
     """Create a heatmap for either recovery probability or ED ratio.
     
     Parameters:
@@ -295,7 +295,7 @@ def _heatmap(flcd, typ, ampl_bins, dur_bins, flares_per_bin):
     # Create a heatmap
     fig = plot_heatmap(dff, val, ID=flcd.targetid, label=typ_map[typ][2],
                        ylabel=f"{typ_map[typ][0]} amplitude", 
-                       xlabel=f"{typ_map[typ][0]} {typ_map[typ][1]} [d]");
+                       xlabel=f"{typ_map[typ][0]} {typ_map[typ][1]} [d]", **kwargs);
     
     return fig
     
@@ -304,7 +304,7 @@ def plot_heatmap(df, val, label=None,
                  ID=None, valcbr=(0.,1.),
                  ovalcbr=(0,50), xlabel="duration [d]",
                  ylabel="amplitude", cmap="viridis",
-                 font_scale=1.5):
+                 font_scale=1.5, interpolate=False):
     """Plot a heatmap from the "fake_flares" table. 
     
     Parameters:
@@ -353,17 +353,23 @@ def plot_heatmap(df, val, label=None,
                          index=['Amplitude'], 
                          columns=['Duration'])
 
+    if interpolate==True:
+        heatmap1_data= (heatmap1_data.bfill(axis=0) +
+                                                heatmap1_data.ffill(axis=0) +
+                                                heatmap1_data.bfill(axis=1) +
+                                                heatmap1_data.ffill(axis=1)) / 4 
+        heatmap1_data = heatmap1_data.bfill(axis=0).ffill(axis=0).bfill(axis=1).ffill(axis=1)
 
     try:
         heatmap = seaborn.heatmap(heatmap1_data, cmap=cmap,cbar_kws={'label': label},
                                   vmin=valcbr[0], vmax=valcbr[1], annot=False, ax=ax,
-                                  yticklabels=["{:.2f}".format(x) for x in heatmap1_data.index.values],
-                                  xticklabels=["{:.3f}".format(x) for x in heatmap1_data.columns.values])
+                                  yticklabels=["{:.2e}".format(x) for x in heatmap1_data.index.values],
+                                  xticklabels=["{:.2e}".format(x) for x in heatmap1_data.columns.values])
     except AttributeError:
         heatmap = seaborn.heatmap(heatmap1_data, cmap=cmap,cbar_kws={'label': label},
                               vmin=valcbr[0], vmax=valcbr[1], annot=False, ax=ax,
-                              yticklabels=["{:.2f}".format(x) for x in heatmap1_data.index.values.categories.values.mid.values],
-                              xticklabels=["{:.3f}".format(x) for x in heatmap1_data.columns.values.categories.values.mid.values])
+                              yticklabels=["{:.2e}".format(x) for x in heatmap1_data.index.values.categories.values.mid.values],
+                              xticklabels=["{:.2e}".format(x) for x in heatmap1_data.columns.values.categories.values.mid.values])
     
     fig = heatmap.get_figure()
     

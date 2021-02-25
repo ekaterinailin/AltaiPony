@@ -110,7 +110,7 @@ def medsig(a):
 
 
 def sigma_clip(a, max_iter=10, max_sigma=3., 
-               separate_masks=False, mexc=None):
+               separate_masks=False, mexc=None, **kwargs):
     """Iterative sigma-clipping routine that 
     separates not finite points, and down-
     and upwards outliers.
@@ -122,6 +122,8 @@ def sigma_clip(a, max_iter=10, max_sigma=3.,
     
     Parameters:
     ------------
+    a : np.array
+        flux array
     max_iter : int
         how often do we want to recalculate sigma to get
         ever smaller outliers?
@@ -132,6 +134,8 @@ def sigma_clip(a, max_iter=10, max_sigma=3.,
         positive and negative outliers.
     mexc : boolean array
         custom mask to additionally account for
+    kwargs : dict
+        keyword arguments to pass to expand_mask
     
     Return:
     -------
@@ -158,19 +162,20 @@ def sigma_clip(a, max_iter=10, max_sigma=3.,
         nm = mask.sum()
         if nm > 1:
             # Calculate median and MAD adjusted standard deviation
+            
             med, sig = medsig(a[mask])
             mhigh[mexc] = a[mexc] - med <  max_sigma * sig #indices of okay values above median
             mlow[mexc]  = a[mexc] - med > -max_sigma * sig #indices of okay values below median
-        
+           
             # Okay values are finite and not outliers
             mask = mexc & mhigh & mlow
             
             LOG.debug(f"iteration {i} at normalized median flux {med:.5f} \pm {sig:.5f}")
             LOG.debug(f"upper mask size before expansion = {mhigh.shape[0]}")
-        
+       
             # Expand the mask left and right
-            mhigh = expand_mask(mhigh)
-        
+            mhigh = expand_mask(mhigh, **kwargs)
+      
             LOG.debug("upper mask size after expansion = {mhigh.shape[0]}\n Should be the same as before.")
             
             i += 1
@@ -182,24 +187,27 @@ def sigma_clip(a, max_iter=10, max_sigma=3.,
         return mlow & mhigh
 
 
-def expand_mask(a, divval=1):
+def expand_mask(a, longdecay=1):
     """Expand the mask if multiple outliers occur in a row.
-    Add 3 x sqrt(#outliers in a row / divval) masked points
+    Add sqrt(#outliers in a row) masked points
     before and after the outlier sequence.
+    
+    Yes the code looks is ugly, but it's faster than 
     
     Parameters:
     -----------
     a : bool array
         mask
-    divval : float
-        optional parameter to set the length of the
-        expanded mask
+    longdecay : int
+        optional parameter to expand the mask more by 
+        this factor after the series of outliers 
      
     Return:
     -------
     array - expanded mask
     """
     i, j, k = 0, 0, 0
+    
     while i<len(a):
         v=a[i]
         
@@ -217,16 +225,19 @@ def expand_mask(a, divval=1):
         
         elif (v==1) & (j==1):
             if k >= 2:
-                addto = int(np.rint(3 * np.sqrt(k/divval)))
+                
+                addto = int(np.rint(np.sqrt(k)))
+                
                 a[i - k - addto : i - k] = 0
-                a[i : i + addto] = 0
-                i += addto
+                a[i : i + longdecay * addto] = 0
+                i += longdecay * addto
             else:
                 i += 1
             j = 0
             k = 0
                  
     return a
+
 
 def generate_random_power_law_distribution(a, b, g, size=1, seed=None):
     """Power-law generator for pdf(x)\propto x^{g-1}

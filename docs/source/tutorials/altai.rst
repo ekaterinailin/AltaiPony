@@ -58,7 +58,7 @@ In our case, it should look like this:
   :width: 700
   :alt: de-trended TESS flare light curve flares
 
-Defining flare candidates
+Basic flare definition
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 
 In ``FlareLightCurve.find_flares()``, the flare candidate definition follows the criteria in `Chang et al. (2015)`_ Eqn. (3) a-d. 
@@ -81,7 +81,22 @@ The default settings are: ``N1=3``, ``N2=2``, ``N3=3``. ``sigma`` defaults to ``
 
 **Note 2:** Another argument to tinker with is the ``minsep`` keyword. The default is ``minsep=3``, meaning that candidate flare events within 3 data points of each other are combined into one.
 
+Extended flare definition
+^^^^^^^^^^^^^^^^^^^^^^^^^
 
+In addition to the basic flare definition above, which is sufficient for flare candidate detection, you may want to add the decay phase of a flare candidate to the flagged data points. This is useful if you are looking for a more precise energy estimate or a better mask that will cover the gradual tails of the flares. To set this up, you can extend teh previous command like
+
+::
+
+    FlareLightCurve.find_flares(N1=3, N2=2, N3=3, sigma=<local_scatter_array>, addtails=True, tailthreshdiff=<decrease in N1 and N2>)
+
+If the `addtails` flag is set, datapoints will be added after the detected stop times of flare candidates if 
+
+* they are positive outliers, 
+* if they fulfill the N1 criterion but with N1 reduced by `tailthreshdiff`, and if
+* if they fulfill the N2 criterion but with N2 reduced by `tailthreshdiff`.
+
+Data points are added successively until a point no longer meets either one of these criteria.
 
 .. _here: https://altaipony.readthedocs.io/en/latest/api/lcio.html
 .. _DataFrame: https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.html
