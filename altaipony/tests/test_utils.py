@@ -18,16 +18,9 @@ def test_expand_mask():
     assert (expand_mask(copy.deepcopy(a), longdecay=2) == 
             np.array([1, 1, 1, 0, 1,
                       1, 1, 1, 1, 1,
-                      1, 1, 0, 0, 0,
-                      0, 0, 0, 0, 0,
-                      0, 0, 0, 1, 1])).all()
-
-    # this breaks the function:
-    a[7] = np.nan
-
-    # check that it does
-    with pytest.raises(ValueError) as e:
-        expand_mask(copy.deepcopy(a))
+                      1, 1, 1, 1, 0,
+                      0, 0, 0, 0, 1,
+                      1, 1, 1, 1, 1])).all()
 
 
 def test_k2sc_quality_cuts():

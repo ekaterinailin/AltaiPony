@@ -49,10 +49,10 @@ def test_detrend_savgol():
     # the outcome of this one. It should only recover the one flare we intro-
     # duced above around t=2025
     flares = flcd.find_flares().flares
-    print(flares)
+    
     f = flares.iloc[0,:]
     assert f.tstart == pytest.approx(2025, abs=5e-3)
-    assert f.ed_rec == pytest.approx(8.46336,abs=f.ed_rec_err)
+    assert f.ed_rec == pytest.approx(8.31358,abs=f.ed_rec_err)
     assert f.istart == 4691
     assert f.istop == 4695
     assert f.total_n_valid_data_points == 1e4-309
