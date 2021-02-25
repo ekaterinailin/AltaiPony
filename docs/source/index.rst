@@ -31,6 +31,11 @@ Problems?
  Often, when something does not work in **AltaiPony**, and this documentation is useless, troubleshooting can be done by diving into the extensive **lightkurve** docs_. Otherwise, you can always shoot Ekaterina an email_ or directly open an issue on GitHub_. Many foreseeable problems will be due to bugs in **AltaiPony** or bad instructions on this website.
 
 
+Contribute to AltaiPony
+^^^^^^^^^^^^^^^^^^^^^^^
+
+**AltaiPony** is under active development on Github_. If you use **AltaiPony** in your research and find yourself missing a functionality, I recommend opening an issue on GitHub_ or shooting Ekaterina an email_. Please do either of the two before you open a pull request. This may save you a lot of development time.
+
 How to cite this work
 ^^^^^^^^^^^^^^^^^^^^^
 

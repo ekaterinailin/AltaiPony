@@ -8,4 +8,4 @@ logging.basicConfig(level=logging.INFO, format='%(message)s')
 LOG = logging.getLogger(__name__)
 
 
-
+from .version import __version__
