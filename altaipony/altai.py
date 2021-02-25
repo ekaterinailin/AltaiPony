@@ -255,7 +255,7 @@ def detrend_savgol(lc, window_length=None, pad=3, printwl=False, **kwargs):
     for (wl,le,ri) in gaps:
         
         # Do the iterative sigma clipping
-        ok = np.where(sigma_clip(lc.flux[le:ri]))[0] + le
+        ok = np.where(sigma_clip(lc.flux[le:ri], **kwargs))[0] + le
         outliers = list(set(list(range(le, ri))) - set(ok)) # inverse of ok
         
         time = lc.time[ok]
@@ -350,7 +350,7 @@ def detrend_savgol(lc, window_length=None, pad=3, printwl=False, **kwargs):
     return lc
 
 
-def find_iterative_median(flc, n=30):
+def find_iterative_median(flc, n=30, **kwargs):
 
     """
     Find the iterative median value for a continuous observation period using
@@ -362,6 +362,8 @@ def find_iterative_median(flc, n=30):
 
     n : 50 or int
         maximum number of iterations
+    kwargs : dict
+        keyword arguments to pass to sigma_clip
 
     Return
     -------

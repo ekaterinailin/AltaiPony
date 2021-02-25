@@ -335,7 +335,7 @@ class FFD(object):
 
 # --------------------------------------------------------------------------------------
 
-    def fit_beta_to_powerlaw(self, mode="ED"):
+    def fit_beta_to_powerlaw(self, mode="ED", x0starts={'ED': 10, 'energy': 1e25}):
         '''Fit beta via linear least squares to a power
         law with given alpha using the cumulative
         FFD. Estimate uncertainty using jackknife algorithm.
@@ -345,6 +345,8 @@ class FFD(object):
         mode : str
             ED or energy will set the starting value for the
             least square minimization
+        x0starts : dict
+            start values for LSQ fitting
 
         Return:
         -------
@@ -361,7 +363,6 @@ class FFD(object):
             raise ValueError('No data.')
 
         # jackknife uncertainty
-        x0starts = {'ED': 10, 'energy': 1e25}
         _beta = np.array([fmin(LSQ, x0=x0starts[mode],
                               args=(np.delete(self.ed, i),
                                     np.delete(self.freq, i),
