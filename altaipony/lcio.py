@@ -8,7 +8,7 @@ from astropy.io import fits
 
 from altaipony.flarelc import FlareLightCurve
 
-from lightkurve import (search_lightcurvefile,
+from lightkurve import (search_lightcurve,
                         search_targetpixelfile,
                         KeplerLightCurveFile,
                         TessLightCurveFile,
@@ -82,7 +82,7 @@ def _from_mast_K2(targetid, mode, c, flux_type="PDCSAP_FLUX",
     
     elif mode == "LC":
         
-        flcfilelist = search_lightcurvefile(targetid, mission=mission,
+        flcfilelist = search_lightcurve(targetid, mission=mission,
                                             campaign=c, cadence=cadence)
         
         return _handle_missions(flcfilelist, mission, flux_type,
@@ -94,7 +94,7 @@ def _from_mast_Kepler(targetid, c, flux_type="PDCSAP_FLUX", cadence="long",
                       download_dir=None):
                       
     mission = "Kepler"
-    flcfilelist = search_lightcurvefile(targetid, mission=mission,
+    flcfilelist = search_lightcurve(targetid, mission=mission,
                                         quarter=c, cadence=cadence)
                                         
     return _handle_missions(flcfilelist, mission, flux_type,
@@ -106,7 +106,7 @@ def _from_mast_TESS(targetid, c, flux_type="PDCSAP_FLUX", cadence="long",
                     download_dir=None):
                     
     mission = "TESS"
-    flcfilelist = search_lightcurvefile(targetid, mission=mission,
+    flcfilelist = search_lightcurve(targetid, mission=mission,
                                         sector=c, cadence=cadence)
 
     return _handle_missions(flcfilelist, mission, flux_type,
@@ -146,8 +146,8 @@ def _handle_missions(flcfilelist, mission, flux_type,
     S, origin = missiondict[mission]   
     
     if len(flcfilelist)==1:
-        flcfile = flcfilelist.download(download_dir=download_dir)
-        lc = flcfile.get_lightcurve(flux_type)
+        lc = flcfilelist.download(download_dir=download_dir)
+        #lc = flcfile.get_lightcurve(flux_type)
 
         flc = _convert_LC_to_FLC(lc, origin="KLC")
         return flc
@@ -158,8 +158,8 @@ def _handle_missions(flcfilelist, mission, flux_type,
         lclist = []
         flcfiles = flcfilelist.download_all(download_dir=download_dir)
         for flcfile in flcfiles:
-            lc = flcfile.get_lightcurve(flux_type)
-            flc = _convert_LC_to_FLC(lc, origin=origin)
+         #   lc = flcfile.get_lightcurve(flux_type)
+            flc = _convert_LC_to_FLC(flcfile, origin=origin)
             lclist.append(flc)
         return lclist    
 
@@ -208,8 +208,8 @@ def _from_path_LC(path, mission, flux_type="PDCSAP_FLUX"):
     else:
         raise KeyError("Invalid mission. Pass 'Kepler', 'K2', or 'TESS'.")
         
-    lc = lcf.get_lightcurve(flux_type)
-    flc = _convert_LC_to_FLC(lc, origin=origins[mission])
+    #lc = lcf.get_lightcurve(flux_type)
+    flc = _convert_LC_to_FLC(lcf, origin=origins[mission])
     return flc
 
 
@@ -261,8 +261,8 @@ def _from_path_AltaiPony(path):
 # Internal type conversion functions
 
 def _convert_TPF_to_FLC(tpf, lc):
-    keys = {'primary_header' : tpf.hdu[0].header,
-            'data_header' : tpf.hdu[1].header,
+    keys = {#'primary_header' : tpf.hdu[0].header,
+            #'data_header' : tpf.hdu[1].header,
             'pos_corr1' : tpf.pos_corr1,
             'pos_corr2' : tpf.pos_corr2,
             'pixel_flux' : tpf.flux,
@@ -277,8 +277,8 @@ def _convert_TPF_to_FLC(tpf, lc):
     if '_required_columns_relax' in z.keys():
         del z['_required_columns_relax']
 
-    flc = FlareLightCurve(time_unit=u.day, origin="TPF",
-                          flux_unit = u.electron/u.s, **z)
+    flc = FlareLightCurve(origin="TPF",
+                          flux_unit = u.electron/u.s, meta=lc.meta, **keys)
     if flc.pos_corr1 is None:
         flc.pos_corr1 = flc.centroid_col
     if flc.pos_corr2 is None:
@@ -292,17 +292,34 @@ def _convert_TPF_to_FLC(tpf, lc):
 
 
 def _convert_LC_to_FLC(lc, origin=None, **kwargs):
-    attributes = lc.__dict__
-    attributes.update(kwargs)
+#    attributes = lc.__dict__
+#    attributes.update(kwargs)
     
-    if "_flux_unit" in attributes.keys():
-        del attributes["_flux_unit"]
-    flc = FlareLightCurve(time_unit=u.day, origin=origin,
-                          flux_unit = u.electron/u.s,
-                           **attributes)
-    flc = flc[np.isfinite(flc.time) &
-              np.isfinite(flc.flux) &
-              np.isfinite(flc.cadenceno)]
+#    if "_flux_unit" in attributes.keys():
+#        del attributes["_flux_unit"]
+#    if '_required_columns_relax' in attributes.keys():
+#        del attributes['_required_columns_relax']	
+#    vals = []
+#    for i,val in attributes.items():        
+#        if i[0] == "_":
+#            vals.append(i)
+#    for i in vals:
+#        del attributes[i]
+#        
+#    flc = FlareLightCurve(time_unit=u.day, origin=origin,
+#                          flux_unit = u.electron/u.s,
+#                           **attributes)
+    lc = lc[np.isfinite(lc.time.value) &
+              np.isfinite(lc.flux.value) &
+              np.isfinite(lc.cadenceno.value)]
+    keys = dict([(key, lc[key]) for key in lc.colnames[:3]])
+    print(keys)
+    flc = FlareLightCurve(time=lc.time, flux=lc.flux, meta=lc.meta)
+#    flc = FlareLightCurve(time=lc.time.value,
+#                          flux=lc.flux.value, 
+#                          flux_err=lc.flux_err.value,
+#                          pos_corr1=
+#                          meta=lc.meta)
     return flc
 
 # ----------------------------------------------------------
