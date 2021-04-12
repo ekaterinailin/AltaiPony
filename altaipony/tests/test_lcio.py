@@ -20,11 +20,15 @@ def test_from_path(path, mode, ID, mission, campaign, quarter, sector):
     assert flc.targetid == ID
     assert flc.mission == mission
     assert flc.flux.shape[0] == flc.time.shape[0]
-    assert flc.campaign == campaign
-    assert flc.quarter == quarter
-    assert flc.sector == sector
+    if campaign is not None:
+        assert flc.campaign == campaign
+    if quarter is not None:
+        assert flc.quarter == quarter
+    if sector is not None:    
+        assert flc.sector == sector    
     assert (np.isnan(flc.flux) == False).all()
     assert (np.isnan(flc.time) == False).all()
+    
     assert np.isnan(flc.detrended_flux).all()
     assert (~np.isnan(flc.flux_err)).all()
     assert flc.flares.shape[0] == 0
@@ -79,12 +83,17 @@ def test_from_mast(ID, mission, c, mode, cadence, sector, campaign, quarter, lfl
     # -----------------------------------    
     assert flc.targetid == int(ID.split(" ")[1])
     assert flc.mission == mission
+ 
     assert flc.flux.shape[0] == flc.time.shape[0]
-    assert flc.campaign == campaign
-    assert flc.quarter == quarter
-    assert flc.sector == sector
+    if campaign is not None:
+        assert flc.campaign == campaign
+    if quarter is not None:
+        assert flc.quarter == quarter
+    if sector is not None:    
+        assert flc.sector == sector
     assert (np.isnan(flc.flux) == False).all()
     assert (np.isnan(flc.time) == False).all()
+
     assert np.isnan(flc.detrended_flux).all()
     assert (~np.isnan(flc.flux_err)).all()
     assert flc.flares.shape[0] == 0
