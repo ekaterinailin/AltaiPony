@@ -85,9 +85,9 @@ def k2sc_quality_cuts(data):
     ``centroid_row`` all have finite values.
     """
 
-    data2 = data[np.isfinite(data.time) &
-                 np.isfinite(data.pos_corr1) &
-                 np.isfinite(data.pos_corr2)]
+    data2 = data[np.isfinite(data.time.value) &
+                 np.isfinite(data.pos_corr1.value) &
+                 np.isfinite(data.pos_corr2.value)]
 
     return data2
 
