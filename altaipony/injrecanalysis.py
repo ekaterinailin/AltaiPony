@@ -273,8 +273,8 @@ def _heatmap(flcd, typ, ampl_bins, dur_bins, flares_per_bin, **kwargs):
         raise AttributeError("Missing injection-recovery data. "
                              "Use `FLC.load_injrec_data(path)` to fetch "
                              "some, or run `FLC.sample_flare_recovery()`.")
-    print(flcd.fake_flares)
-    print(flcd.flares)
+    #print(flcd.fake_flares)
+    #print(flcd.flares)
     # define observed flare duration
     flcd.flares["dur"] = flcd.flares.tstop - flcd.flares.tstart
     flcd.fake_flares["dur"] = flcd.fake_flares.tstop - flcd.fake_flares.tstart

@@ -26,7 +26,7 @@ def test_detrend_savgol():
              flc.detrend("savgol", window_length=(101,205)),
              flc.detrend("savgol", window_length=[101,205])]
     for flcd in flcds:
-            assert flcd.detrended_flux.shape[0] == 1e4-309
+            assert flcd.detrended_flux.value.shape[0] == 1e4-309
             
     N = int(1e4)
     time = np.linspace(2000,2050,N)
@@ -42,7 +42,7 @@ def test_detrend_savgol():
              flc.detrend("savgol", window_length=(101,205)),
              flc.detrend("savgol", window_length=[25,25])]
     for flcd in flcds:
-            assert flcd.detrended_flux.shape[0] == 1e4-309
+            assert flcd.detrended_flux.value.shape[0] == 1e4-309
             
     # The last de-trending iteration is the only appropriate one to give good 
     # results given the rapid variability of the light curve. So let's check
@@ -64,11 +64,10 @@ def test_iterative_median():
     flc = mock_flc(detrended=True)
     lc1 = find_iterative_median(flc, n=1)
     lc2 = find_iterative_median(flc, n=2)
-    # test that gaps are found if none are defined
-    assert flc.gaps != lc1.gaps
+
     # test that find_iterative_median converges after one iteration for mock FLC
-    assert np.median(flc.it_med) != np.median(lc1.it_med)
-    assert np.median(lc1.it_med) == np.median(lc2.it_med)
+    assert np.median(flc.it_med.value) != np.median(lc1.it_med.value)
+    assert np.median(lc1.it_med.value) == np.median(lc2.it_med.value)
 
 def test_find_flares():
     """
@@ -154,11 +153,11 @@ def test_equivalent_duration():
     """Test a triangle shaped flare in a toy light curve."""
     detrended_flux = np.full(1000,1.)
     detrended_flux[60:70] = np.array([10,9,8,7,6,5,4,3,2,1])
-    lc = FlareLightCurve(time=np.arange(1000)/86400.,
-                         detrended_flux=detrended_flux,
-                         it_med=np.full(1000,1.),
-                         detrended_flux_err=np.full(1000,1e-8))
-    print(lc.saturation)
+    lc = FlareLightCurve(time=np.arange(1000)/86400.)
+    lc.detrended_flux=detrended_flux
+    lc.it_med =np.full(1000,1.)
+    lc.detrended_flux_err=np.full(1000,1e-8)
+   # print(lc.saturation)
     ed, ed_err = equivalent_duration(lc, 60, 70, err=True)
     assert ed == pytest.approx(45,rel=1e-8)
     assert ed_err == pytest.approx(2.665569e-08, rel=1e-4)
