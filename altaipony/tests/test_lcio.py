@@ -19,24 +19,24 @@ def test_from_path(path, mode, ID, mission, campaign, quarter, sector):
     flc = from_path(path, mode=mode, mission=mission)
     assert flc.targetid == ID
     assert flc.mission == mission
-    assert flc.flux.shape[0] == flc.time.shape[0]
+    assert flc.flux.value.shape[0] == flc.time.value.shape[0]
     if campaign is not None:
         assert flc.campaign == campaign
     if quarter is not None:
         assert flc.quarter == quarter
     if sector is not None:    
         assert flc.sector == sector    
-    assert (np.isnan(flc.flux) == False).all()
-    assert (np.isnan(flc.time) == False).all()
+    assert (np.isnan(flc.flux.value) == False).all()
+    assert (np.isnan(flc.time.value) == False).all()
     
-    assert np.isnan(flc.detrended_flux).all()
-    assert (~np.isnan(flc.flux_err)).all()
+    assert np.isnan(flc.detrended_flux.value).all()
+    assert (~np.isnan(flc.flux_err.value)).all()
     assert flc.flares.shape[0] == 0
     flct = flc[10:20]
-    assert flct.flux.shape[0] == flct.time.shape[0]
-    assert flct.flux.shape[0] == flct.flux_err.shape[0]
-    assert flct.flux.shape[0] == flct.detrended_flux_err.shape[0]
-    assert flct.flux.shape[0] == 10
+    assert flct.flux.value.shape[0] == flct.time.value.shape[0]
+    assert flct.flux.value.shape[0] == flct.flux_err.value.shape[0]
+    assert flct.flux.value.shape[0] == flct.detrended_flux_err.value.shape[0]
+    assert flct.flux.value.shape[0] == 10
     
     
 def test__from_path_AltaiPony():
@@ -48,17 +48,17 @@ def test__from_path_AltaiPony():
     assert rflc.quarter == flc.quarter
     assert rflc.ra == flc.ra
     assert rflc.dec == flc.dec
-    assert rflc.time_scale == flc.time_scale
-    assert rflc.time_format == flc.time_format
+    assert rflc.time.value_scale == flc.time.value_scale
+    assert rflc.time.value_format == flc.time.value_format
     assert rflc.mission == "Kepler"
     kws = ['time', 'flux', 'flux_err', 'centroid_col',
            'centroid_row', 'quality', 'cadenceno',
            'detrended_flux', 'detrended_flux_err',]
-    assert (len(rflc.flux) == np.array([len(getattr(rflc,x)) for x in kws])).all()
+    assert (len(rflc.flux.value) == np.array([len(getattr(rflc,x)) for x in kws])).all()
     assert rflc.targetid == 10002792
     assert rflc.origin == "KLC"
-    assert np.isnan(rflc.detrended_flux).all()
-    assert np.isnan(rflc.detrended_flux_err).all()
+    assert np.isnan(rflc.detrended_flux.value).all()
+    assert np.isnan(rflc.detrended_flux_err.value).all()
     
     
 
@@ -84,22 +84,22 @@ def test_from_mast(ID, mission, c, mode, cadence, sector, campaign, quarter, lfl
     assert flc.targetid == int(ID.split(" ")[1])
     assert flc.mission == mission
  
-    assert flc.flux.shape[0] == flc.time.shape[0]
+    assert flc.flux.value.shape[0] == flc.time.value.shape[0]
     if campaign is not None:
         assert flc.campaign == campaign
     if quarter is not None:
         assert flc.quarter == quarter
     if sector is not None:    
         assert flc.sector == sector
-    assert (np.isnan(flc.flux) == False).all()
-    assert (np.isnan(flc.time) == False).all()
-
-    assert np.isnan(flc.detrended_flux).all()
-    assert (~np.isnan(flc.flux_err)).all()
+    assert (np.isnan(flc.flux.value) == False).all()
+    assert (np.isnan(flc.time.value) == False).all()
+    print(flc.columns)
+    assert np.isnan(flc.detrended_flux.value).all()
+    assert (~np.isnan(flc.flux_err.value)).all()
     assert flc.flares.shape[0] == 0
     flct = flc[10:20]
-    assert flct.flux.shape[0] == flct.time.shape[0]
-    assert flct.flux.shape[0] == flct.flux_err.shape[0]
-    assert flct.flux.shape[0] == flct.detrended_flux_err.shape[0]
-    assert flct.flux.shape[0] == 10
+    assert flct.flux.value.shape[0] == flct.time.value.shape[0]
+    assert flct.flux.value.shape[0] == flct.flux_err.value.shape[0]
+    assert flct.flux.value.shape[0] == flct.detrended_flux_err.value.shape[0]
+    assert flct.flux.value.shape[0] == 10
     

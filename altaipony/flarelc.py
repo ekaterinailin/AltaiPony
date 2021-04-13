@@ -14,6 +14,8 @@ from astropy.io import fits
 from astropy.utils.data_info import DataInfo
 from astropy.table import TableColumns, Column
 import astropy.units as u
+from astropy.timeseries import TimeSeries
+from astropy.time import Time
 
 from .k2scmod import k2sc_lc
 from .altai import (find_flares, find_iterative_median, detrend_savgol)
@@ -105,62 +107,60 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
 
 
     """
-    def __init__(self, time=None, flux=None, flux_err=None, detrended_flux=None,mission=None, detrended_flux_err=None,it_med=None,saturation=None,flares=None, fake_flares=None, meta=None, origin = None, 
- pixel_flux=None, pixel_flux_err=None, pipeline_mask=None,pos_corr1=None,
-                 pos_corr2=None,**kwargs):
+    #def __init__(self, data, meta=None, flares=None, fake_flares=None,  origin = None, 
+# pixel_flux=None, pixel_flux_err=None, pipeline_mask=None,pos_corr1=None,
+ #                pos_corr2=None, time_format=None, **kwargs):
       
-        if mission == 'TESS':
-                TessLightCurve.__init__(self, time=time, flux=flux, flux_err=flux_err, meta=meta, #_required_columns=required_columns,
- **kwargs
-                                        )
-                #self.mission = mission
-                #self.campaign = None
-                #self.quarter = None
-        else:
-                KeplerLightCurve.__init__(self, time=time, flux=flux, flux_err=flux_err, meta=meta,#_required_columns=required_columns,
- **kwargs)
-
-
-        self.origin = origin
-        for col in [detrended_flux, detrended_flux_err, it_med, saturation]:
-            print(col)
-            if col is None:
-                col = np.full_like(time,np.nan)
+    
+    #    self.origin = origin
+    #    for col in [detrended_flux, detrended_flux_err, it_med, saturation]:
+    #       
+    #        if col is None:
+    #            col = np.full_like(time,np.nan)
        
-        if detrended_flux is None:
-                detrended_flux = np.full_like(time,np.nan)
-        if detrended_flux_err is None:
-                detrended_flux_err = np.full_like(time,np.nan)
-        if it_med is None:
-                it_med = np.full_like(time,np.nan)
-        if saturation is None:
-                saturation = np.full_like(time,np.nan)
-        if pos_corr1 is None:
-                pos_corr1 = np.full_like(time,np.nan)
-        if pos_corr1 is None:
-                pos_corr1 = np.full_like(time,np.nan)
-        # override column checking, otherwise indexing and slicing won't work
-        self._required_columns_enabled = False 
-        self._first_colname = "time"
-      #  for col, name in list(zip([time, flux, flux_err, detrended_flux, detrended_flux_err, it_med, saturation, pos_corr1, pos_corr2], ['time','flux','flux_err','detrended_flux','detrended_flux_err','it_med','saturation', 'pos_corr1','pos_corr2'])):
+      #  if detrended_flux is None:
+      #          detrended_flux = np.full_like(time,np.nan)
+      #  if detrended_flux_err is None:
+      #          detrended_flux_err = np.full_like(time,np.nan)
+      #  if it_med is None:
+      #          it_med = np.full_like(time,np.nan)
+      #  if saturation is None:
+      #          saturation = np.full_like(time,np.nan)
+      #  if pos_corr1 is None:
+      #          pos_corr1 = np.full_like(time,np.nan)
+      #  if pos_corr2 is None:
+      #          pos_corr2 = np.full_like(time,np.nan)
+      #  # override column checking, otherwise indexing and slicing won't work
+        #self._required_columns_enabled = False 
+       # self._first_colname = "time"
+      #  for col, name in dict(zip([time, flux, flux_err, detrended_flux, detrended_flux_err, it_med, saturation, pos_corr1, pos_corr2], ['time','flux','flux_err','detrended_flux','detrended_flux_err','it_med','saturation', 'pos_corr1','pos_corr2'])):
        #     col = Column(col, name=name)
-        time = Column(time, name="time", dtype=np.dtype('d'))
-        detrended_flux = Column(detrended_flux, name="detrended_flux")
-        detrended_flux_err = Column(detrended_flux_err, name="detrended_flux_err")
-        flux = Column(flux, name="flux")
-        flux_err = Column(flux_err, name="flux_err")
-        it_med = Column(it_med, name="it_med")
-        pos_corr1 = Column(pos_corr1, name="pos_corr1")
-        pos_corr2 = Column(pos_corr2, name="pos_corr2")
-        
-        self.columns = TableColumns([time, flux, flux_err,detrended_flux, detrended_flux_err, it_med, saturation,  pos_corr1, pos_corr2])
+#        time = Time(time, format="bkjd")
+        #detrended_flux = Column(detrended_flux, name="detrended_flux")
+        #detrended_flux_err = Column(detrended_flux_err, name="detrended_flux_err")
+ #       flux = Column(flux, name="flux")
+     #   flux_err = Column(flux_err, name="flux_err")
+     #   it_med = Column(it_med, name="it_med")
+     #   pos_corr1 = Column(pos_corr1, name="pos_corr1")
+     #   pos_corr2 = Column(pos_corr2, name="pos_corr2")
+        ##np.array([flux, flux_err, detrended_flux, detrended_flux_err, it_med, saturation, pos_corr1, pos_corr2]).T
+        #data = {"flux":flux, "time":time}
 #dict(zip(['time','flux','flux_err','detrended_flux','detrended_flux_err','it_med','saturation'],
-        self.meta["colnames"] = self.columns
-        self.columns.info = DataInfo()
+        #print(self.columns)
+       # self.meta["colnames"] = self.columns
+       # self.columns.info = DataInfo()
 
-        self.pixel_flux = pixel_flux
-        self.pixel_flux_err = pixel_flux_err
-        self.pipeline_mask = pipeline_mask
+       # self.pixel_flux = pixel_flux
+       # self.pixel_flux_err = pixel_flux_err
+       # self.pipeline_mask = pipeline_mask
+
+
+     #   if mission == 'TESS':
+     #       TessLightCurve.__init__(self, data=data, meta=meta,)# **kwargs)            #self.mission = mission
+   # 
+   #     else:
+   #         KeplerLightCurve.__init__(self, data=data, meta=meta,)# **kwargs)
+
 
        # print(self.columns["time"])
         #self["detrended_flux"] = detrended_flux
@@ -175,6 +175,10 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
         #self._required_columns = required_columns
         
         
+
+
+
+    def _init_flare_table(self, flares=None, fake_flares=None):
 
         columns = ['istart', 'istop', 'cstart', 'cstop', 'tstart',
                    'tstop', 'ed_rec', 'ed_rec_err', 'ampl_rec', 
@@ -191,6 +195,12 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
             self.fake_flares = pd.DataFrame(columns=other_columns)
         else:
             self.fake_flares = fake_flares
+
+    def _add_tpf_columns(self, pixel_flux, pixel_flux_err, pipeline_mask):
+
+        self.pixel_flux = pixel_flux
+        self.pixel_flux_err = pixel_flux_err
+        self.pipeline_mask = pipeline_mask
 
     def __repr__(self):
         return('FlareLightCurve(ID: {})'.format(self.targetid))
