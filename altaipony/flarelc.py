@@ -178,8 +178,59 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
         #self._required_columns = required_columns
         
         #self._init_flare_table(self, flares=flares, fake_flares=fake_flares)
+
+
+
         #self._add_tpf_columns(self, pixel_flux=None, pixel_flux_err=None, pipeline_mask=None)
 
+    @property
+    def detrended_flux_err(self) -> np.array:
+        try:
+            return self["detrended_flux_err"]
+        except KeyError:
+            self["detrended_flux_err"] = np.full_like(self.time.value, np.nan)
+            return self["detrended_flux_err"]
+
+    @detrended_flux_err.setter
+    def detrended_flux_err(self, detrended_flux_err):
+        self["detrended_flux_err"] = detrended_flux_err
+
+
+    @property
+    def detrended_flux(self) -> np.array:
+        try:
+            return self["detrended_flux"]
+        except KeyError:
+            self["detrended_flux"] = np.full_like(self.time.value, np.nan)
+            return self["detrended_flux"]
+
+    @detrended_flux.setter
+    def detrended_flux(self, detrended_flux):
+        self["detrended_flux"] = detrended_flux 
+
+    @property
+    def cadenceno(self):
+        try:
+            return self["cadenceno"]
+        except KeyError:
+            self["cadenceno"] = np.full_like(self.time.value, np.nan)
+            return self["cadenceno"]
+
+    @cadenceno.setter
+    def cadenceno(self, cadenceno):
+        self["cadenceno"] = cadenceno
+
+    @property
+    def it_med(self):
+        try:
+            return self["it_med"]
+        except KeyError:
+            self["it_med"] = np.full_like(self.time.value, np.nan)
+            return self["it_med"]
+
+    @it_med.setter
+    def it_med(self, it_med):
+        self["it_med"] = it_med
 
     @property
     def origin(self):
@@ -230,6 +281,19 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
     @fake_flares.setter
     def fake_flares(self, fake_flares):
         self.meta["fake_flares"] = fake_flares
+
+
+    @property
+    def gaps(self):
+        try:
+            return self.meta["gaps"]
+        except KeyError:
+            self.meta["gaps"] = None
+            return self.meta["gaps"]
+
+    @gaps.setter
+    def gaps(self, gaps):
+        self.meta["gaps"] = gaps 
 
     def _init_flare_table(self, flares=None, fake_flares=None):
 
@@ -358,17 +422,17 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
 
             else:
                 new_lc = copy.deepcopy(self)
-                new_lc.keplerid = self.targetid
+                new_lc.meta["keplerid"] = self.targetid
 
                 #K2SC MAGIC
                 new_lc.__class__ = k2sc_lc
                 try:
                     new_lc.k2sc(de_niter=de_niter, max_sigma=max_sigma, **kwargs)
-                    new_lc.detrended_flux = (new_lc.corr_flux - new_lc.tr_time
-                                             + np.nanmedian(new_lc.tr_time))
-                    new_lc.detrended_flux_err = copy.copy(new_lc.flux_err) # does k2sc share their uncertainties somewhere?
-                    new_lc.flux_trends = new_lc.tr_time
-                    if new_lc.detrended_flux.shape != self.flux.shape:
+                    new_lc["detrended_flux"] = (new_lc.corr_flux.value - new_lc.tr_time.value
+                                             + np.nanmedian(new_lc.tr_time.value))
+                    new_lc["detrended_flux_err"] = copy.copy(new_lc.flux_err) # does k2sc share their uncertainties somewhere?
+                    new_lc["flux_trends"] = new_lc.tr_time.value
+                    if new_lc.detrended_flux.value.shape != self.flux.value.shape:
                         LOG.error('De-detrending messed up the flux arrays.')
                     else:
                         LOG.info('De-trending successfully completed.')
@@ -847,14 +911,14 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
                     ed_fake[k] = _equivalent_duration(time, fl_flux)
                     
                 # inject flare in to light curve by adding the flare flux
-                fake_lc.__dict__[typ][le:ri] = (fake_lc[typ][le:ri].value +
+                fake_lc[typ][le:ri] = (fake_lc[typ][le:ri].value +
                                                 fl_flux * fake_lc.it_med[le:ri].value)
                 
             # Increment the counter
             ckm += nfake
             
         # error minimum is a safety net for the spline function if mode=3
-        fake_lc.__dict__[typerr] = max( 1e-10, np.nanmedian( pd.Series(fake_lc[typ]).
+        fake_lc[typerr] = max( 1e-10, np.nanmedian( pd.Series(fake_lc[typ]).
                                                 rolling(3, center=True).
                                                 std() ) )*np.ones_like(fake_lc[typ])
         # Put the data together

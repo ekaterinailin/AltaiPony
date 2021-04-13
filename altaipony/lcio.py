@@ -301,18 +301,20 @@ def _convert_TPF_to_FLC(tpf, lc):
 
 #    flc = FlareLightCurve(origin="TPF",
 #                          flux_unit = u.electron/u.s, meta=lc.meta, **keys)
-#    if flc.pos_corr1 is None:
-#        flc.pos_corr1 = flc.centroid_col
-#    if flc.pos_corr2 is None:
-#        flc.pos_corr2 = flc.centroid_row
-#    flc = flc[np.isfinite(flc.time) &
-#              np.isfinite(flc.flux) &
-#              np.isfinite(flc.pos_corr1) &
-#              np.isfinite(flc.pos_corr2) &
-#              np.isfinite(flc.cadenceno) ]
+    if lc.pos_corr1 is None:
+        lc.pos_corr1 = lc.centroid_col
+    if lc.pos_corr2 is None:
+        lc.pos_corr2 = lc.centroid_row
+    flc = flc[np.isfinite(lc.time.value) &
+              np.isfinite(lc.flux.value) &
+              np.isfinite(lc.pos_corr1.value) &
+              np.isfinite(lc.pos_corr2.value) &
+              np.isfinite(lc.cadenceno.value) ]
     
     lc["detrended_flux"] = np.nan
     lc["detrended_flux_err"] = np.nan
+    lc.meta['primary_header'] = tpf.hdu[0].header
+    lc.meta['data_header'] = tpf.hdu[1].header
     lc.__class__ = FlareLightCurve
     lc._init_flare_table()
     lc._add_tpf_columns(tpf.flux.value, tpf.flux_err.value, tpf.pipeline_mask)

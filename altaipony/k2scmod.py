@@ -280,15 +280,15 @@ class k2sc_lc(lightkurve.KeplerLightCurve):
 
     def get_k2data(self):
         try:
-            x, y = self.pos_corr1, self.pos_corr2
+            x, y = self.pos_corr1.value, self.pos_corr2.value
         except:
-            x, y = self.centroid_col, self.centroid_row
+            x, y = self.centroid_col.value, self.centroid_row.value
         dataset = K2Data(self.targetid,
-                 time = self.time,
-                      cadence = self.cadenceno,
-                      quality = self.quality,
-                      fluxes  = self.flux,
-                      errors  = self.flux_err,
+                 time = self.time.value,
+                      cadence = self.cadenceno.value,
+                      quality = self.quality.value,
+                      fluxes  = self.flux.value,
+                      errors  = self.flux_err.value,
                       x       = x,
                       y       = y,
                       primary_header = self.primary_header,
@@ -298,11 +298,11 @@ class k2sc_lc(lightkurve.KeplerLightCurve):
 
     def k2sc(self,**kwargs):
         dataset = self.get_k2data()
-        results, self.detrender = detrend(dataset,campaign=self.campaign,**kwargs) # see keyword arguments from detrend above
-        self.tr_position = results.tr_position
-        self.tr_time = results.tr_time 
-        self.pv = results.pv # hyperparameters 
-        self.corr_flux = self.flux - self.tr_position + nanmedian(self.tr_position) 
-        self.cdpp_r = results.cdpp_r
-        self.cdpp_t = results.cdpp_t
-        self.cdpp_c = results.cdpp_c
+        results, self.meta["detrender"] = detrend(dataset,campaign=self.campaign,**kwargs) # see keyword arguments from detrend above
+        self["tr_position"] = results.tr_position
+        self["tr_time"] = results.tr_time 
+        self.meta["pv"] = results.pv # hyperparameters 
+        self["corr_flux"] = self.flux.value - self.tr_position.value + nanmedian(self.tr_position.value) 
+        self.meta["cdpp_r"] = results.cdpp_r
+        self.meta["cdpp_t"] = results.cdpp_t
+        self.meta["cdpp_c"] = results.cdpp_c
