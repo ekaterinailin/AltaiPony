@@ -40,9 +40,10 @@ def test_from_path(path, mode, ID, mission, campaign, quarter, sector):
     
     
 def test__from_path_AltaiPony():
-    path = "altaipony/examples/pony010002792-2009259160929_llc_test_from_path_AltaiPony.fits"
-    flc = from_path(pathkepler, mode="LC", mission="Kepler")
-    flc.to_fits(path)
+    flc = from_path("altaipony/examples/kplr010002792-2010174085026_llc.fits","LC", "Kepler")
+    path = "altaipony/examples/pony010002792-2010174085026_llc_test_from_path_AltaiPony.fits"
+    #flc = from_path(pathkepler, mode="LC", mission="Kepler")
+    flc.to_fits(path, overwrite=True)
     rflc = _from_path_AltaiPony(path)
     assert rflc.channel == flc.channel
     assert rflc.quarter == flc.quarter
