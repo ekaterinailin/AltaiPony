@@ -13,7 +13,8 @@ from lightkurve import (search_lightcurve,
                         KeplerLightCurveFile,
                         TessLightCurveFile,
                         KeplerTargetPixelFile,
-                        TessTargetPixelFile)
+                        TessTargetPixelFile,
+                        read)
                         
 LOG = logging.getLogger(__name__)
 
@@ -85,7 +86,7 @@ def _from_mast_K2(targetid, mode, c, flux_type="PDCSAP_FLUX",
     elif mode == "LC":
         
         flcfilelist = search_lightcurve(targetid, mission=mission,
-                                            campaign=c, cadence=cadence)
+                                            campaign=c, cadence=cadence, author="K2")
         
         return _handle_missions(flcfilelist, mission, flux_type,
                                 cadence, download_dir, targetid,
@@ -237,25 +238,42 @@ def _from_path_TPF(path, mission, aperture_mask="default"):
     
 def _from_path_AltaiPony(path):
     
-    rhdul =  fits.open(path)
-    attrs = dict()
-    for k, v in rhdul[0].header.items():
-        if str.lower(k) not in ['simple', 'bitpix', 'naxis', 'extend']:
-            if str.lower(k) == "keplerid": #rename keplerid if it appears
-                k = "targetid"
-            attrs[str.lower(k)] = v
-    
-    for k in ['time', 'flux', 'flux_err', 'centroid_col',
-              'centroid_row', 'quality', 'cadenceno',
-              'detrended_flux', 'detrended_flux_err',
-              'quality_bitmask', 'saturation']:
-        try:
-            attrs[k] = rhdul[1].data[k].byteswap().newbyteorder()
-        except KeyError:
-            LOG.info("Warning: Keyword {} not in file.".format(k))
-            continue   
-            
-    return FlareLightCurve(**attrs)
+#    rhdul =  fits.open(path)
+#    attrs = dict()
+#    for k, v in rhdul[0].header.items():
+#        if str.lower(k) not in ['simple', 'bitpix', 'naxis', 'extend']:
+#            if str.lower(k) == "keplerid": #rename keplerid if it appears
+#                k = "targetid"
+#            attrs[str.lower(k)] = v
+#    
+#    for k in ['time', 'flux', 'flux_err', 'centroid_col',
+#              'centroid_row', 'quality', 'cadenceno',
+#              'detrended_flux', 'detrended_flux_err',
+#              'quality_bitmask', 'saturation']:
+#        try:
+#            attrs[k] = rhdul[1].data[k].byteswap().newbyteorder()
+#        except KeyError:
+#            LOG.info("Warning: Keyword {} not in file.".format(k))
+#            continue   
+    lc = read(path)        
+    lc = lc[np.isfinite(lc.time.value) &
+          np.isfinite(lc.flux.value) &
+          np.isfinite(lc.cadenceno.value)]
+   # keys = dict([(key, lc[key].value) for key in lc.colnames[:3]])
+   # print(keys)
+   # flc = lc.FlareLightCurve(**keys, time_format=lc.time.format, meta=lc.meta)
+#    flc = FlareLightCurve(time=lc.time.value,
+#                          flux=lc.flux.value, 
+#                          flux_err=lc.flux_err.value,
+#                          pos_corr1=
+#                          meta=lc.meta)
+        
+    lc["detrended_flux"] = np.nan
+    lc["detrended_flux_err"] = np.nan
+
+    lc.__class__ = FlareLightCurve
+    lc._init_flare_table()
+    return lc
 
 # ----------------------------------------------------------
 
@@ -297,7 +315,7 @@ def _convert_TPF_to_FLC(tpf, lc):
     lc["detrended_flux_err"] = np.nan
     lc.__class__ = FlareLightCurve
     lc._init_flare_table()
-    lc._add_tpf_columns(tpf.flux.value, tpf.flux_err.value, tpf.pipeline_mask.value)
+    lc._add_tpf_columns(tpf.flux.value, tpf.flux_err.value, tpf.pipeline_mask)
 
     return lc
 

@@ -11,11 +11,6 @@ from lightkurve import KeplerLightCurve, KeplerTargetPixelFile, TessLightCurve
 from lightkurve.utils import KeplerQualityFlags
 
 from astropy.io import fits
-from astropy.utils.data_info import DataInfo
-from astropy.table import TableColumns, Column
-import astropy.units as u
-from astropy.timeseries import TimeSeries
-from astropy.time import Time
 
 from .k2scmod import k2sc_lc
 from .altai import (find_flares, find_iterative_median, detrend_savgol)
@@ -29,6 +24,14 @@ from .utils import split_gaps
 
 import time
 LOG = logging.getLogger(__name__)
+
+
+FLARE_COLUMNS = ['istart', 'istop', 'cstart', 'cstop', 'tstart',
+                 'tstop', 'ed_rec', 'ed_rec_err', 'ampl_rec', 
+                  'total_n_valid_data_points', 'dur']
+
+FAKE_FLARE_COLUMNS = ['duration_d', 'amplitude', 'ed_inj', 'peak_time']
+
 
 class FlareLightCurve(KeplerLightCurve, TessLightCurve):
     """
@@ -174,29 +177,74 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
 #        self.add_column(saturation, name="saturation", copy=False, index=len(self._required_columns)+3)
         #self._required_columns = required_columns
         
+        #self._init_flare_table(self, flares=flares, fake_flares=fake_flares)
+        #self._add_tpf_columns(self, pixel_flux=None, pixel_flux_err=None, pipeline_mask=None)
+
+
+    @property
+    def origin(self):
+        try:
+            return self.meta["origin"]
+        except KeyError:
+            self.meta["origin"] = "FLC"
+            return self.meta["origin"]
+
+    @origin.setter
+    def origin(self, origin):
+        self.meta["origin"] = origin 
+    
+    @property
+    def saturation(self):
+        try:
+            return self.meta["saturation"]
+        except KeyError:
+            self.meta["saturation"] = []
+            return self.meta["saturation"]
+
+    @saturation.setter
+    def saturation(self, saturation):
+        self.meta["saturation"] = saturation 
+
+    @property
+    def flares(self) -> pd.DataFrame:
+        try:
+            return self.meta["flares"]
+        except KeyError:
+            self.meta["flares"] = pd.DataFrame(columns=FLARE_COLUMNS)
+            return self.meta["flares"]
+
+    @flares.setter
+    def flares(self, flares):
+        self.meta["flares"] = flares 
+
+
+    @property
+    def fake_flares(self) -> pd.DataFrame:
         
+        try:
+            return self.meta["fake_flares"]
+        except KeyError:
+            self.meta["fake_flares"] = pd.DataFrame(columns=FAKE_FLARE_COLUMNS)
+            return self.meta["fake_flares"]
 
-
+    @fake_flares.setter
+    def fake_flares(self, fake_flares):
+        self.meta["fake_flares"] = fake_flares
 
     def _init_flare_table(self, flares=None, fake_flares=None):
 
-        columns = ['istart', 'istop', 'cstart', 'cstop', 'tstart',
-                   'tstop', 'ed_rec', 'ed_rec_err', 'ampl_rec', 
-                   'total_n_valid_data_points', 'dur']
-
-
         if flares is None:
-            self.flares = pd.DataFrame(columns=columns)
+            self.flares = pd.DataFrame(columns=FLARE_COLUMNS)
         else:
             self.flares = flares
 
         if fake_flares is None:
-            other_columns = ['duration_d', 'amplitude', 'ed_inj', 'peak_time']
-            self.fake_flares = pd.DataFrame(columns=other_columns)
+            
+            self.fake_flares = pd.DataFrame(columns=FAKE_FLARE_COLUMNS)
         else:
             self.fake_flares = fake_flares
 
-    def _add_tpf_columns(self, pixel_flux, pixel_flux_err, pipeline_mask):
+    def _add_tpf_columns(self, pixel_flux=None, pixel_flux_err=None, pipeline_mask=None):
 
         self.pixel_flux = pixel_flux
         self.pixel_flux_err = pixel_flux_err
@@ -896,46 +944,5 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
         flc.flares = flares
         return flc
     
-
-    def to_fits(self, path):
-        """Write FlareLightCurve to a .fits
-        file. Read it in again using from_path().
-
-        Parameters:
-        ------------
-        path : str
-            Path to location.
-        """
-        flc = copy.deepcopy(self)
-        bintab = [] # list for main table
-        hdr = fits.Header() # empty header
-        vals = flc.__dict__ # all attributes from light curve
-
-        # Place attributes into header or main table depending on dtype:
-        for key, val in vals.items():
-            if type(val)==np.ndarray:
-                if len(val.shape) == 1:
-                    bintab.append(fits.Column(name=key, format='D', array=val))
-                else:
-                    LOG.warning("Did not save {} because fits files only accept 1D arrays.".format(key))
-            elif (type(val) == str) | (type(val) == int) | (type(val) == float):
-                hdr[key] = val
-            elif type(val) == dict:
-                for k, v in val:
-                    LOG.debug("Extra column {} defined in header.".format(k))
-                    hdr[k] = v
-            else:
-                LOG.debug("{} was not written to .fits file.".format(key))
-                
-        # Define columns
-        cols = fits.ColDefs(bintab)
-
-        # Define header and binary table
-        hdu = fits.BinTableHDU.from_columns(cols)
-        primary_hdu = fits.PrimaryHDU(header=hdr)
-
-        # Stick header and main table together
-        hdul = fits.HDUList([primary_hdu, hdu])
-        hdul.writeto(path, overwrite=True)
 
 

@@ -257,6 +257,8 @@ def _heatmap(flcd, typ, ampl_bins, dur_bins, flares_per_bin, **kwargs):
     
     Parameters:
     -----------
+    flcd : FlareLightCurve
+
     typ : string
         Either "recovery_probability" or "ed_ratio"
     ampl_bins : int or array
@@ -271,7 +273,8 @@ def _heatmap(flcd, typ, ampl_bins, dur_bins, flares_per_bin, **kwargs):
         raise AttributeError("Missing injection-recovery data. "
                              "Use `FLC.load_injrec_data(path)` to fetch "
                              "some, or run `FLC.sample_flare_recovery()`.")
-    
+    print(flcd.fake_flares)
+    print(flcd.flares)
     # define observed flare duration
     flcd.flares["dur"] = flcd.flares.tstop - flcd.flares.tstart
     flcd.fake_flares["dur"] = flcd.fake_flares.tstop - flcd.fake_flares.tstart
@@ -361,6 +364,7 @@ def plot_heatmap(df, val, label=None,
         heatmap1_data = heatmap1_data.bfill(axis=0).ffill(axis=0).bfill(axis=1).ffill(axis=1)
 
     try:
+        print(heatmap1_data)
         heatmap = seaborn.heatmap(heatmap1_data, cmap=cmap,cbar_kws={'label': label},
                                   vmin=valcbr[0], vmax=valcbr[1], annot=False, ax=ax,
                                   yticklabels=["{:.2e}".format(x) for x in heatmap1_data.index.values],

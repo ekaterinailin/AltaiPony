@@ -55,19 +55,20 @@ def mock_flc(origin='TPF', detrended=False, ampl=1., dur=1):
     quality[18] = 128
     keys = {'flux' : flux, 'flux_err' : flux_err, 'time' : time,
             'pos_corr1' : np.zeros(n), 'pos_corr2' : np.zeros(n),
-            'cadenceno' : np.arange(n), 'targetid' : 800000000,
-            'origin' : origin, 'it_med' : np.full_like(time,500.005),
-            'quality' : quality, 'pipeline_mask' : pipeline_mask,
+            'cadenceno' : np.arange(n), 'it_med' : np.full_like(time,500.005),
+            'quality' : quality,}
+    meta = {'targetid' : 800000000,
+            'origin' : origin,  'pipeline_mask' : pipeline_mask,
             'pixel_flux' : pixel_flux, 'campaign' : 5, 'ra' : 22.,
             'dec' : 22., 'mission' : 'K2', 'channel' : 55, 
             'pixel_flux_err' : pixel_flux_err, 'time_format': 'bkjd'}
 
     if detrended == False:
-        flc = FlareLightCurve(**keys)
+        flc = FlareLightCurve(keys)
     else:
-        flc = FlareLightCurve(detrended_flux=flux,
-                              detrended_flux_err=flux_err,
-                              **keys)
+        keys["detrended_flux"]=flux
+        keys["detrended_flux_err"]=flux_err
+        flc = FlareLightCurve(data=keys, meta=meta)
     return flc
 
 
@@ -394,6 +395,7 @@ def test_find_flares():
     """Test that an obvious flare is recovered sufficiently well."""
     flc = mock_flc(detrended=True)
     flc = flc.find_flares()
+    print(flc.flares)
     assert flc.flares.loc[0,'ed_rec'] == pytest.approx(3455.8875941, rel=1e-4)
     assert flc.flares['ed_rec_err'][0] < flc.flares['ed_rec'][0]
     assert flc.flares['istart'][0] == 15
