@@ -216,9 +216,10 @@ def _from_path_LC(path, mission, flux_type="PDCSAP_FLUX"):
     return flc
 
 
+
 def _from_path_TPF(path, mission, aperture_mask="default"):
     
-    origins = {"Kepler":"KLC", "K2":"KLC","TESS":"TLC"}
+#    origins = {"Kepler":"KLC", "K2":"KLC","TESS":"TLC"}
     
     if ((mission == "Kepler") | (mission == "K2")):
         tpf = KeplerTargetPixelFile(path)
@@ -281,35 +282,15 @@ def _from_path_AltaiPony(path):
 # Internal type conversion functions
 
 def _convert_TPF_to_FLC(tpf, lc):
-#    keys = {#'primary_header' : tpf.hdu[0].header,
-            #'data_header' : tpf.hdu[1].header,
-#            'pos_corr1' : tpf.pos_corr1,
-#            'pos_corr2' : tpf.pos_corr2,
-#            'pixel_flux' : tpf.flux,
-#            'pixel_flux_err' : tpf.flux_err,
-#            'pipeline_mask' : tpf.pipeline_mask}
-
-#    attributes = dict([(key, lc[key].value) for key in lc.colnames[:3]])#lc.__dict__
-#    z = attributes.copy()
-#    z.update(keys)
-#    if "_flux_unit" in z.keys():
-#        del z["_flux_unit"]
-#    if '_required_columns_relax' in z.keys():
-#        del z['_required_columns_relax']
-#    keys = 
- #   flc = FlareLightCurve(**z, meta=lc.meta)
-
-#    flc = FlareLightCurve(origin="TPF",
-#                          flux_unit = u.electron/u.s, meta=lc.meta, **keys)
-    if lc.pos_corr1 is None:
+    if "pos_corr1" not in lc.columns:
         lc.pos_corr1 = lc.centroid_col
-    if lc.pos_corr2 is None:
+    if "pos_corr2" not in lc.columns:
         lc.pos_corr2 = lc.centroid_row
-    flc = flc[np.isfinite(lc.time.value) &
-              np.isfinite(lc.flux.value) &
-              np.isfinite(lc.pos_corr1.value) &
-              np.isfinite(lc.pos_corr2.value) &
-              np.isfinite(lc.cadenceno.value) ]
+    lc = lc[np.isfinite(lc.time.value) &
+            np.isfinite(lc.flux.value) &
+            np.isfinite(lc.pos_corr1.value) &
+            np.isfinite(lc.pos_corr2.value) &
+            np.isfinite(lc.cadenceno.value) ]
     
     lc["detrended_flux"] = np.nan
     lc["detrended_flux_err"] = np.nan
@@ -318,42 +299,17 @@ def _convert_TPF_to_FLC(tpf, lc):
     lc.__class__ = FlareLightCurve
     lc._init_flare_table()
     lc._add_tpf_columns(tpf.flux.value, tpf.flux_err.value, tpf.pipeline_mask)
-
+    lc.origin = "TPF"
     return lc
 
 
 def _convert_LC_to_FLC(lc, origin=None, **kwargs):
-#    attributes = lc.__dict__
-#    attributes.update(kwargs)
-    
-#    if "_flux_unit" in attributes.keys():
-#        del attributes["_flux_unit"]
-#    if '_required_columns_relax' in attributes.keys():
-#        del attributes['_required_columns_relax']	
-#    vals = []
-#    for i,val in attributes.items():        
-#        if i[0] == "_":
-#            vals.append(i)
-#    for i in vals:
-#        del attributes[i]
-#        
-#    flc = FlareLightCurve(time_unit=u.day, origin=origin,
-#                          flux_unit = u.electron/u.s,
-#                           **attributes)
+
     lc = lc[np.isfinite(lc.time.value) &
               np.isfinite(lc.flux.value) &
               np.isfinite(lc.cadenceno.value)]
-   # keys = dict([(key, lc[key].value) for key in lc.colnames[:3]])
-   # print(keys)
-   # flc = lc.FlareLightCurve(**keys, time_format=lc.time.format, meta=lc.meta)
-#    flc = FlareLightCurve(time=lc.time.value,
-#                          flux=lc.flux.value, 
-#                          flux_err=lc.flux_err.value,
-#                          pos_corr1=
-#                          meta=lc.meta)
-        
-    lc["detrended_flux"] = np.nan
-    lc["detrended_flux_err"] = np.nan
+#    lc["detrended_flux"] = np.nan
+#    lc["detrended_flux_err"] = np.nan
 
     lc.__class__ = FlareLightCurve
     lc._init_flare_table()

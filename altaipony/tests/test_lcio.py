@@ -49,15 +49,13 @@ def test__from_path_AltaiPony():
     assert rflc.quarter == flc.quarter
     assert rflc.ra == flc.ra
     assert rflc.dec == flc.dec
-    assert rflc.time.value_scale == flc.time.value_scale
-    assert rflc.time.value_format == flc.time.value_format
     assert rflc.mission == "Kepler"
     kws = ['time', 'flux', 'flux_err', 'centroid_col',
            'centroid_row', 'quality', 'cadenceno',
            'detrended_flux', 'detrended_flux_err',]
     assert (len(rflc.flux.value) == np.array([len(getattr(rflc,x)) for x in kws])).all()
     assert rflc.targetid == 10002792
-    assert rflc.origin == "KLC"
+    assert rflc.origin == "FLC"
     assert np.isnan(rflc.detrended_flux.value).all()
     assert np.isnan(rflc.detrended_flux_err.value).all()
     

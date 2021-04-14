@@ -357,24 +357,23 @@ def plot_heatmap(df, val, label=None,
                          columns=['Duration'])
 
     if interpolate==True:
-        heatmap1_data= (heatmap1_data.bfill(axis=0) +
-                                                heatmap1_data.ffill(axis=0) +
-                                                heatmap1_data.bfill(axis=1) +
-                                                heatmap1_data.ffill(axis=1)) / 4 
+        heatmap1_data.iloc[:,:] = (heatmap1_data.bfill(axis=0).values +
+	                                        heatmap1_data.ffill(axis=0).values +
+	                                        heatmap1_data.bfill(axis=1).values +
+	                                        heatmap1_data.ffill(axis=1).values) / 4 
         heatmap1_data = heatmap1_data.bfill(axis=0).ffill(axis=0).bfill(axis=1).ffill(axis=1)
 
     try:
-        print(heatmap1_data)
-        heatmap = seaborn.heatmap(heatmap1_data, cmap=cmap,cbar_kws={'label': label},
-                                  vmin=valcbr[0], vmax=valcbr[1], annot=False, ax=ax,
-                                  yticklabels=["{:.2e}".format(x) for x in heatmap1_data.index.values],
-                                  xticklabels=["{:.2e}".format(x) for x in heatmap1_data.columns.values])
+        heatmap = seaborn.heatmap(heatmap1_data.values,cbar_kws={'label': label},
+	                          vmin=valcbr[0], vmax=valcbr[1], annot=False, ax=ax,
+	                          yticklabels=["{:.2e}".format(x) for x in heatmap1_data.index.values],
+	                          xticklabels=["{:.2e}".format(x) for x in heatmap1_data.columns.values])
     except AttributeError:
-        heatmap = seaborn.heatmap(heatmap1_data, cmap=cmap,cbar_kws={'label': label},
-                              vmin=valcbr[0], vmax=valcbr[1], annot=False, ax=ax,
-                              yticklabels=["{:.2e}".format(x) for x in heatmap1_data.index.values.categories.values.mid.values],
-                              xticklabels=["{:.2e}".format(x) for x in heatmap1_data.columns.values.categories.values.mid.values])
-    
+        heatmap = seaborn.heatmap(heatmap1_data.values, cbar_kws={'label': label},
+	                      vmin=valcbr[0], vmax=valcbr[1], annot=False, ax=ax,
+	                      yticklabels=["{:.2e}".format(x) for x in heatmap1_data.index.values.categories.values.mid.values],
+	                      xticklabels=["{:.2e}".format(x) for x in heatmap1_data.columns.values.categories.values.mid.values])
+        
     fig = heatmap.get_figure()
     
     # Do some layout stuff
