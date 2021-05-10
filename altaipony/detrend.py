@@ -4,7 +4,7 @@ import copy
 import numpy as np
 import pandas as pd
 
-§from .altai import find_iterative_median, equivalent_duration
+#from .altai import find_iterative_median, equivalent_duration
 from .utils import sigma_clip
 
 from collections import defaultdict
