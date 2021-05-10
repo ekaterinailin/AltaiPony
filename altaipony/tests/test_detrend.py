@@ -10,7 +10,7 @@ from ..detrend import (custom_detrending,
                        remove_sines_iteratively,
                        )
   
-from ..altai import find_iterative_median
+#from ..altai import find_iterative_median
 
 cases = [(.05, 0.005, 1.5, 24.4, 1.5, 0.1),
          (.1, 0.005, 1.5, 14.4, 1.5, 0.5),
@@ -33,7 +33,7 @@ def test_custom_detrending(a1, a2, period1, period2, quad, cube,):
     flccc = estimate_detrended_noise(flcc, mask_pos_outliers_sigma=2.5, 
                                      std_window=100)
 
-    flccc = find_iterative_median(flccc)
+ #   flccc = find_iterative_median(flccc)
 
 
     flares = flccc.find_flares(addtail=True).flares
@@ -76,8 +76,8 @@ def test_remove_sines_iteratively(a, b, c, d):
                           detrended_flux=y1,
                           detrended_flux_err=np.full_like(y1, .01),)
 
-    # find median
-    flc = find_iterative_median(flc)
+ #   # find median
+  #  flc = find_iterative_median(flc)
 #     flc.plot()
     
     # apply function
@@ -121,7 +121,7 @@ def test_remove_exponential_fringes(a,b,median,c,d):
                       detrended_flux_err=np.full_like(y1, .0005*median),)
     
     # get iterative median
-    flc = find_iterative_median(flc)
+    #flc = find_iterative_median(flc)
     
     # run the function
     flcd = remove_exponential_fringes(flc)
