@@ -9,7 +9,6 @@ from scipy.signal import savgol_filter
 
 from .utils import sigma_clip
 from .fakeflares import aflare
-from .detrend import MultiBoxcar
 
 LOG = logging.getLogger(__name__)
 
