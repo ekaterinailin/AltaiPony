@@ -3,7 +3,7 @@ import pytest
 import numpy as np
 import pandas as pd
 
-from ..flarelc import FlareLightCurve
+#from ..flarelc import FlareLightCurve
 
 from ..detrend import (custom_detrending,
                        remove_exponential_fringes,
