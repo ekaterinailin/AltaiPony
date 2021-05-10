@@ -338,12 +338,12 @@ def detrend_savgol(lc, window_length=None, pad=3, printwl=False, **kwargs):
 
             flux_model_j[off:upper] = np.nanmean(lc.flux_model.value[le:ri][[i,k]])
             off += j + d - i
-        print(lc.flux.value[le:ri][np.where(a==1)[0]], flux_model_j, np.nanmean(flux_model_i))
+       # print(lc.flux.value[le:ri][np.where(a==1)[0]], flux_model_j, np.nanmean(flux_model_i))
         lc["detrended_flux"][le:ri][np.where(a==1)[0]] = lc.flux.value[le:ri][np.where(a==1)[0]] - flux_model_j + np.nanmean(flux_model_i)
 
         # End of main de-trending.
         # --------------------------------------------------
-    print(lc.detrended_flux)
+   # print(lc.detrended_flux)
     lc = lc[np.isfinite(lc.time.value) &
           np.isfinite(lc.flux.value) &
           np.isfinite(lc.detrended_flux.value)]

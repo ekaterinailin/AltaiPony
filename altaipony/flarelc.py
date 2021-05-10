@@ -842,7 +842,7 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
                     ed_fake[k] = _equivalent_duration(time, fl_flux)
                     
                 # inject flare in to light curve by adding the flare flux
-                fake_lc[typ][le:ri] = (fake_lc[typ][le:ri].value +
+                fake_lc[typ].value[le:ri] = (fake_lc[typ][le:ri].value +
                                                 fl_flux * fake_lc.it_med[le:ri].value)
                 
             # Increment the counter
