@@ -14,7 +14,7 @@ from .detrend import MultiBoxcar
 LOG = logging.getLogger(__name__)
 
 def find_flares_in_cont_obs_period(flux, median, error, sigma=None, 
-                                   N1=3, N2=2, N3=3, addtail=False,
+                                   N1=3, N2=2, N3=1, addtail=False,
                                    tailthreshdiff=1.):
     '''
     The algorithm for local changes due to flares defined by
@@ -39,9 +39,9 @@ def find_flares_in_cont_obs_period(flux, median, error, sigma=None,
         If sigma=None, error is used instead.
     N1 : int or float (default is 3)
         How many times above sigma is required.
-    N2 : int or float (Default is 2)
+    N2 : int or float (Default is 3)
         How many times above sigma and detrended_flux_err is required
-    N3 : int or float (Default is 3)
+    N3 : int or float (Default is 2)
         The number of consecutive points required to flag as a flare.
     addtail : bool (Default is False)
         Optionally, add data points to the flares with a lower threshold
@@ -63,7 +63,7 @@ def find_flares_in_cont_obs_period(flux, median, error, sigma=None,
         sigma = error
     T0 = flux - median # excursion should be positive #"N0"
     T1 = np.abs(flux - median) / sigma #N1
-    T2 = np.abs(flux - median + error) / sigma #N2
+    T2 = np.abs(flux - median - error) / sigma #N2
     
     # apply thresholds N0-N2:
     LOG.debug(f'Factor above standard deviation: N1 = {N1},\n'
