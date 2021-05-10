@@ -14,3 +14,16 @@
     - flare characterization
     - injection/recovery diagnostics
     - statistical analysis tools
+
+1.0.1 (2021-02-20)
+++++++++++++++++++
+
+- fixed the lightcurve version to <2 
+- altaipony.__version__ now returns a version number
+
+
+2.0 (2021-05-10)
+++++++++++++++++
+
+- now available
+    - compatibility with lightcurve >2

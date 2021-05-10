@@ -15,7 +15,7 @@ from lightkurve import (search_lightcurve,
                         KeplerTargetPixelFile,
                         TessTargetPixelFile,
                         read)
-                        
+
 LOG = logging.getLogger(__name__)
 
 from astropy.table import TableColumns, Column
@@ -24,7 +24,8 @@ from astropy.table import TableColumns, Column
 # Read in data from MAST, either as LC (TESS, Kepler, K2) or TPF (K2)
 # No reading in of Kepler or TESS TPFs as de-trending is not implemented for them.
 
-def from_mast(targetid, mission, c, mode="LC", **kwargs):
+def from_mast(targetid, mission, c=None, mode="LC", campaign=None, sector=None,
+		quarter=None, **kwargs):
     """Download light curve derived from
     TPF or LC directly from MAST using the
     great search functionality in lightkurve,
@@ -53,12 +54,18 @@ def from_mast(targetid, mission, c, mode="LC", **kwargs):
         if mode == "LC":
             warnings.warn("\nYou cannot do K2SC de-trending on a light curve only." 
                  "Pass mode='TPF' to be able to run FLC.detrend('k2sc') later.")
+        if campaign != None:
+            c = campaign
         return _from_mast_K2(targetid, mode, c, **kwargs)
     
     elif mission == "Kepler":
+        if quarter != None:
+            c = quarter
         return _from_mast_Kepler(targetid, c, **kwargs)
     
     elif mission == "TESS":
+        if sector != None:
+            c = sector
         return _from_mast_TESS(targetid, c, **kwargs)
     
     return
@@ -106,12 +113,13 @@ def _from_mast_Kepler(targetid, c, flux_type="PDCSAP_FLUX", cadence="long",
 
 
 def _from_mast_TESS(targetid, c, flux_type="PDCSAP_FLUX", cadence="long",
-                    download_dir=None):
+                    download_dir=None, **kwargs):
                     
     mission = "TESS"
+   # print(targetid, mission, c, cadence, kwargs)
     flcfilelist = search_lightcurve(targetid, mission=mission,
-                                        sector=c, cadence=cadence)
-
+                                     sector=c, cadence=cadence, **kwargs)
+   # print(flcfilelist)
     return _handle_missions(flcfilelist, mission, flux_type,
                             cadence, download_dir, targetid,
                             c)
@@ -152,7 +160,7 @@ def _handle_missions(flcfilelist, mission, flux_type,
         lc = flcfilelist.download(download_dir=download_dir)
         #lc = flcfile.get_lightcurve(flux_type)
 
-        flc = _convert_LC_to_FLC(lc, origin="KLC")
+        flc = _convert_LC_to_FLC(lc, origin=origin)
         return flc
 
     elif len(flcfilelist)>1:
