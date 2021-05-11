@@ -66,16 +66,16 @@ For a statistical analysis of your flares, **AltaiPony** also features a set of 
 
 .. _Aigrain et al. 2016: http://ascl.net/1605.012
 .. _fork: https://github.com/ekaterinailin/k2sc
-.. _notebook: https://github.com/ekaterinailin/AltaiPony/blob/master/notebooks/Getting_Started.ipynb
-.. _this: https://github.com/ekaterinailin/AltaiPony/blob/master/notebooks/Kepler_Light_Curves_With_Flares.ipynb
+.. _notebook: https://github.com/ekaterinailin/AltaiPony/blob/master/notebooks/01_Getting_Started.ipynb
+.. _this: https://github.com/ekaterinailin/AltaiPony/blob/master/notebooks/03_Kepler_Light_Curves_With_Flares.ipynb
 .. _Savitzky-Golay: http://www.statistics4u.info/fundstat_eng/cc_filter_savgolay.html
 .. _scipy: https://docs.scipy.org/doc/scipy-0.15.1/reference/generated/scipy.signal.savgol_filter.html
-.. _other: https://github.com/ekaterinailin/AltaiPony/blob/master/notebooks/TESS_Light_Curves_With_Flares.ipynb
+.. _other: https://github.com/ekaterinailin/AltaiPony/blob/master/notebooks/04_TESS_Light_Curves_With_Flares.ipynb
 .. _in this tutorial: https://altaipony.readthedocs.io/en/latest/tutorials/altai.html
 .. _Finding Flares: https://altaipony.readthedocs.io/en/latest/tutorials/altai.html
 .. _Finding Data: https://altaipony.readthedocs.io/en/latest/tutorials/lcio.html
 .. _Synthetic Flare Injection and Recovery: https://altaipony.readthedocs.io/en/latest/tutorials/fakeflares.html
-.. _visualization: https://github.com/ekaterinailin/AltaiPony/blob/master/notebooks/Visualize_Injection_Recovery.ipynb
-.. _beginner: https://github.com/ekaterinailin/AltaiPony/blob/master/notebooks/Beginner_Flare_Frequency_Distributions_and_Power_Laws.ipynb
-.. _advanced: https://github.com/ekaterinailin/AltaiPony/blob/master/notebooks/Advanced_Flare_Frequency_Distributions_and_Power_Laws.ipynb
+.. _visualization: https://github.com/ekaterinailin/AltaiPony/blob/master/notebooks/05_Visualize_Injection_Recovery.ipynb
+.. _beginner: https://github.com/ekaterinailin/AltaiPony/blob/master/notebooks/02_Beginner_Flare_Frequency_Distributions_and_Power_Laws.ipynb
+.. _advanced: https://github.com/ekaterinailin/AltaiPony/blob/master/notebooks/06_Advanced_Flare_Frequency_Distributions_and_Power_Laws.ipynb
 .. _Flare Frequency Distributions and Power Laws: https://altaipony.readthedocs.io/en/latest/tutorials/ffds.html
