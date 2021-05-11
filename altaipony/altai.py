@@ -9,7 +9,6 @@ from scipy.signal import savgol_filter
 
 from .utils import sigma_clip
 from .fakeflares import aflare
-from .detrend import MultiBoxcar
 
 LOG = logging.getLogger(__name__)
 
@@ -39,9 +38,9 @@ def find_flares_in_cont_obs_period(flux, median, error, sigma=None,
         If sigma=None, error is used instead.
     N1 : int or float (default is 3)
         How many times above sigma is required.
-    N2 : int or float (Default is 2)
+    N2 : int or float (Default is 3)
         How many times above sigma and detrended_flux_err is required
-    N3 : int or float (Default is 3)
+    N3 : int or float (Default is 2)
         The number of consecutive points required to flag as a flare.
     addtail : bool (Default is False)
         Optionally, add data points to the flares with a lower threshold
@@ -63,7 +62,7 @@ def find_flares_in_cont_obs_period(flux, median, error, sigma=None,
         sigma = error
     T0 = flux - median # excursion should be positive #"N0"
     T1 = np.abs(flux - median) / sigma #N1
-    T2 = np.abs(flux - median + error) / sigma #N2
+    T2 = np.abs(flux - median - error) / sigma #N2
     
     # apply thresholds N0-N2:
     LOG.debug(f'Factor above standard deviation: N1 = {N1},\n'
@@ -144,17 +143,17 @@ def find_flares(flc, minsep=3, **kwargs):
     istart = np.array([], dtype='int')
     istop = np.array([], dtype='int')
 
-    if np.isnan(lc.detrended_flux).all():
+    if np.isnan(lc.detrended_flux.value).all():
         raise TypeError('Flare finding only works on de-trended light curves.')
 
     #Now work on periods of continuous observation with no gaps
     for (le,ri) in lc.gaps:
-        error = lc.detrended_flux_err[le:ri]
-        flux = lc.detrended_flux[le:ri]
+        error = lc.detrended_flux_err.value[le:ri]
+        flux = lc.detrended_flux.value[le:ri]
         
-        median = lc.it_med[le:ri]
+        median = lc.it_med.value[le:ri]
         
-        time = lc.time[le:ri]
+        time = lc.time.value[le:ri]
         # run final flare-find on DATA - MODEL
 
         isflare = find_flares_in_cont_obs_period(flux, median, error, **kwargs)
@@ -183,12 +182,12 @@ def find_flares(flc, minsep=3, **kwargs):
     if len(istart) > 0:
         l = [equivalent_duration(lc, i, j, err=True) for (i,j) in zip(istart, istop)]
         ed_rec, ed_rec_err = zip(*l)
-        fl = lc.detrended_flux
-        ampl_rec = [np.max(fl[i:j]) / lc.it_med[i] - 1. for (i,j) in zip(istart,istop)]
-        cstart = lc.cadenceno[istart]
-        cstop = lc.cadenceno[istop]
-        tstart = lc.time[istart]
-        tstop = lc.time[istop]
+        fl = lc.detrended_flux.value
+        ampl_rec = [np.max(fl[i:j]) / lc.it_med.value[i] - 1. for (i,j) in zip(istart,istop)]
+        cstart = lc.cadenceno[istart].value
+        cstop = lc.cadenceno[istop].value
+        tstart = lc.time[istart].value
+        tstop = lc.time[istop].value
 
         lc.flares = lc.flares.append(pd.DataFrame(
                                      {'ed_rec': ed_rec,
@@ -200,7 +199,7 @@ def find_flares(flc, minsep=3, **kwargs):
                                       'cstop': cstop,
                                       'tstart': tstart,
                                       'tstop': tstop,
-                                      'total_n_valid_data_points': lc.flux.shape[0],
+                                      'total_n_valid_data_points': lc.flux.value.shape[0],
                                       'dur': tstop - tstart
                                       }),
                                       ignore_index=True)
@@ -238,10 +237,10 @@ def detrend_savgol(lc, window_length=None, pad=3, printwl=False, **kwargs):
     FlareLightCurve
     '''
     
-    lc = lc[np.where(~np.isnan(lc.flux))]
-    lc.detrended_flux = np.full_like(lc.flux, np.nan)
-    lc.flux_model = np.full_like(lc.flux, np.nan)
-    lc.detrended_flux_err = lc.flux_err
+    lc = lc[np.where(~np.isnan(lc.flux.value))]
+    lc.detrended_flux = np.full_like(lc.flux.value, np.nan)
+    lc["flux_model"] = np.full_like(lc.flux.value, np.nan)
+    lc.detrended_flux_err = lc.flux_err.value
     
     if lc.gaps is None:
         lc = lc.find_gaps()
@@ -255,12 +254,12 @@ def detrend_savgol(lc, window_length=None, pad=3, printwl=False, **kwargs):
     for (wl,le,ri) in gaps:
         
         # Do the iterative sigma clipping
-        ok = np.where(sigma_clip(lc.flux[le:ri], **kwargs))[0] + le
+        ok = np.where(sigma_clip(lc.flux.value[le:ri], **kwargs))[0] + le
         outliers = list(set(list(range(le, ri))) - set(ok)) # inverse of ok
         
-        time = lc.time[ok]
-        flux = lc.flux[ok]
-        error = lc.flux_err[ok]
+        time = lc.time.value[ok]
+        flux = lc.flux.value[ok]
+        error = lc.flux_err.value[ok]
         
         # ----------------------------------
         # Main detrending happens here:
@@ -279,11 +278,11 @@ def detrend_savgol(lc, window_length=None, pad=3, printwl=False, **kwargs):
         flux_model_i = savgol_filter(flux, wl, 3, mode='nearest')
         
         flux_diff = flux - flux_model_i + np.nanmean(flux_model_i)
-        lc.detrended_flux[ok] = flux_diff
-        lc.flux_model[ok] = flux_model_i
+        lc.detrended_flux.value[ok] = flux_diff
+        lc.flux_model.value[ok] = flux_model_i
         
         # Find out where outlier begin and end:
-        a = np.isnan(lc.detrended_flux[le:ri]).astype(int)
+        a = np.isnan(lc.detrended_flux.value[le:ri]).astype(int)
         
         #pad outliers-------------------
        # print(np.where(a)[0])
@@ -326,27 +325,27 @@ def detrend_savgol(lc, window_length=None, pad=3, printwl=False, **kwargs):
                 
             else:
                 k = j + 2
-            k = min(len(lc.flux_model[le:ri]), k)
+            k = min(len(lc.flux_model.value[le:ri]), k)
 
             upper = min(j + d - i + off, len(flux_model_j))
 
             # work around a bug that sometimes occurs, not sure why
             # ----------------------------------
-            if k == len(lc.flux_model[le:ri]): 
+            if k == len(lc.flux_model.value[le:ri]): 
                 k-=1
             # ----------------------------------
 
-            flux_model_j[off:upper] = np.nanmean(lc.flux_model[le:ri][[i,k]])
+            flux_model_j[off:upper] = np.nanmean(lc.flux_model.value[le:ri][[i,k]])
             off += j + d - i
-            
-        lc.detrended_flux[le:ri][np.where(a==1)[0]] = lc.flux[le:ri][np.where(a==1)[0]] - flux_model_j + np.nanmean(flux_model_i)
+       # print(lc.flux.value[le:ri][np.where(a==1)[0]], flux_model_j, np.nanmean(flux_model_i))
+        lc["detrended_flux"][le:ri][np.where(a==1)[0]] = lc.flux.value[le:ri][np.where(a==1)[0]] - flux_model_j + np.nanmean(flux_model_i)
 
         # End of main de-trending.
         # --------------------------------------------------
-        
-    lc = lc[np.where(~np.isnan(lc.detrended_flux) &
-                     ~np.isnan(lc.detrended_flux_err) &
-                     ~np.isnan(lc.time))]
+   # print(lc.detrended_flux)
+    lc = lc[np.isfinite(lc.time.value) &
+          np.isfinite(lc.flux.value) &
+          np.isfinite(lc.detrended_flux.value)]
     return lc
 
 
@@ -371,15 +370,17 @@ def find_iterative_median(flc, n=30, **kwargs):
     """
 
     lc = copy.deepcopy(flc)
-    lc.it_med = np.full_like(flc.detrended_flux, np.median(flc.detrended_flux))
+
+    lc.it_med = np.full_like(flc.detrended_flux.value, np.median(flc.detrended_flux.value))
     if lc.gaps is None:
         lc = lc.find_gaps()
     for (le,ri) in lc.gaps:
-        flux = flc.detrended_flux[le:ri]
+        flux = flc.detrended_flux.value[le:ri]
         #find a median that is not skewed by outliers
         good = sigma_clip(flux)
         goodflux = flux[good]
         lc.it_med[le:ri] = np.nanmedian(goodflux)
+
     return lc
 
 def equivalent_duration(lc, start, stop, err=False):
@@ -412,13 +413,13 @@ def equivalent_duration(lc, start, stop, err=False):
 
     start, stop = int(start),int(stop)+1
     lct = lc[start:stop]
-    residual = lct.detrended_flux / np.nanmedian(lct.it_med)-1.
-    x = lct.time * 60.0 * 60.0 * 24.0
+    residual = lct.detrended_flux.value / np.nanmedian(lct.it_med.value)-1.
+    x = lct.time.value * 60.0 * 60.0 * 24.0
     ed = np.sum(np.diff(x) * residual[:-1])
 
     if err == True:
         flare_chisq = chi_square(residual[:-1],
-                                 lct.detrended_flux_err[:-1]/np.nanmedian(lct.it_med))
+                                 lct.detrended_flux_err.value[:-1]/np.nanmedian(lct.it_med.value))
         ederr = np.sqrt(ed**2 / (stop-1-start) / flare_chisq)
         return ed, ederr
     else:

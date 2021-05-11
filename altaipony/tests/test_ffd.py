@@ -4,6 +4,8 @@ import copy
 import numpy as np
 import pandas as pd
 
+import logging
+
 from ..utils import generate_random_power_law_distribution
 from ..wheatland import generate_fake_data
 from ..ffd import (FFD,
@@ -47,38 +49,49 @@ def test_init_FFD():
 def test_setter_outputs(caplog):
     """Test all setters to work in both silent and loud modes.
     Using the caplog fixture from pytest to get logging outputs.""" 
-    simple_ffd = FFD()
+    with caplog.at_level(logging.INFO):
+        simple_ffd = FFD()
+    print(caplog)
+
     assert ('No total observing time given. Set to 1. '
             'You are now working with number counts instead of frequency.' in caplog.text)
-    
+
     # multiple_stars
-    simple_ffd._multiple_stars = True
+    with caplog.at_level(logging.INFO):
+        simple_ffd._multiple_stars = True
     assert ('Setting multiple_stars flag with True.' in caplog.text) == False
-    simple_ffd.multiple_stars = True
+    with caplog.at_level(logging.INFO):    
+        simple_ffd.multiple_stars = True
     assert 'Setting multiple_stars flag with True.' in caplog.text
     
     a = [1,2,3]
 
     # ed
     s = f"Setting ED with new values, size {len(a)}."
-    simple_ffd._ed = a
+    with caplog.at_level(logging.INFO):
+        simple_ffd._ed = a
     assert (s in caplog.text) == False
-    simple_ffd.ed = a
+    with caplog.at_level(logging.INFO):    
+        simple_ffd.ed = a
     assert s in caplog.text
 
     # freq
     s = f"Setting frequency values with new values, size {len(a)}."
-    simple_ffd._freq = a
+    with caplog.at_level(logging.INFO):    
+        simple_ffd._freq = a
     assert (s in caplog.text) == False
-    simple_ffd.freq = a
+    with caplog.at_level(logging.INFO):
+        simple_ffd.freq = a
     assert s in caplog.text
 
     # count_ed
-    simple_ffd._count_ed = a
+    with caplog.at_level(logging.INFO):
+        simple_ffd._count_ed = a
     s = (f"Setting frequency adjusted count values "
          f"with new values, size {len(a)}.")
     assert (s in caplog.text) == False
-    simple_ffd.count_ed = a
+    with caplog.at_level(logging.INFO):    
+        simple_ffd.count_ed = a
     assert s in caplog.text
     
 #---------------------------------------------------------------------------------------

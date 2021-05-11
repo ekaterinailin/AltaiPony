@@ -7,13 +7,22 @@ import progressbar
 import datetime
 
 
+from collections import defaultdict
+
+from scipy.interpolate import UnivariateSpline
+from scipy import optimize
+from scipy.fftpack import fft
+
 from lightkurve import KeplerLightCurve, KeplerTargetPixelFile, TessLightCurve
 from lightkurve.utils import KeplerQualityFlags
 
 from astropy.io import fits
+import astropy.units as u
 
 from .k2scmod import k2sc_lc
-from .altai import (find_flares, find_iterative_median, detrend_savgol)
+from .altai import (find_flares,
+                    find_iterative_median, 
+                    detrend_savgol)
 from .fakeflares import (merge_fake_and_recovered_events,
                          generate_fake_flare_distribution,
                          mod_random,
@@ -24,6 +33,14 @@ from .utils import split_gaps
 
 import time
 LOG = logging.getLogger(__name__)
+
+
+FLARE_COLUMNS = ['istart', 'istop', 'cstart', 'cstop', 'tstart',
+                 'tstop', 'ed_rec', 'ed_rec_err', 'ampl_rec', 
+                  'total_n_valid_data_points', 'dur']
+
+FAKE_FLARE_COLUMNS = ['duration_d', 'amplitude', 'ed_inj', 'peak_time']
+
 
 class FlareLightCurve(KeplerLightCurve, TessLightCurve):
     """
@@ -72,8 +89,8 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
         Mission identifier, e.g., 'TESS', 'K2' or 'Kepler'.
     cadenceno : array-like
         Cadence number - unique identifier.
-    targetid : int
-        EPIC ID number.
+    object : str
+        target ID.
     ra : float
         RA in deg.
     dec : float
@@ -102,123 +119,145 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
 
 
     """
-    def __init__(self, time=None, flux=None, flux_err=None, time_format=None,
-                 time_scale=None, time_unit=None, centroid_col=None,
-                 centroid_row=None, quality=None, quality_bitmask=None,
-                 channel=None, campaign=None, quarter=None, sector=None, mission=None,
-                 cadenceno=None, targetid=None, ra=None, dec=None, label=None,
-                 meta={}, detrended_flux=None, detrended_flux_err=None,
-                 flux_trends=None, gaps=None, flares=None, flux_unit = None,
-                 primary_header=None, data_header=None, pos_corr1=None,
-                 pos_corr2=None, origin='FLC', fake_flares=None, it_med=None,
-                 pixel_flux=None, pixel_flux_err=None, pipeline_mask=None,
-                 camera=None, ccd=None, saturation=None):
 
-        if mission == 'TESS':
-                TessLightCurve.__init__(self, time=time, flux=flux, flux_err=flux_err,
-                                        time_format=time_format, time_scale=time_scale,
-                                        centroid_col=centroid_col, centroid_row=centroid_row,
-                                        quality=quality, quality_bitmask=quality_bitmask,
-                                        camera=camera, cadenceno=cadenceno, targetid=targetid,
-                                        ra=ra, dec=dec, label=label, meta=meta, sector=sector,
-                                        )
-                self.mission = mission
-                self.campaign = None
-                self.quarter = None
-        else:
-                KeplerLightCurve.__init__(self, time=time, flux=flux, flux_err=flux_err,
-                                          time_format=time_format, time_scale=time_scale,
-                                          centroid_col=centroid_col, centroid_row=centroid_row,
-                                          quality=quality, quality_bitmask=quality_bitmask,
-                                          channel=channel, campaign=campaign, quarter=quarter,
-                                          mission=mission, cadenceno=cadenceno, targetid=targetid,
-                                          ra=ra, dec=dec, label=label, meta=meta)
+    @property
+    def detrended_flux_err(self) -> np.array:
+        try:
+            return self["detrended_flux_err"]
+        except KeyError:
+            self["detrended_flux_err"] = np.full_like(self.time.value, np.nan)
+            return self["detrended_flux_err"]
+
+    @detrended_flux_err.setter
+    def detrended_flux_err(self, detrended_flux_err):
+        self["detrended_flux_err"] = detrended_flux_err
+
+
+    @property
+    def detrended_flux(self) -> np.array:
+        try:
+            return self["detrended_flux"]
+        except KeyError:
+            self["detrended_flux"] = np.full_like(self.time.value, np.nan)
+            return self["detrended_flux"]
+
+    @detrended_flux.setter
+    def detrended_flux(self, detrended_flux):
+        self["detrended_flux"] = detrended_flux 
+
+    @property
+    def cadenceno(self):
+        try:
+            return self["cadenceno"]
+        except KeyError:
+            self["cadenceno"] = np.full_like(self.time.value, np.nan)
+            return self["cadenceno"]
+
+    @cadenceno.setter
+    def cadenceno(self, cadenceno):
+        self["cadenceno"] = cadenceno
+
+    @property
+    def it_med(self):
+        try:
+            return self["it_med"]
+        except KeyError:
+            self["it_med"] = np.full_like(self.time.value, np.nan)
+            return self["it_med"]
+
+    @it_med.setter
+    def it_med(self, it_med):
+        self["it_med"] = it_med
+
+    @property
+    def origin(self):
+        try:
+            return self.meta["origin"]
+        except KeyError:
+            self.meta["origin"] = "FLC"
+            return self.meta["origin"]
+
+    @origin.setter
+    def origin(self, origin):
+        self.meta["origin"] = origin 
+
+
+
+    
+    @property
+    def saturation(self):
+        try:
+            return self.meta["saturation"]
+        except KeyError:
+            self.meta["saturation"] = []
+            return self.meta["saturation"]
+
+    @saturation.setter
+    def saturation(self, saturation):
+        self.meta["saturation"] = saturation 
+
+    @property
+    def flares(self) -> pd.DataFrame:
+        try:
+            return self.meta["flares"]
+        except KeyError:
+            self.meta["flares"] = pd.DataFrame(columns=FLARE_COLUMNS)
+            return self.meta["flares"]
+
+    @flares.setter
+    def flares(self, flares):
+        self.meta["flares"] = flares 
+
+
+    @property
+    def fake_flares(self) -> pd.DataFrame:
         
-        self.flux_unit = flux_unit
-        self.time_unit = time_unit
-        self.gaps = gaps
-        self.flux_trends = flux_trends
-        self.primary_header = primary_header
-        self.data_header = data_header
-        self.pos_corr1 = pos_corr1
-        self.pos_corr2 = pos_corr2
-        self.origin = origin
-        self.detrended_flux = detrended_flux
-        self.detrended_flux_err = detrended_flux_err
-        self.pixel_flux = pixel_flux
-        self.pixel_flux_err = pixel_flux_err
-        self.pipeline_mask = pipeline_mask
-        self.it_med = it_med
-        self.saturation = saturation
+        try:
+            return self.meta["fake_flares"]
+        except KeyError:
+            self.meta["fake_flares"] = pd.DataFrame(columns=FAKE_FLARE_COLUMNS)
+            return self.meta["fake_flares"]
 
-        
+    @fake_flares.setter
+    def fake_flares(self, fake_flares):
+        self.meta["fake_flares"] = fake_flares
 
-        columns = ['istart', 'istop', 'cstart', 'cstop', 'tstart',
-                   'tstop', 'ed_rec', 'ed_rec_err', 'ampl_rec', 
-                   'total_n_valid_data_points', 'dur']
 
-        if detrended_flux is None:
-            self.detrended_flux = np.full_like(time, np.nan)
-        else:
-            self.detrended_flux = detrended_flux
+    @property
+    def gaps(self):
+        try:
+            return self.meta["gaps"]
+        except KeyError:
+            self.meta["gaps"] = None
+            return self.meta["gaps"]
 
-        if detrended_flux_err is None:
-            self.detrended_flux_err = np.full_like(time, np.nan)
-        else:
-            self.detrended_flux_err = detrended_flux_err
-        
-        if saturation is None:
-            self.saturation = np.full_like(time, np.nan)
-        else:
-            self.saturation = saturation
+    @gaps.setter
+    def gaps(self, gaps):
+        self.meta["gaps"] = gaps 
+
+    def _init_flare_table(self, flares=None, fake_flares=None):
 
         if flares is None:
-            self.flares = pd.DataFrame(columns=columns)
+            self.flares = pd.DataFrame(columns=FLARE_COLUMNS)
         else:
             self.flares = flares
 
         if fake_flares is None:
-            other_columns = ['duration_d', 'amplitude', 'ed_inj', 'peak_time']
-            self.fake_flares = pd.DataFrame(columns=other_columns)
+            
+            self.fake_flares = pd.DataFrame(columns=FAKE_FLARE_COLUMNS)
         else:
             self.fake_flares = fake_flares
+
+    def _add_tpf_columns(self, pixel_flux=None, pixel_flux_err=None, pipeline_mask=None):
+
+        self.pixel_flux = pixel_flux
+        self.pixel_flux_err = pixel_flux_err
+        self.pipeline_mask = pipeline_mask
 
     def __repr__(self):
         return('FlareLightCurve(ID: {})'.format(self.targetid))
 
-    def __getitem__(self, key):
-        """
-        Override default indexing to cover all time-domain attributes.
-        """
-        copy_self = copy.copy(self)
-        copy_self.time = self.time[key]
-        copy_self.flux = self.flux[key]
-        copy_self.flux_err = self.flux_err[key]
-        if copy_self.cadenceno is not None:
-            copy_self.cadenceno = self.cadenceno[key]
-        if copy_self.pos_corr1 is not None:
-            copy_self.pos_corr1 = self.pos_corr1[key]
-            copy_self.pos_corr2 = self.pos_corr2[key]
-        if copy_self.centroid_col is not None:
-            copy_self.centroid_col = self.centroid_col[key]
-        if copy_self.centroid_row is not None:
-            copy_self.centroid_row = self.centroid_row[key]
-        if copy_self.detrended_flux is not None:
-            copy_self.detrended_flux = self.detrended_flux[key]
-            copy_self.detrended_flux_err = self.detrended_flux_err[key]
-        if copy_self.it_med is not None:
-            copy_self.it_med = self.it_med[key]
-        if copy_self.flux_trends is not None:
-            copy_self.flux_trends = self.flux_trends[key]
-        if copy_self.pixel_flux is not None:
-            copy_self.pixel_flux = self.pixel_flux[key]
-        if copy_self.pixel_flux_err is not None:
-            copy_self.pixel_flux_err = self.pixel_flux_err[key]
-        if copy_self.quality is not None:
-            copy_self.quality = self.quality[key]
-        if copy_self.saturation is not None:
-            copy_self.saturation = self.saturation[key]
-        return copy_self
+
 
     def find_gaps(self, maxgap=0.09, minspan=10, splits=[]):
         '''
@@ -246,11 +285,11 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
 
         '''
         lc = copy.copy(self)
-        dt = np.diff(lc.time)
+        dt = np.diff(lc.time.value)
         gap = np.where(np.append(0, dt) >= maxgap)[0]
 
         # add start/end of LC to loop over easily
-        gap_out = np.append(0, np.append(gap, len(lc.time)))
+        gap_out = np.append(0, np.append(gap, len(lc.time.value)))
 
         # left start, right end of data
         left, right = gap_out[:-1], gap_out[1:]
@@ -323,17 +362,17 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
 
             else:
                 new_lc = copy.deepcopy(self)
-                new_lc.keplerid = self.targetid
+                new_lc.meta["keplerid"] = self.targetid
 
                 #K2SC MAGIC
                 new_lc.__class__ = k2sc_lc
                 try:
                     new_lc.k2sc(de_niter=de_niter, max_sigma=max_sigma, **kwargs)
-                    new_lc.detrended_flux = (new_lc.corr_flux - new_lc.tr_time
-                                             + np.nanmedian(new_lc.tr_time))
-                    new_lc.detrended_flux_err = copy.copy(new_lc.flux_err) # does k2sc share their uncertainties somewhere?
-                    new_lc.flux_trends = new_lc.tr_time
-                    if new_lc.detrended_flux.shape != self.flux.shape:
+                    new_lc["detrended_flux"] = (new_lc.corr_flux.value - new_lc.tr_time.value
+                                             + np.nanmedian(new_lc.tr_time.value))
+                    new_lc["detrended_flux_err"] = copy.copy(new_lc.flux_err) # does k2sc share their uncertainties somewhere?
+                    new_lc["flux_trends"] = new_lc.tr_time.value
+                    if new_lc.detrended_flux.value.shape != self.flux.value.shape:
                         LOG.error('De-detrending messed up the flux arrays.')
                     else:
                         LOG.info('De-trending successfully completed.')
@@ -708,7 +747,7 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
         # or as defined by the frequency
         nfakesum = max(len(fake_lc.gaps),
                        int(np.rint(fakefreq *
-                           (fake_lc.time.max() - fake_lc.time.min()))
+                           (fake_lc.time.value.max() - fake_lc.time.value.min()))
                            )
                        )
         
@@ -734,8 +773,8 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
             # Define the number of synthetic flares you want to inject
             # minimum of 1
             nfake = max(1, int(np.rint(fakefreq *
-                                       (gap_fake_lc.time.max() -
-                                        gap_fake_lc.time.min()
+                                       (gap_fake_lc.time.value.max() -
+                                        gap_fake_lc.time.value.min()
                                        )
                                       )
                               )
@@ -747,9 +786,9 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
                                              (self.flares.istop <= ri)]
                                              
             # Pick flux, time, and flux error arrays 
-            error = gap_fake_lc.__dict__[typerr]
-            flux = gap_fake_lc.__dict__[typ]
-            time = gap_fake_lc.time
+            error = gap_fake_lc[typerr].value
+            flux = gap_fake_lc[typ].value
+            time = gap_fake_lc.time.value
             
             # generate the time constraints for the flares you want to inject
             mintime, maxtime = np.min(time), np.max(time)
@@ -812,16 +851,16 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
                     ed_fake[k] = _equivalent_duration(time, fl_flux)
                     
                 # inject flare in to light curve by adding the flare flux
-                fake_lc.__dict__[typ][le:ri] = (fake_lc.__dict__[typ][le:ri] +
-                                                fl_flux * fake_lc.it_med[le:ri])
+                fake_lc[typ].value[le:ri] = (fake_lc[typ][le:ri].value +
+                                                fl_flux * fake_lc.it_med[le:ri].value)
                 
             # Increment the counter
             ckm += nfake
             
         # error minimum is a safety net for the spline function if mode=3
-        fake_lc.__dict__[typerr] = max( 1e-10, np.nanmedian( pd.Series(fake_lc.__dict__[typ]).
+        fake_lc[typerr] = max( 1e-10, np.nanmedian( pd.Series(fake_lc[typ]).
                                                 rolling(3, center=True).
-                                                std() ) )*np.ones_like(fake_lc.__dict__[typ])
+                                                std() ) )*np.ones_like(fake_lc[typ])
         # Put the data together
         injected_events = {'duration_d' : dur_fake,
                            'amplitude' : ampl_fake,  
@@ -910,45 +949,57 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
         return flc
     
 
-    def to_fits(self, path):
-        """Write FlareLightCurve to a .fits
-        file. Read it in again using from_path().
+    def to_fits(self, *args, **kwargs):
+        if self.mission in ["Kepler", "K2"]:
+            self.__class__ = KeplerLightCurve
+            self.to_fits(*args, cadenceno=self.cadenceno, **kwargs)
 
-        Parameters:
-        ------------
-        path : str
-            Path to location.
-        """
-        flc = copy.deepcopy(self)
-        bintab = [] # list for main table
-        hdr = fits.Header() # empty header
-        vals = flc.__dict__ # all attributes from light curve
+        elif self.mission in ["TESS"]:
+            self.__class__ = TessLightCurve
+            self.to_fits(*args, cadenceno=self.cadenceno, **kwargs)
 
-        # Place attributes into header or main table depending on dtype:
-        for key, val in vals.items():
-            if type(val)==np.ndarray:
-                if len(val.shape) == 1:
-                    bintab.append(fits.Column(name=key, format='D', array=val))
-                else:
-                    LOG.warning("Did not save {} because fits files only accept 1D arrays.".format(key))
-            elif (type(val) == str) | (type(val) == int) | (type(val) == float):
-                hdr[key] = val
-            elif type(val) == dict:
-                for k, v in val:
-                    LOG.debug("Extra column {} defined in header.".format(k))
-                    hdr[k] = v
-            else:
-                LOG.debug("{} was not written to .fits file.".format(key))
-                
-        # Define columns
-        cols = fits.ColDefs(bintab)
 
-        # Define header and binary table
-        hdu = fits.BinTableHDU.from_columns(cols)
-        primary_hdu = fits.PrimaryHDU(header=hdr)
 
-        # Stick header and main table together
-        hdul = fits.HDUList([primary_hdu, hdu])
-        hdul.writeto(path, overwrite=True)
+def generate_lightcurve(errorval,  a1, a2, period1, period2, quad, cube,
+                        mean=3400.):
+    
+    """Generate wild light curves with variability on several
+    timescales.
+    
+    Returns:
+    ---------
+    FlareLightCurve with time, flux, and flux_err attributes
+    """
+    time = np.arange(10, 10 + 10 * np.pi,.0008)
+
+    # define the flux
+    flux = (np.random.normal(0,errorval,time.shape[0]) +
+            mean + 
+            a1*mean*np.sin(period1*time +1.)  +
+            a2*mean*np.sin(period2*time) +
+            quad*(time-25)**2 -
+            cube*(time-25)**3)
+
+    # add a gap in the data
+    flux[5600:7720] = np.nan
+
+    # add big and long flare
+    l = 66
+    flux[5280:5280 + l] = flux[5280:5280 + l] + np.linspace(1000,250,l)
+
+    # add tiny flare
+    l = 3
+    flux[15280:15280 + l] = flux[15280:15280 + l] + np.linspace(100,60,l)
+
+    # add intermediate flare
+    l, s = 15, 25280
+    flux[s:s + l] = flux[s:s + l] + np.linspace(200,60,l)
+
+    # typically Kepler and TESS underestimate the real noise
+    err = np.full_like(time,errorval/3*2)
+
+    # define FLC
+    return FlareLightCurve(time=time, flux=flux, flux_err=err)
+
 
 

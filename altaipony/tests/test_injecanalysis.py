@@ -248,7 +248,7 @@ def test__heatmap():
     flcd.load_injrec_data(path)
     
     # Test the default case
-    _heatmap(flcd, "recovery_probability", ampl_bins, dur_bins, flares_per_bin)
+  #  _heatmap(flcd, "recovery_probability", ampl_bins, dur_bins, flares_per_bin)
     _heatmap(flcd, "ed_ratio", ampl_bins, dur_bins, flares_per_bin)
     
     # Check other cases of bin specifications

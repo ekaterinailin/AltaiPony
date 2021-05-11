@@ -8,20 +8,24 @@ from astropy.io import fits
 
 from altaipony.flarelc import FlareLightCurve
 
-from lightkurve import (search_lightcurvefile,
+from lightkurve import (search_lightcurve,
                         search_targetpixelfile,
                         KeplerLightCurveFile,
                         TessLightCurveFile,
                         KeplerTargetPixelFile,
-                        TessTargetPixelFile)
-                        
+                        TessTargetPixelFile,
+                        read)
+
 LOG = logging.getLogger(__name__)
+
+from astropy.table import TableColumns, Column
 
 # ----------------------------------------------------------
 # Read in data from MAST, either as LC (TESS, Kepler, K2) or TPF (K2)
 # No reading in of Kepler or TESS TPFs as de-trending is not implemented for them.
 
-def from_mast(targetid, mission, c, mode="LC", **kwargs):
+def from_mast(targetid, mission, c=None, mode="LC", campaign=None, sector=None,
+		quarter=None, **kwargs):
     """Download light curve derived from
     TPF or LC directly from MAST using the
     great search functionality in lightkurve,
@@ -50,12 +54,18 @@ def from_mast(targetid, mission, c, mode="LC", **kwargs):
         if mode == "LC":
             warnings.warn("\nYou cannot do K2SC de-trending on a light curve only." 
                  "Pass mode='TPF' to be able to run FLC.detrend('k2sc') later.")
+        if campaign != None:
+            c = campaign
         return _from_mast_K2(targetid, mode, c, **kwargs)
     
     elif mission == "Kepler":
+        if quarter != None:
+            c = quarter
         return _from_mast_Kepler(targetid, c, **kwargs)
     
     elif mission == "TESS":
+        if sector != None:
+            c = sector
         return _from_mast_TESS(targetid, c, **kwargs)
     
     return
@@ -82,8 +92,8 @@ def _from_mast_K2(targetid, mode, c, flux_type="PDCSAP_FLUX",
     
     elif mode == "LC":
         
-        flcfilelist = search_lightcurvefile(targetid, mission=mission,
-                                            campaign=c, cadence=cadence)
+        flcfilelist = search_lightcurve(targetid, mission=mission,
+                                            campaign=c, cadence=cadence, author="K2")
         
         return _handle_missions(flcfilelist, mission, flux_type,
                                 cadence, download_dir, targetid,
@@ -94,7 +104,7 @@ def _from_mast_Kepler(targetid, c, flux_type="PDCSAP_FLUX", cadence="long",
                       download_dir=None):
                       
     mission = "Kepler"
-    flcfilelist = search_lightcurvefile(targetid, mission=mission,
+    flcfilelist = search_lightcurve(targetid, mission=mission,
                                         quarter=c, cadence=cadence)
                                         
     return _handle_missions(flcfilelist, mission, flux_type,
@@ -103,12 +113,13 @@ def _from_mast_Kepler(targetid, c, flux_type="PDCSAP_FLUX", cadence="long",
 
 
 def _from_mast_TESS(targetid, c, flux_type="PDCSAP_FLUX", cadence="long",
-                    download_dir=None):
+                    download_dir=None, **kwargs):
                     
     mission = "TESS"
-    flcfilelist = search_lightcurvefile(targetid, mission=mission,
-                                        sector=c, cadence=cadence)
-
+   # print(targetid, mission, c, cadence, kwargs)
+    flcfilelist = search_lightcurve(targetid, mission=mission,
+                                     sector=c, cadence=cadence, **kwargs)
+   # print(flcfilelist)
     return _handle_missions(flcfilelist, mission, flux_type,
                             cadence, download_dir, targetid,
                             c)
@@ -146,10 +157,10 @@ def _handle_missions(flcfilelist, mission, flux_type,
     S, origin = missiondict[mission]   
     
     if len(flcfilelist)==1:
-        flcfile = flcfilelist.download(download_dir=download_dir)
-        lc = flcfile.get_lightcurve(flux_type)
+        lc = flcfilelist.download(download_dir=download_dir)
+        #lc = flcfile.get_lightcurve(flux_type)
 
-        flc = _convert_LC_to_FLC(lc, origin="KLC")
+        flc = _convert_LC_to_FLC(lc, origin=origin)
         return flc
 
     elif len(flcfilelist)>1:
@@ -158,8 +169,8 @@ def _handle_missions(flcfilelist, mission, flux_type,
         lclist = []
         flcfiles = flcfilelist.download_all(download_dir=download_dir)
         for flcfile in flcfiles:
-            lc = flcfile.get_lightcurve(flux_type)
-            flc = _convert_LC_to_FLC(lc, origin=origin)
+         #   lc = flcfile.get_lightcurve(flux_type)
+            flc = _convert_LC_to_FLC(flcfile, origin=origin)
             lclist.append(flc)
         return lclist    
 
@@ -208,14 +219,15 @@ def _from_path_LC(path, mission, flux_type="PDCSAP_FLUX"):
     else:
         raise KeyError("Invalid mission. Pass 'Kepler', 'K2', or 'TESS'.")
         
-    lc = lcf.get_lightcurve(flux_type)
-    flc = _convert_LC_to_FLC(lc, origin=origins[mission])
+    #lc = lcf.get_lightcurve(flux_type)
+    flc = _convert_LC_to_FLC(lcf, origin=origins[mission])
     return flc
+
 
 
 def _from_path_TPF(path, mission, aperture_mask="default"):
     
-    origins = {"Kepler":"KLC", "K2":"KLC","TESS":"TLC"}
+#    origins = {"Kepler":"KLC", "K2":"KLC","TESS":"TLC"}
     
     if ((mission == "Kepler") | (mission == "K2")):
         tpf = KeplerTargetPixelFile(path)
@@ -235,25 +247,42 @@ def _from_path_TPF(path, mission, aperture_mask="default"):
     
 def _from_path_AltaiPony(path):
     
-    rhdul =  fits.open(path)
-    attrs = dict()
-    for k, v in rhdul[0].header.items():
-        if str.lower(k) not in ['simple', 'bitpix', 'naxis', 'extend']:
-            if str.lower(k) == "keplerid": #rename keplerid if it appears
-                k = "targetid"
-            attrs[str.lower(k)] = v
-    
-    for k in ['time', 'flux', 'flux_err', 'centroid_col',
-              'centroid_row', 'quality', 'cadenceno',
-              'detrended_flux', 'detrended_flux_err',
-              'quality_bitmask', 'saturation']:
-        try:
-            attrs[k] = rhdul[1].data[k].byteswap().newbyteorder()
-        except KeyError:
-            LOG.info("Warning: Keyword {} not in file.".format(k))
-            continue   
-            
-    return FlareLightCurve(**attrs)
+#    rhdul =  fits.open(path)
+#    attrs = dict()
+#    for k, v in rhdul[0].header.items():
+#        if str.lower(k) not in ['simple', 'bitpix', 'naxis', 'extend']:
+#            if str.lower(k) == "keplerid": #rename keplerid if it appears
+#                k = "targetid"
+#            attrs[str.lower(k)] = v
+#    
+#    for k in ['time', 'flux', 'flux_err', 'centroid_col',
+#              'centroid_row', 'quality', 'cadenceno',
+#              'detrended_flux', 'detrended_flux_err',
+#              'quality_bitmask', 'saturation']:
+#        try:
+#            attrs[k] = rhdul[1].data[k].byteswap().newbyteorder()
+#        except KeyError:
+#            LOG.info("Warning: Keyword {} not in file.".format(k))
+#            continue   
+    lc = read(path)        
+    lc = lc[np.isfinite(lc.time.value) &
+          np.isfinite(lc.flux.value) &
+          np.isfinite(lc.cadenceno.value)]
+   # keys = dict([(key, lc[key].value) for key in lc.colnames[:3]])
+   # print(keys)
+   # flc = lc.FlareLightCurve(**keys, time_format=lc.time.format, meta=lc.meta)
+#    flc = FlareLightCurve(time=lc.time.value,
+#                          flux=lc.flux.value, 
+#                          flux_err=lc.flux_err.value,
+#                          pos_corr1=
+#                          meta=lc.meta)
+        
+    lc["detrended_flux"] = np.nan
+    lc["detrended_flux_err"] = np.nan
+
+    lc.__class__ = FlareLightCurve
+    lc._init_flare_table()
+    return lc
 
 # ----------------------------------------------------------
 
@@ -261,49 +290,39 @@ def _from_path_AltaiPony(path):
 # Internal type conversion functions
 
 def _convert_TPF_to_FLC(tpf, lc):
-    keys = {'primary_header' : tpf.hdu[0].header,
-            'data_header' : tpf.hdu[1].header,
-            'pos_corr1' : tpf.pos_corr1,
-            'pos_corr2' : tpf.pos_corr2,
-            'pixel_flux' : tpf.flux,
-            'pixel_flux_err' : tpf.flux_err,
-            'pipeline_mask' : tpf.pipeline_mask}
-
-    attributes = lc.__dict__
-    z = attributes.copy()
-    z.update(keys)
-    if "_flux_unit" in z.keys():
-        del z["_flux_unit"]
-    if '_required_columns_relax' in z.keys():
-        del z['_required_columns_relax']
-
-    flc = FlareLightCurve(time_unit=u.day, origin="TPF",
-                          flux_unit = u.electron/u.s, **z)
-    if flc.pos_corr1 is None:
-        flc.pos_corr1 = flc.centroid_col
-    if flc.pos_corr2 is None:
-        flc.pos_corr2 = flc.centroid_row
-    flc = flc[np.isfinite(flc.time) &
-              np.isfinite(flc.flux) &
-              np.isfinite(flc.pos_corr1) &
-              np.isfinite(flc.pos_corr2) &
-              np.isfinite(flc.cadenceno) ]
-    return flc
+    if "pos_corr1" not in lc.columns:
+        lc.pos_corr1 = lc.centroid_col
+    if "pos_corr2" not in lc.columns:
+        lc.pos_corr2 = lc.centroid_row
+    lc = lc[np.isfinite(lc.time.value) &
+            np.isfinite(lc.flux.value) &
+            np.isfinite(lc.pos_corr1.value) &
+            np.isfinite(lc.pos_corr2.value) &
+            np.isfinite(lc.cadenceno.value) ]
+    
+    lc["detrended_flux"] = np.nan
+    lc["detrended_flux_err"] = np.nan
+    lc.meta['primary_header'] = tpf.hdu[0].header
+    lc.meta['data_header'] = tpf.hdu[1].header
+    lc.__class__ = FlareLightCurve
+    lc._init_flare_table()
+    lc._add_tpf_columns(tpf.flux.value, tpf.flux_err.value, tpf.pipeline_mask)
+    lc.origin = "TPF"
+    return lc
 
 
 def _convert_LC_to_FLC(lc, origin=None, **kwargs):
-    attributes = lc.__dict__
-    attributes.update(kwargs)
-    
-    if "_flux_unit" in attributes.keys():
-        del attributes["_flux_unit"]
-    flc = FlareLightCurve(time_unit=u.day, origin=origin,
-                          flux_unit = u.electron/u.s,
-                           **attributes)
-    flc = flc[np.isfinite(flc.time) &
-              np.isfinite(flc.flux) &
-              np.isfinite(flc.cadenceno)]
-    return flc
+
+    lc = lc[np.isfinite(lc.time.value) &
+              np.isfinite(lc.flux.value) &
+              np.isfinite(lc.cadenceno.value)]
+#    lc["detrended_flux"] = np.nan
+#    lc["detrended_flux_err"] = np.nan
+
+    lc.__class__ = FlareLightCurve
+    lc._init_flare_table()
+
+    return lc
 
 # ----------------------------------------------------------
 

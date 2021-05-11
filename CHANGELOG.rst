@@ -23,9 +23,10 @@
 
 
 2.0 (2021-05-11)
-++++++++++++++++
+=======
 
 - now available
     - compatibility with lightcurve >2
     - docs subpage added for de-trending
     - experimental detrending function provided
+
