@@ -13,7 +13,7 @@ from .fakeflares import aflare
 LOG = logging.getLogger(__name__)
 
 def find_flares_in_cont_obs_period(flux, median, error, sigma=None, 
-                                   N1=3, N2=2, N3=1, addtail=False,
+                                   N1=3, N2=2, N3=3, addtail=False,
                                    tailthreshdiff=1.):
     '''
     The algorithm for local changes due to flares defined by

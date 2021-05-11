@@ -279,7 +279,6 @@ def test_detrend():
         for att in ["detrended_flux", "detrended_flux_err",
                     "flux_err", "flux", "time", "quality"]:
             assert getattr(flc, att).value.shape == shape
-        assert flc.pv[0] == pytest.approx(-.24053657903920067, rel=0.1)
     except np.linalg.linalg.LinAlgError:
         warning.warn('Detrending of mock LC failed, this happens.')
         pass
