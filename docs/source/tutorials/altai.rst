@@ -98,7 +98,7 @@ If the `addtails` flag is set, datapoints will be added after the detected stop 
 
 Data points are added successively until a point no longer meets either one of these criteria.
 
-.. _here: https://altaipony.readthedocs.io/en/latest/api/lcio.html
+.. _here: https://altaipony.readthedocs.io/en/latest/tutorials/lcio.html
 .. _DataFrame: https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.html
 .. _Davenport (2016): https://iopscience.iop.org/article/10.3847/0004-637X/829/1/23
 .. _Chang et al. (2015): https://ui.adsabs.harvard.edu/abs/2015ApJ...814...35C/abstract

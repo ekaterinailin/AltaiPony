@@ -146,5 +146,5 @@ For a subset of these parameters, ``flc.flares`` could look like this:
 
 
 .. _DataFrame: https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.html
-.. _here: https://altaipony.readthedocs.io/en/latest/api/altai.html
+.. _here: https://altaipony.readthedocs.io/en/latest/tutorials/altai.html
 .. _Davenport et al. (2014): https://ui.adsabs.harvard.edu/abs/2014ApJ...797..122D/abstract
