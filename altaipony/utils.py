@@ -6,6 +6,7 @@ import numpy as np
 import logging
 LOG = logging.getLogger(__name__)
 
+
 def split_gaps(gaps, splits):
     """Helper function that splices up a list
     of tuples into more tuples at values defined by
@@ -248,3 +249,6 @@ def generate_random_power_law_distribution(a, b, g, size=1, seed=None):
     r = np.random.random(size=size)
     ag, bg = a**g, b**g
     return (ag + (bg - ag) * r)**(1. / g)
+
+
+
