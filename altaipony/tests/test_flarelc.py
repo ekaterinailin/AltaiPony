@@ -13,6 +13,7 @@ from ..lcio import from_path
 from .. import PACKAGEDIR
 from . import test_ids, test_paths, pathkepler, pathAltaiPony, pathk2TPF
 
+
 def mock_flc(origin='TPF', detrended=False, ampl=1., dur=1):
     """
     Mocks a FlareLightCurve with a sinusoid variation and a single positive outlier.
@@ -278,7 +279,7 @@ def test_detrend():
         for att in ["detrended_flux", "detrended_flux_err",
                     "flux_err", "flux", "time", "quality"]:
             assert getattr(flc, att).value.shape == shape
-        assert flc.pv[0] == pytest.approx(-3.8951761605991755, rel=0.1)
+        assert flc.pv[0] == pytest.approx(-.24053657903920067, rel=0.1)
     except np.linalg.linalg.LinAlgError:
         warning.warn('Detrending of mock LC failed, this happens.')
         pass
@@ -481,3 +482,7 @@ def test_plot_recovery_probability_heatmap():
     
     # Test if the function is called properly with default values
     flcd.plot_recovery_probability_heatmap()
+
+
+# ------------------------------------------------------------------------------
+

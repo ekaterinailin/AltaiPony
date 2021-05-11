@@ -4,7 +4,7 @@ import copy
 import numpy as np
 import pandas as pd
 
-#from .altai import find_iterative_median, equivalent_duration
+from .altai import find_iterative_median, equivalent_duration
 from .utils import sigma_clip
 
 from collections import defaultdict
@@ -361,89 +361,6 @@ def fit_spline(flc, spline_coarseness=30, spline_order=3):
     
     return flcp, model
 
-def find_iterative_median(flc, n=30, **kwargs):
 
-    """
-    Find the iterative median value for a continuous observation period using
-    flare finding to identify outliers.
-
-    Parameters
-    -----------
-    flc : FlareLightCurve
-
-    n : 50 or int
-        maximum number of iterations
-    kwargs : dict
-        keyword arguments to pass to sigma_clip
-
-    Return
-    -------
-    FlareLightCurve with the it_med attribute set.
-    """
-
-    lc = copy.deepcopy(flc)
-
-    lc.it_med = np.full_like(flc.detrended_flux.value, np.median(flc.detrended_flux.value))
-    if lc.gaps is None:
-        lc = lc.find_gaps()
-    for (le,ri) in lc.gaps:
-        flux = flc.detrended_flux.value[le:ri]
-        #find a median that is not skewed by outliers
-        good = sigma_clip(flux)
-        goodflux = flux[good]
-        lc.it_med[le:ri] = np.nanmedian(goodflux)
-
-    return lc
-
-def equivalent_duration(lc, start, stop, err=False):
-
-    '''
-    Returns the equivalend duratio of a flare event,
-    found within indices [start, stop],
-    calculated as the area under the residual (flux-flux_median).
-    Use only on de-trended light curves!
-    Returns also the uncertainty on ED following Davenport (2016)
-
-    Parameters
-    --------------
-    start : int
-        start time index of a flare event
-    stop : int
-        end time index of a flare event
-    lc : FlareLightCurve
-
-    err: False or bool
-        If True will compute uncertainty on ED
-
-    Return
-    --------------
-    ed : float
-        equivalent duration in seconds
-    ederr : float
-        uncertainty in seconds
-    '''
-
-    start, stop = int(start),int(stop)+1
-    lct = lc[start:stop]
-    residual = lct.detrended_flux.value / np.nanmedian(lct.it_med.value)-1.
-    x = lct.time.value * 60.0 * 60.0 * 24.0
-    ed = np.sum(np.diff(x) * residual[:-1])
-
-    if err == True:
-        flare_chisq = chi_square(residual[:-1],
-                                 lct.detrended_flux_err.value[:-1]/np.nanmedian(lct.it_med.value))
-        ederr = np.sqrt(ed**2 / (stop-1-start) / flare_chisq)
-        return ed, ederr
-    else:
-        return ed
-    
-
-
-def chi_square(residual, error):
-    '''
-    Compute the normalized chi square statistic:
-    chisq =  1 / N * SUM(i) ( (data(i) - model(i))/error(i) )^2
-    '''
-    return np.sum( (residual / error)**2.0 ) / np.size(error)
 
 
