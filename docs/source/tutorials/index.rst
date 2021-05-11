@@ -6,6 +6,7 @@ Tutorials
 	:maxdepth: 1
 
 	lcio
+        detrend
 	altai
 	fakeflares
 	ffds
