@@ -17,10 +17,10 @@ The following snippet shows the difference: The raw flux is still stored in ``fl
 
 ::
    
-     import matplotlib.pyplot as plt
+    import matplotlib.pyplot as plt
     plt.figure(figsize=(12,5))
-    plt.plot(flc.time, flc.flux / np.nanmedian(flc.flux)+0.1, c="r", label="PDCSAP_FLUX")
-    plt.plot(flc.time, flc.detrended_flux / np.nanmedian(flc.detrended_flux), "b", label="detrended flux")
+    plt.plot(flc.time.value, flc.flux / np.nanmedian(flc.flux)+0.1, c="r", label="PDCSAP_FLUX")
+    plt.plot(flc.time.value, flc.detrended_flux / np.nanmedian(flc.detrended_flux), "b", label="detrended flux")
     plt.xlabel("Time - 2457000 [BKJD days]")
     plt.ylabel(r"Flux [e$^-$s$^{-1}$]")
     plt.xlim(flc.time[0], flc.time[-1])
@@ -90,11 +90,11 @@ In addition to the basic flare definition above, which is sufficient for flare c
 
     FlareLightCurve.find_flares(N1=3, N2=2, N3=3, sigma=<local_scatter_array>, addtails=True, tailthreshdiff=<decrease in N1 and N2>)
 
-If the `addtails` flag is set, datapoints will be added after the detected stop times of flare candidates if 
+If the ``addtails`` flag is set, datapoints will be added after the detected stop times of flare candidates if 
 
 * they are positive outliers, 
-* if they fulfill the N1 criterion but with N1 reduced by `tailthreshdiff`, and if
-* if they fulfill the N2 criterion but with N2 reduced by `tailthreshdiff`.
+* if they fulfill the N1 criterion but with N1 reduced by ``tailthreshdiff``, and if
+* if they fulfill the N2 criterion but with N2 reduced by ``tailthreshdiff``.
 
 Data points are added successively until a point no longer meets either one of these criteria.
 
