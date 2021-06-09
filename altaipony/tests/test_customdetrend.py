@@ -72,10 +72,9 @@ def test_remove_sines_iteratively(a, b, c, d):
     x = np.linspace(10, 40, 1200)
     y1 = 20. + np.random.normal(0, .01, 1200) + a * np.sin(b * x) + c * np.sin(d * x)
     
-    flc = FlareLightCurve(time=x, flux=y1, 
-                          flux_err=np.full_like(y1, .01),
-                          detrended_flux=y1,
-                          detrended_flux_err=np.full_like(y1, .01),)
+    flc = FlareLightCurve(time=x, flux=y1, flux_err=np.full_like(y1, .01),)
+    flc.detrended_flux = y1
+    flc.detrended_flux_err = np.full_like(y1, .01)
 
     # find median
     flc = find_iterative_median(flc)
@@ -117,9 +116,9 @@ def test_remove_exponential_fringes(a,b,median,c,d):
 
     # define lightcurve
     flc = FlareLightCurve(time=x, flux=y1, 
-                      flux_err=np.full_like(y1, .0005 * median),
-                      detrended_flux=y1,
-                      detrended_flux_err=np.full_like(y1, .0005 * median),)
+                          flux_err=np.full_like(y1, .0005 * median))
+    flc.detrended_flux = y1
+    flc.detrended_flux_err = np.full_like(y1, .0005 * median)
     
     # get iterative median
     flc = find_iterative_median(flc)
@@ -192,7 +191,8 @@ def test_estimate_detrended_noise():
     flux = np.random.normal(0,40, time.shape[0]) + 200.
     
     # define light curve
-    flc = FlareLightCurve(time=time, detrended_flux=flux)
+    flc = FlareLightCurve(time=time)
+    flc.detrended_flux = flux
 
     # this should work
     flces = estimate_detrended_noise(flc, mask_pos_outliers_sigma=2.5, 
@@ -205,7 +205,8 @@ def test_estimate_detrended_noise():
     np.random.seed(30)
     flux = np.random.normal(0,40, time.shape[0]) + 200.
     flux[120:124] = [500,380,300,270]
-    flc = FlareLightCurve(time=time, detrended_flux=flux)
+    flc = FlareLightCurve(time=time)
+    flc.detrended_flux = flux
 
     # should mask flare, error should not grow
     flces = estimate_detrended_noise(flc, mask_pos_outliers_sigma=2.5, 
@@ -218,7 +219,8 @@ def test_estimate_detrended_noise():
     flux = np.random.normal(0,40, time.shape[0]) + 200.
     flux[120:124] = [500,380,300,270]
     flux[30:40] = np.nan
-    flc = FlareLightCurve(time=time, detrended_flux=flux)
+    flc = FlareLightCurve(time=time)
+    flc.detrended_flux = flux
 
     # should work regardless
     flces = estimate_detrended_noise(flc, mask_pos_outliers_sigma=2.5, 
