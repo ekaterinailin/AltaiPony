@@ -316,40 +316,56 @@ def remove_exponential_fringes(flcd, demask=10, max_sigma=3.5, longdecay=2):
 
 def estimate_detrended_noise(flc, mask_pos_outliers_sigma=2.5, 
                              std_window=100, ):
+    """Estimate the noise in the de-trended light curve while accounting 
+    for outliers.
 
+    """
+    # create a copy
     flcc = copy.deepcopy(flc)
+
+    # Find gaps in the light curve if any
     flcc = flcc.find_gaps()
 
+    # iterate over the uninterrupted light curve chunks
     for (le, ri) in flcc.gaps:
-
-        flcd = copy.deepcopy(flcc[le:ri])
-        mask = sigma_clip(flcd.detrended_flux.value, max_sigma=mask_pos_outliers_sigma, longdecay=2)
-
-        flcd.detrended_flux[~mask] = np.nan
-        # apply rolling window std and interpolate the masked values
-        flcd.detrended_flux_err[:] = pd.Series(flcd.detrended_flux.value).rolling(std_window,
-                                                                 center=True,
-                                                                 min_periods=1).std().interpolate()
         
-        # and refine it:
+        # copy the chunk
+        flcd = copy.deepcopy(flcc[le:ri])
+
+        # mask outliers while
+        # adding a tail of masked points to series of positive outliers
+        mask = sigma_clip(flcd.detrended_flux.value, 
+                          max_sigma=mask_pos_outliers_sigma,
+                          longdecay=2)
+
+        # remove the masked data points from the noise estimate
+        flcd.detrended_flux[~mask] = np.nan
+
+        # apply rolling window std and interpolate the masked values
+        flcd.detrended_flux_err[:] = (pd.Series(flcd.detrended_flux.value)
+                                      .rolling(std_window, center=True, min_periods=1)
+                                      .std()
+                                      .interpolate())
+        
+        # Use the masked light curve and noise estimate to get a median flux value
         flcd = find_iterative_median(flcd)
         
-        
-        # make a copy first
+        # make a copy of the flux array first
         filtered = copy.deepcopy(flcd.detrended_flux.value)
-        
-        # get right bound of flux array
-        tf = filtered.shape[0]
 
-        # pick outliers
+        # pick outliers, now from the filtered light curve
+        # that has the potential flare points masked already
         mask = sigma_clip(filtered, max_sigma=mask_pos_outliers_sigma, longdecay=2)
 
+        # remove the masked data points from the noise estimate
         filtered[~mask] = np.nan    
 
         # apply rolling window std and interpolate the masked values
-        flcc.detrended_flux_err[le:ri]= pd.Series(filtered).rolling(std_window,
-                                                                 center=True,
-                                                                 min_periods=1).std().interpolate()
+        # to get the final noise estimate
+        flcc.detrended_flux_err[le:ri]= (pd.Series(filtered)
+                                         .rolling(std_window, center=True, min_periods=1)
+                                         .std()
+                                         .interpolate())
     return flcc
 
 

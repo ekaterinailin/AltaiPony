@@ -16,7 +16,6 @@ from ..altai import find_iterative_median
 cases = [(.05, 0.005, 1.5, 24.4, 1.5, 0.1),
          (.1, 0.005, 1.5, 14.4, 1.5, 0.5),
          (.1, 0.05, 1.5, 8, 1.5, 0.5),
-         (.01, .1, 1.5, 8, -.5, 0.25),
          (.3, .05, .5, 30, -.5, 0.25),
          ]
 
@@ -195,8 +194,7 @@ def test_estimate_detrended_noise():
     flc.detrended_flux = flux
 
     # this should work
-    flces = estimate_detrended_noise(flc, mask_pos_outliers_sigma=2.5, 
-                                 std_window=100, padleft=3, padright=10)
+    flces = estimate_detrended_noise(flc, mask_pos_outliers_sigma=2.5, std_window=100,)
     
     # error should be similar to input error of 40
     np.median(flces.detrended_flux_err.value) == pytest.approx(41.38048677022836)
@@ -209,8 +207,7 @@ def test_estimate_detrended_noise():
     flc.detrended_flux = flux
 
     # should mask flare, error should not grow
-    flces = estimate_detrended_noise(flc, mask_pos_outliers_sigma=2.5, 
-                                 std_window=100, padleft=3, padright=10)
+    flces = estimate_detrended_noise(flc, mask_pos_outliers_sigma=2.5, std_window=100)
 
     np.median(flces.detrended_flux_err.value) == pytest.approx(41.24232394552432)
 
@@ -223,8 +220,7 @@ def test_estimate_detrended_noise():
     flc.detrended_flux = flux
 
     # should work regardless
-    flces = estimate_detrended_noise(flc, mask_pos_outliers_sigma=2.5, 
-                                     std_window=100, padleft=3, padright=10)
+    flces = estimate_detrended_noise(flc, mask_pos_outliers_sigma=2.5, std_window=100)
 
     # error should not change too much
     np.median(flces.detrended_flux_err.value) == pytest.approx(41.23144256208637)
@@ -253,5 +249,4 @@ def test_measure_flare():
     assert measured_flare.tstart == pytest.approx(14.224)
     assert measured_flare.tstop ==  pytest.approx(14.276800)
     assert measured_flare.ed_rec == pytest.approx((250 + 750 * 0.5) / 3400 * 0.052800 * 24 * 3600, rel=.01)
-    assert measured_flare.ed_rec == pytest.approx(0.293085,0.1)
     assert measured_flare.tstop -measured_flare.tstart == measured_flare.dur
