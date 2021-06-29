@@ -23,10 +23,15 @@
 
 
 2.0 (2021-05-11)
-=======
+++++++++++++++++++
 
 - now available
     - compatibility with lightcurve >2
     - docs subpage added for de-trending
     - experimental detrending function provided
+    
+2.0.1 (2021-06-29)
+++++++++++++++++++    
 
+- fixed links in the README
+- JOSS version
