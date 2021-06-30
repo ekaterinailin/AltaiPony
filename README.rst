@@ -1,4 +1,9 @@
-|ci-badge| |docs-badge| |license-badge| |requirements-badge| |zenodo-badge|
+|ci-badge| |docs-badge| |license-badge| |requirements-badge| |joss-badge| |zenodo-badge|
+
+
+reStructuredText:
+.. |joss-badge| image:: https://joss.theoj.org/papers/10.21105/joss.02845/status.svg
+   :target: https://doi.org/10.21105/joss.02845
 
 ..  |zenodo-badge| image:: https://zenodo.org/badge/DOI/10.5281/zenodo.5040830.svg
                     :target: https://doi.org/10.5281/zenodo.5040830
