@@ -1,7 +1,6 @@
 |ci-badge| |docs-badge| |license-badge| |requirements-badge| |joss-badge| |zenodo-badge|
 
 
-reStructuredText:
 .. |joss-badge| image:: https://joss.theoj.org/papers/10.21105/joss.02845/status.svg
    :target: https://doi.org/10.21105/joss.02845
 
