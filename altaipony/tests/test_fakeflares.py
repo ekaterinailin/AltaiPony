@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 from inspect import signature
 
-from ..fakeflares import (aflare,
+from ..fakeflares import (flare_eqn,flare_model,
                           generate_fake_flare_distribution,
                           merge_fake_and_recovered_events,
                          # merge_complex_flares,
@@ -139,29 +139,29 @@ def test_aflare_and_equivalent_duration():
     x = time * 60.0 * 60.0 * 24.0
 
     # Test a large flare without upsampling
-    fl_flux = aflare(time, 11.400134, 1.415039, 110.981950)
+    fl_flux = flare_model(time, 11.400134, 1.415039, 110.981950)
     integral = np.sum(np.diff(x) * fl_flux[:-1])
     assert integral == pytest.approx(1.22e7,rel=1e-2)
     
     # Test a flare with 0 amplitude
-    fl_flux = aflare(time, 11.400134, 1.415039, 0)
+    fl_flux = flare_model(time, 11.400134, 1.415039, 0)
     integral = np.sum(np.diff(x) * fl_flux[:-1])
     assert integral == 0.
 
     # test a large flare with upsampling
-    fl_flux = aflare(time, 11.400134, 1.415039, 110.981950, upsample=True)
+    fl_flux = flare_model(time, 11.400134, 1.415039, 110.981950, upsample=True)
     integral = np.sum(np.diff(x) * fl_flux[:-1])
     assert integral == pytest.approx(1.22e7,rel=1e-2)
     
     
     # Test a smaller undersampled flare
-    fl_flux = aflare(time, 11.400134, 1/48., 1.0)
+    fl_flux = flare_model(time, 11.400134, 1/48., 1.0)
     x = time * 60.0 * 60.0 * 24.0
     integral = np.sum(np.diff(x) * fl_flux[:-1])
     assert integral == pytest.approx(1453.1179,rel=1e-2)
     
     # Test the amplitude
-    fl_flux = aflare(time, 1.734, 15, 1.0)
+    fl_flux = flare_model(time, 1.734, 15, 1.0)
     assert np.max(fl_flux) == pytest.approx(1,rel=1e-2)
 
 #def test_merge_complex_flares():
