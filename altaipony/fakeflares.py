@@ -5,6 +5,7 @@ import logging
 import copy
 import random
 from scipy.stats import binned_statistic
+from scipy import special
 
 LOG = logging.getLogger(__name__)
 
