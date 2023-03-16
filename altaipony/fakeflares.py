@@ -125,7 +125,7 @@ def flare_model(t,tpeak, fwhm, ampl, upsample=False, uptime=10):
         # and now downsample back to the original time...
 
         downbins = np.concatenate((t_new - dt / 2.,[max(t_new) + dt / 2.]))
-        flare,_,_ = binned_statistic(timeup, flareup, statistic='mean',bins=downbins)
+        flare,_,_ = binned_statistic(timeup, flareup, statistic='mean',bins=np.sort(downbins))
     else:
 
         flare = flare_eqn(t_new,tpeak,fwhm,ampl)
