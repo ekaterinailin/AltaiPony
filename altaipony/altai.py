@@ -123,7 +123,7 @@ def find_flares_in_cont_obs_period(flux, median, error, sigma=None,
         
     return isflare
 
-def find_flares(flc, minsep=3, **kwargs):
+def find_flares(flc, minsep=3, sigma=None, **kwargs):
     '''
     Main wrapper to obtain and process a light curve.
 
@@ -133,6 +133,9 @@ def find_flares(flc, minsep=3, **kwargs):
         FlareLightCurve object
     minsep : 1 or int
         minimum distance between two candidate start times in datapoints
+    sigma : numpy array
+        local scatter of the flux. Array should be the same length as the
+        detrended flux array.
     kwargs : dict
         keyword arguments to pass to :func:`find_flares_in_cont_obs_period`
     Return
@@ -156,7 +159,10 @@ def find_flares(flc, minsep=3, **kwargs):
         time = lc.time.value[le:ri]
         # run final flare-find on DATA - MODEL
 
-        isflare = find_flares_in_cont_obs_period(flux, median, error, **kwargs)
+        if sigma is None:
+            isflare = find_flares_in_cont_obs_period(flux, median, error, **kwargs)
+        else:
+            isflare = find_flares_in_cont_obs_period(flux, median, error, sigma=sigma[le:ri], **kwargs)
   
 
         # now pick out final flare candidate indices

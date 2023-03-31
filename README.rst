@@ -1,8 +1,12 @@
-|ci-badge| |docs-badge| |license-badge| |requirements-badge| |zenodo-badge|
+|ci-badge| |docs-badge| |license-badge| |requirements-badge| |joss-badge| |zenodo-badge|
 
-.. |zenodo-badge|       image:: https://zenodo.org/badge/DOI/10.5281/zenodo.4095340.svg
-            :target: https://doi.org/10.5281/zenodo.4095340
 
+.. |joss-badge| image:: https://joss.theoj.org/papers/10.21105/joss.02845/status.svg
+   :target: https://doi.org/10.21105/joss.02845
+
+..  |zenodo-badge| image:: https://zenodo.org/badge/DOI/10.5281/zenodo.5040830.svg
+                    :target: https://doi.org/10.5281/zenodo.5040830
+   
 .. |ci-badge| image:: https://travis-ci.org/ekaterinailin/AltaiPony.svg?branch=master
               :target: https://travis-ci.org/ekaterinailin/AltaiPony
 
@@ -96,3 +100,5 @@ Depending on the methods you use, you may also want to cite
 .. _altaipony.readthedocs.io: https://altaipony.readthedocs.io/en/latest/
 .. _notebook: https://github.com/ekaterinailin/AltaiPony/blob/master/notebooks/Getting_Started.ipynb
 .. _docs: https://altaipony.readthedocs.io/en/latest/
+.. _Github: https://github.com/ekaterinailin/AltaiPony/issues/new
+.. _email: eilin@aip.de
