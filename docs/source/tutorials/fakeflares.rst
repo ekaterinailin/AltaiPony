@@ -1,7 +1,9 @@
 Synthetic Flare Injection and Recovery
 =====
 
-To characterize how well the de-trending and flare finding procedures actually find and characterized flares in a light curve you can inject synthetic flares into it and run the procedures to compare the recovered events to the injected ones. In **AltaiPony**, the shapes of the flares are generated using the new continuous, and analytic flare model from `Tovar Mendoza et al. (2022)`_. The analytical model is an update to the piecewise model generated in `Davenport et al. (2014)`_. Using a combination of improved Kepler light-curve processing, an improved flare parameterization from `Jackman et al. (2018)`_, and a Gaussian process detredning technique to account for background starspot variability, an updated analytic and continuous flare template was generated to model the white-light flare events on active stars.
+To characterize how well the de-trending and flare finding procedures actually find and characterized flares in a light curve you can inject synthetic flares into it and run the procedures to compare the recovered events to the injected ones. Shapes of flares are created using the piecewise model generated in `Davenport et al. (2014)`_
+
+**Experimental feature: Available from the GitHub repository only at the moment:** In **AltaiPony**, the shapes of the flares are generated using the new continuous, and analytic flare model from `Tovar Mendoza et al. (2022)`_. The analytical model is an update to the piecewise model generated in `Davenport et al. (2014)`_. Using a combination of improved Kepler light-curve processing, an improved flare parameterization from `Jackman et al. (2018)`_, and a Gaussian process detredning technique to account for background starspot variability, an updated analytic and continuous flare template was generated to model the white-light flare events on active stars.
 
 To run a series of injections, call the ``sample_flare_recovery()`` method on a ``FlareLightCurve``.
 
