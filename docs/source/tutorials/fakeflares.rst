@@ -1,7 +1,7 @@
 Synthetic Flare Injection and Recovery
 =====
 
-To characterize how well the de-trending and flare finding procedures actually find and characterized flares in a light curve you can inject synthetic flares into it and run the procedures to compare the recovered events to the injected ones. In **AltaiPony**, the shapes of the flares are generated using the emprical flare model from `Davenport et al. (2014)`_.
+To characterize how well the de-trending and flare finding procedures actually find and characterized flares in a light curve you can inject synthetic flares into it and run the procedures to compare the recovered events to the injected ones. In **AltaiPony**, the shapes of the flares are generated using the new continuous, and analytic flare model from `Tovar Mendoza et al. (2022)`_. The analytical model is an update to the piecewise model generated in `Davenport et al. (2014)`_. Using a combination of improved Kepler light-curve processing, an improved flare parameterization from `Jackman et al. (2018)`_, and a Gaussian process detredning technique to account for background starspot variability, an updated analytic and continuous flare template was generated to model the white-light flare events on active stars.
 
 To run a series of injections, call the ``sample_flare_recovery()`` method on a ``FlareLightCurve``.
 
@@ -63,7 +63,7 @@ We can now look at what fraction of the injected equivalent duration of flares w
   :width: 500
   :alt: ED ratio of recovered flares in GJ 1243
 
-Similarly, we can illustrate what fraction of flares with different injected amplitudes and full-width-at-half-maximum values (:math:`t_{1/2}` in `Davenport et al. (2014)`_) is recovered:
+Similarly, we can illustrate what fraction of flares with different injected amplitudes and full-width-at-half-maximum values :math:`t_{1/2}` in `Davenport et al. (2014)`_ is recovered:
 
 ::
 
@@ -148,4 +148,6 @@ For a subset of these parameters, ``flc.flares`` could look like this:
 .. _DataFrame: https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.html
 
 .. _here: https://altaipony.readthedocs.io/en/latest/api/altaipony.flarelc.FlareLightCurve.html#altaipony.flarelc.FlareLightCurve
+.. _Tovar Mendoza et al. (2022): https://iopscience.iop.org/article/10.3847/1538-3881/ac6fe6
 .. _Davenport et al. (2014): https://ui.adsabs.harvard.edu/abs/2014ApJ...797..122D/abstract
+.. _Jackman et al. (2018): https://ui.adsabs.harvard.edu/abs/2018MNRAS.477.4655J/abstract
