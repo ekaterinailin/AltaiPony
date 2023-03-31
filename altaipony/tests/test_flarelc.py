@@ -5,11 +5,9 @@ import pytest
 import os
 import warnings
 
-from inspect import currentframe, getframeinfo
 
 from ..flarelc import FlareLightCurve
 from ..altai import find_iterative_median
-from ..lcio import from_path
 
 from .. import PACKAGEDIR
 from . import test_ids, test_paths, pathkepler, pathAltaiPony, pathk2TPF

@@ -3,7 +3,7 @@ import pytest
 import numpy as np
 
 from ..lcio import from_path, from_mast, _from_path_AltaiPony
-from . import pathkepler, pathk2LC, pathk2TPF, pathtess, pathAltaiPony
+from . import pathkepler, pathk2LC, pathk2TPF, pathtess
 
 
 

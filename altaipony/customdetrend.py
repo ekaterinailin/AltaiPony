@@ -2,18 +2,15 @@ import time
 
 import copy
 import numpy as np
-import pandas as pd
 
-from .altai import find_iterative_median, equivalent_duration
+from .altai import find_iterative_median
 from .utils import sigma_clip
 
-from collections import defaultdict
 
 import astropy.units as u
 
 from scipy.interpolate import UnivariateSpline
 from scipy import optimize
-from scipy.fftpack import fft
 
 
 def custom_detrending(lc, spline_coarseness=30, spline_order=3,

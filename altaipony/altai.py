@@ -1,14 +1,13 @@
-from astropy.io import fits
+
 import pandas as pd
 import numpy as np
 import logging
 import copy
-from lightkurve import KeplerLightCurve
 
 from scipy.signal import savgol_filter
 
 from .utils import sigma_clip
-from .fakeflares import aflare
+
 
 LOG = logging.getLogger(__name__)
 

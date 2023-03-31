@@ -7,17 +7,10 @@ import progressbar
 import datetime
 
 
-from collections import defaultdict
 
-from scipy.interpolate import UnivariateSpline
-from scipy import optimize
-from scipy.fftpack import fft
-
-from lightkurve import KeplerLightCurve, KeplerTargetPixelFile, TessLightCurve
+from lightkurve import KeplerLightCurve, TessLightCurve
 from lightkurve.utils import KeplerQualityFlags
 
-from astropy.io import fits
-import astropy.units as u
 
 from .k2scmod import k2sc_lc
 from .altai import (find_flares,
@@ -26,7 +19,7 @@ from .altai import (find_flares,
 from .fakeflares import (merge_fake_and_recovered_events,
                          generate_fake_flare_distribution,
                          mod_random,
-                         aflare,
+                         flare_model,
                          )
 from .injrecanalysis import wrap_characterization_of_flares, _heatmap
 from .utils import split_gaps
@@ -674,7 +667,7 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
         return flc
 
 
-    def inject_fake_flares(self, gapwindow=0.1, fakefreq=.005,
+    def inject_fake_flares(self, model="mendoza2022", gapwindow=0.1, fakefreq=.005,
                            inject_before_detrending=False, d=False, seed=None,
                            **kwargs):
         '''
@@ -687,8 +680,8 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
 
         Parameters:
         -------------
-        mode : 'loglog', 'hawley2014' or 'rand'
-            injection mode
+        model : "mendoza2022" or "davenport2014"
+            The flare model to use. Default is "mendoza2022".
         gapwindow : 0.1 or float
 
         fakefreq : .005 or float
@@ -845,7 +838,7 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
                     t0_fake[k] = t0
                     
                     # generate the flare flux from the Davenport 2014 model
-                    fl_flux = aflare(time, t0, dur_fake[k], ampl_fake[k])
+                    fl_flux = flare_model(model,time, t0, dur_fake[k], ampl_fake[k])
                     
                     # calculate the injected ED
                     ed_fake[k] = _equivalent_duration(time, fl_flux)
@@ -893,10 +886,10 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
 
         df = pd.read_csv(path)
         if self.fake_flares.shape[0]>0:
-	        LOG.warning("The file is appended to an existing table.")
-	        self.fake_flares = self.fake_flares.append(df)
+            LOG.warning("The file is appended to an existing table.")
+            self.fake_flares = self.fake_flares.append(df)
         else:
-	        self.fake_flares = df
+            self.fake_flares = df
 
     def plot_recovery_probability_heatmap(self, ampl_bins=None, 
                                           dur_bins=None, flares_per_bin=20, **kwargs):

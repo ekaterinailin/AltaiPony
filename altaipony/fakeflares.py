@@ -1,14 +1,33 @@
 import numpy as np
-import pandas as pd
-import datetime
 import logging
-import copy
-import random
 from scipy.stats import binned_statistic
 from scipy import special
 
 LOG = logging.getLogger(__name__)
 
+
+def flare_model(model, *params):
+    """
+    Flare model wrapper.
+
+    Parameters
+    ----------
+    model : str
+        Name of the flare model to use.
+    params : tuple
+        Parameters of the flare model.
+
+    Returns
+    -------
+    array
+        Flare model.
+    """
+    if model == 'davenport2014':
+        return flare_model_davenport2014(*params)
+    elif model == 'mendoza2022':
+        return flare_model_mendoza2022(*params)
+    else:
+        raise ValueError(f'Unknown flare model: {model}')
 
 def generate_fake_flare_distribution(nfake, ampl=[1e-4, 5], dur=[0.005, 0.012], mode="uniform", **kwargs ):
 
@@ -86,7 +105,7 @@ def flare_eqn(t,tpeak,fwhm,ampl):
     return eqn * ampl
 
 
-def flare_model(t,tpeak, fwhm, ampl, upsample=False, uptime=10):
+def flare_model_mendoza2022(t,tpeak, fwhm, ampl, upsample=False, uptime=10):
     '''
     The Continuous Flare Model evaluated for single-peak (classical) flare events.
     Use this function for fitting classical flares with most curve_fit
@@ -133,7 +152,7 @@ def flare_model(t,tpeak, fwhm, ampl, upsample=False, uptime=10):
     return flare 
 
 
-def aflare(t, tpeak, dur, ampl, upsample=False, uptime=10):
+def flare_model_davenport2014(t, tpeak, dur, ampl, upsample=False, uptime=10):
     '''
     The Analytic Flare Model evaluated for a single-peak (classical).
     Reference Davenport et al. (2014) http://arxiv.org/abs/1411.3723

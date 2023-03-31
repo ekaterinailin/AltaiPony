@@ -1,10 +1,10 @@
 from k2sc.core import *
-from k2sc.k2io import DataReader
+
 from k2sc.k2data import K2Data
-from k2sc.ls import fasper
+
 from numpy import *
-import math as mt
-from time import time, sleep
+
+from time import time
 from k2sc.cdpp import cdpp
 from k2sc.de import DiffEvol
 from numpy.random import normal
@@ -16,7 +16,7 @@ from k2sc.kernels import kernels, BasicKernel, BasicKernelEP, QuasiPeriodicKerne
 
 
 # ALTAIPONY MOD: Here is where I use my own modification
-from altaipony.utils import medsig, sigma_clip
+from altaipony.utils import sigma_clip
 from k2sc.standalone import psearch
 
 import lightkurve

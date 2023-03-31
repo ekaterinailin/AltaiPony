@@ -2,9 +2,6 @@ import warnings
 import logging
 
 import numpy as np
-import astropy.units as u
-
-from astropy.io import fits
 
 from altaipony.flarelc import FlareLightCurve
 
@@ -18,7 +15,6 @@ from lightkurve import (search_lightcurve,
 
 LOG = logging.getLogger(__name__)
 
-from astropy.table import TableColumns, Column
 
 # ----------------------------------------------------------
 # Read in data from MAST, either as LC (TESS, Kepler, K2) or TPF (K2)
