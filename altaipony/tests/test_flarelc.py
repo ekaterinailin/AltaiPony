@@ -3,6 +3,7 @@ import pandas as pd
 import pytest
 
 import os
+import warnings
 
 from inspect import currentframe, getframeinfo
 
@@ -280,7 +281,7 @@ def test_detrend():
                     "flux_err", "flux", "time", "quality"]:
             assert getattr(flc, att).value.shape == shape
     except np.linalg.linalg.LinAlgError:
-        warning.warn('Detrending of mock LC failed, this happens.')
+        warnings.warn('Detrending of mock LC failed, this happens.')
         pass
     
     # Test K2SC detrending with custom splits    
@@ -293,7 +294,7 @@ def test_detrend():
             assert getattr(flc, att).value.shape == shape
 
     except np.linalg.linalg.LinAlgError:
-        warning.warn('Detrending of mock LC failed, this happens.')
+        warnings.warn('Detrending of mock LC failed, this happens.')
         pass
 
     #test non TPF derived LC fails
