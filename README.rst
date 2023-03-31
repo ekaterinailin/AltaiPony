@@ -1,4 +1,4 @@
-|ci-badge| |docs-badge| |license-badge| |requirements-badge| |joss-badge| |zenodo-badge|
+ |docs-badge| |license-badge| |requirements-badge| |joss-badge| |zenodo-badge|
 
 
 .. |joss-badge| image:: https://joss.theoj.org/papers/10.21105/joss.02845/status.svg
@@ -6,9 +6,6 @@
 
 ..  |zenodo-badge| image:: https://zenodo.org/badge/DOI/10.5281/zenodo.5040830.svg
                     :target: https://doi.org/10.5281/zenodo.5040830
-   
-.. |ci-badge| image:: https://travis-ci.org/ekaterinailin/AltaiPony.svg?branch=master
-              :target: https://travis-ci.org/ekaterinailin/AltaiPony
 
 .. |docs-badge| image:: https://readthedocs.org/projects/altaipony/badge/?version=latest
 	      :target: https://altaipony.readthedocs.io/en/latest/?badge=latest
