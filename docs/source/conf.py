@@ -19,7 +19,7 @@ import sphinx_rtd_theme
 
 
 def setup(app):
-    app.add_javascript('_static/copybutton.js')
+    app.add_js_file('_static/copybutton.js')
 
 # -- Project information -----------------------------------------------------
 
