@@ -1,4 +1,4 @@
- |docs-badge| |license-badge| |requirements-badge| |joss-badge| |zenodo-badge|
+|docs-badge| |license-badge| |joss-badge| |zenodo-badge|
 
 
 .. |joss-badge| image:: https://joss.theoj.org/papers/10.21105/joss.02845/status.svg
@@ -14,10 +14,6 @@
 .. |license-badge|  image:: https://img.shields.io/github/license/mashape/apistatus.svg   
 		    :target: https://github.com/ekaterinailin/AltaiPony/blob/master/LICENSE 
 		    :alt: GitHub	
-.. |requirements-badge| image:: https://requires.io/github/ekaterinailin/AltaiPony/requirements.svg?branch=master
-                       :target: https://requires.io/github/ekaterinailin/AltaiPony/requirements/?branch=master
-                       :alt: Requirements Status
-
 
 .. image:: logo.png
    :height: 100px
