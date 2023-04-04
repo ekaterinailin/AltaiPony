@@ -72,6 +72,7 @@ Depending on the methods you use, you may also want to cite
   - Maschberger and Kroupa (2009) [2]_ (MMLE power law fit)
   - Wheatland (2004) [3]_ (MCMC power law fit)
   - Aigrain et al. (2016) [4]_ and their softwar [5]_ (K2SC de-trending)
+  - Davenport et al. (2014) [6_] or Mendoza et al. (2022) [7_] (injection-recovery analysis)
 
 
 .. [a] Ekaterina Ilin, Sarah J. Schmidt, Katja Poppenhäger, James R. A. Davenport, Martti H. Kristiansen, Mark Omohundro (2021). "Flares in Open Clusters with K2. II. Pleiades, Hyades, Praesepe, Ruprecht 147, and M67" Astronomy & Astrophysics, Volume 645, id.A42, 25 pp.  	https://doi.org/10.1051/0004-6361/202039198 
@@ -87,6 +88,12 @@ Depending on the methods you use, you may also want to cite
 .. [4] Aigrain, Suzanne; Parviainen, Hannu; Pope, Benjamin "K2SC: flexible systematics correction and detrending of K2 light curves using Gaussian process regression" Monthly Notices of the Royal Astronomical Society, Volume 459, Issue 3, p.2408-2419 https://doi.org/10.1093/mnras/stw706
 
 .. [5] Aigrain, Suzanne; Parviainen, Hannu; Pope, Benjamin "K2SC: K2 Systematics Correction." Astrophysics Source Code Library, record ascl:1605.012 https://ui.adsabs.harvard.edu/abs/2016ascl.soft05012A/abstract
+
+.. [6] J. R. A. Davenport et al., “Kepler Flares. II. The Temporal Morphology of White-light Flares on GJ 1243,” The Astrophysical Journal, vol. 797, p. 122, Dec. 2014, doi: 10.1088/0004-637X/797/2/122.
+
+.. [7] G. T. Mendoza, J. R. A. Davenport, E. Agol, J. A. G. Jackman, and S. L. Hawley, “Llamaradas Estelares: Modeling the Morphology of White-light Flares,” The Astronomical Journal, Volume 164, Issue 1, id.17, <NUMPAGES>12</NUMPAGES> pp., vol. 164, no. 1, p. 17, Jul. 2022, doi: 10.3847/1538-3881/ac6fe6.
+
+
 
 
 .. _Appaloosa: https://github.com/jradavenport/appaloosa/
