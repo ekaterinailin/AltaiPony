@@ -529,7 +529,7 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
             injrec_results = pd.DataFrame(columns=columns)
             
             # Merge injected and recovered flares
-            injrec_results = injrec_results.append(merge_fake_and_recovered_events(injs, recs),
+            injrec_results = pd.concat([injrec_results, merge_fake_and_recovered_events(injs, recs)],
                                                    ignore_index=True)
             
 
@@ -553,7 +553,7 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
             
             # Add to previous runs of sample_flare_recovery on the same LC or create new table    
             if lc.fake_flares.shape[0] > 0:    
-                lc.fake_flares = lc.fake_flares.append(injrec_results, ignore_index=True)
+                lc.fake_flares = pd.concat([lc.fake_flares,injrec_results], ignore_index=True)
             else:
                 lc.fake_flares = injrec_results
                 
@@ -887,7 +887,7 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
         df = pd.read_csv(path)
         if self.fake_flares.shape[0]>0:
             LOG.warning("The file is appended to an existing table.")
-            self.fake_flares = self.fake_flares.append(df)
+            self.fake_flares = pd.concat([self.fake_flares, df])
         else:
             self.fake_flares = df
 
