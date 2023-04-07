@@ -542,19 +542,22 @@ def measure_flare(flc, sta, sto):
     tstop = flc.time.value[sto]
     
     # add result to flare table
-    flc.flares = pd.concat([flc.flares, pd.Series(
-                                 {'ed_rec': ed_rec,
-                                  'ed_rec_err': ed_rec_err,
-                                  'ampl_rec': ampl_rec,
-                                  'istart': sta,
-                                  'istop': sto,
-                                  'cstart': cstart,
-                                  'cstop': cstop,
-                                  'tstart': tstart,
-                                  'tstop': tstop,
-                                  'dur': tstop - tstart,
-                                  'total_n_valid_data_points': flc.flux.value.shape[0]
-                                  })],ignore_index=True)
+    newline = pd.Series(
+                        {'ed_rec': ed_rec,
+                        'ed_rec_err': ed_rec_err,
+                        'ampl_rec': ampl_rec,
+                        'istart': sta,
+                        'istop': sto,
+                        'cstart': cstart,
+                        'cstop': cstop,
+                        'tstart': tstart,
+                        'tstop': tstop,
+                        'dur': tstop - tstart,
+                        'total_n_valid_data_points': flc.flux.value.shape[0]
+                        })
+    
+    flc.flares = pd.concat([flc.flares, newline.to_frame().T], ignore_index=True)
+
     return 
 
 

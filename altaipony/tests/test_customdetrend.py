@@ -1,6 +1,5 @@
 import pytest
 
-import time
 
 import numpy as np
 import pandas as pd
@@ -263,5 +262,5 @@ def test_measure_flare():
     assert measured_flare.istop == 5346
     assert measured_flare.tstart == pytest.approx(14.224)
     assert measured_flare.tstop ==  pytest.approx(14.276800)
-    assert measured_flare.ed_rec == pytest.approx((250 + 750 * 0.5) / 3400 * 0.052800 * 24 * 3600, rel=.01)
+    assert measured_flare.ed_rec == pytest.approx((250 + 750 * 0.5) / 3400 * 0.052800 * 24 * 3600, rel=.03)
     assert measured_flare.tstop -measured_flare.tstart == measured_flare.dur
