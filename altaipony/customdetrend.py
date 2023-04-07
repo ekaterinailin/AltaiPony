@@ -533,7 +533,7 @@ def measure_flare(flc, sta, sto):
     # get amplitude
     ampl_rec = np.max(flc.detrended_flux.value[sta:sto]) / flc.it_med.value[sta] - 1. 
     
-    # get cadence numbers
+    # get cadence numberspip l
     cstart = flc.cadenceno.value[sta]
     cstop = flc.cadenceno.value[sto]
     
@@ -542,7 +542,7 @@ def measure_flare(flc, sta, sto):
     tstop = flc.time.value[sto]
     
     # add result to flare table
-    flc.flares = flc.flares.append(pd.Series(
+    flc.flares = pd.concat([flc.flares, pd.Series(
                                  {'ed_rec': ed_rec,
                                   'ed_rec_err': ed_rec_err,
                                   'ampl_rec': ampl_rec,
@@ -554,7 +554,7 @@ def measure_flare(flc, sta, sto):
                                   'tstop': tstop,
                                   'dur': tstop - tstart,
                                   'total_n_valid_data_points': flc.flux.value.shape[0]
-                                  }),ignore_index=True)
+                                  })],ignore_index=True)
     return 
 
 
