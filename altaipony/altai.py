@@ -283,11 +283,11 @@ def detrend_savgol(lc, window_length=None, pad=3, printwl=False, **kwargs):
         flux_model_i = savgol_filter(flux, wl, 3, mode='nearest')
         
         flux_diff = flux - flux_model_i + np.nanmean(flux_model_i)
-        lc.detrended_flux.value[ok] = flux_diff
-        lc.flux_model.value[ok] = flux_model_i
+        lc.detrended_flux[ok] = flux_diff
+        lc.flux_model[ok] = flux_model_i
         
         # Find out where outlier begin and end:
-        a = np.isnan(lc.detrended_flux.value[le:ri]).astype(int)
+        a = np.isnan(lc.detrended_flux[le:ri]).astype(int)
         
         #pad outliers-------------------
        # print(np.where(a)[0])
