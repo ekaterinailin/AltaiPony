@@ -140,7 +140,7 @@ def test_sample_flare_recovery():
     # Generic case
     flc = mock_flc(detrended=True)
     
-    flc, fflc = flc.sample_flare_recovery(iterations=2)
+    flc, fflc = flc.sample_flare_recovery(iterations=2, **{"model":"davenport2014"},)
     #make sure no flares are injected overlapping true flares
     data = flc.fake_flares
     assert data[(data.istart > 14) & (data.istart < 19)].shape[0] == 0
@@ -159,7 +159,7 @@ def test_sample_flare_recovery():
     flc = mock_flc(detrended=True)
     
     flcd, fflc = flc.sample_flare_recovery(iterations=10, inject_before_detrending=True,
-                                          func=func, mode="custom")
+                                          func=func, **{"model":"davenport2014"}, mode="custom")
     #make sure no flares are injected overlapping true flares
     data = flcd.fake_flares
     assert data[(data.istart > 14) & (data.istart < 19)].shape[0] == 0
@@ -182,7 +182,7 @@ def test_sample_flare_recovery():
     flc = mock_flc(detrended=True)
     
     flcd, fflc = flc.sample_flare_recovery(iterations=10, inject_before_detrending=True,
-                                           func=func, mode="custom", 
+                                           func=func, mode="custom", **{"model":"davenport2014"},
                                            detrend_kwargs={"kw":17})
     #make sure no flares are injected overlapping true flares
     data = flcd.fake_flares
@@ -191,9 +191,10 @@ def test_sample_flare_recovery():
     #test if all injected event are covered in the merged flares:
     assert data.shape[0] == 10
     assert fflc.gaps == [(0, 1000)]
-    assert np.median(fflc.it_med) == pytest.approx(500.005274113832/2.)
+    assert float(np.median(fflc.it_med)) == pytest.approx(500.005274113832/2.)
     assert flcd.detrended_flux == pytest.approx(flc.flux/2.)
-    
+       
+    flcd.flares = flcd.flares.astype(float)
     # Test that the original flare was not changed accidentally
     assert flcd.flares.loc[0,'ed_rec'] == pytest.approx(3455.8875941, rel=1e-4)
     assert flcd.flares['ed_rec_err'][0] < flcd.flares['ed_rec'][0]
@@ -209,11 +210,11 @@ def test_sample_flare_recovery():
     # Test that adding another round of injrec will append to the path
     flc = mock_flc(detrended=True)
     flcd, fflc = flc.sample_flare_recovery(iterations=10, inject_before_detrending=False,
-                                           save=True)
+                                           save=True, **{"model":"davenport2014"},)
     size = len(flcd.fake_flares)
     
     flcd, fflc = flcd.sample_flare_recovery(iterations=10, inject_before_detrending=False,
-                                           save=True)
+                                           save=True, **{"model":"davenport2014"},)
     size2 = len(flcd.fake_flares)
     assert size < size2
     
