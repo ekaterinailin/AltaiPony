@@ -365,7 +365,7 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
                                              + np.nanmedian(new_lc.tr_time.value))
                     new_lc["detrended_flux_err"] = copy.copy(new_lc.flux_err) # does k2sc share their uncertainties somewhere?
                     new_lc["flux_trends"] = new_lc.tr_time.value
-                    if new_lc.detrended_flux.value.shape != self.flux.value.shape:
+                    if new_lc.detrended_flux.shape != self.flux.value.shape:
                         LOG.error('De-detrending messed up the flux arrays.')
                     else:
                         LOG.info('De-trending successfully completed.')
@@ -507,7 +507,7 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
             fake_lc = lc.inject_fake_flares(inject_before_detrending=inject_before_detrending,
                                                  fakefreq=fakefreq,
                                                  **kwargs)
-    
+            
             if save_lc_to_file == True:
                 fake_lc.to_fits("{folder}before.fits")
                 print(f"saved {self.targetit} LC before detrending")
@@ -668,7 +668,7 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
 
 
     def inject_fake_flares(self, model="mendoza2022", gapwindow=0.1, fakefreq=.005,
-                           inject_before_detrending=False, d=False, seed=None,
+                           inject_before_detrending=False, d=False, seed=None, 
                            **kwargs):
         '''
         Create a number of events, inject them in to data
@@ -772,6 +772,7 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
                                       )
                               )
                         )
+
             LOG.debug(f'Inject {nfake} fake flares into a {ri-le} datapoint long array.')
             
             # Are there real flares to deal with in the gap?
@@ -779,8 +780,14 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
                                              (self.flares.istop <= ri)]
                                              
             # Pick flux, time, and flux error arrays 
-            error = gap_fake_lc[typerr].value
-            flux = gap_fake_lc[typ].value
+            error = gap_fake_lc[typerr]
+            flux = gap_fake_lc[typ]
+
+            # account for different data types for detrended and non-detrended data
+            if typ == "flux":
+                flux = flux.value
+                error = error.value
+
             time = gap_fake_lc.time.value
             
             # generate the time constraints for the flares you want to inject
@@ -844,9 +851,12 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
                     ed_fake[k] = _equivalent_duration(time, fl_flux)
                     
                 # inject flare in to light curve by adding the flare flux
-                fake_lc[typ].value[le:ri] = (fake_lc[typ][le:ri].value +
-                                                fl_flux * fake_lc.it_med[le:ri].value)
-                
+                if typ == "flux":
+                    fake_lc[typ].value[le:ri] = (fake_lc[typ][le:ri].value +
+                                                fl_flux * fake_lc.it_med[le:ri])
+                elif typ == "detrended_flux":
+                    fake_lc[typ][le:ri] = (fake_lc[typ][le:ri] +
+                                                fl_flux * fake_lc.it_med[le:ri])
             # Increment the counter
             ckm += nfake
             

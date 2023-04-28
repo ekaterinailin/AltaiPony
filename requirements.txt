@@ -2,7 +2,7 @@ numpy>=1.15.1
 pandas>=2.0
 scipy>=1.5.0
 pybind11
-lightkurve>=2
+lightkurve>=2.4
 astropy>=4.1
 k2sc==1.0.2.
 emcee

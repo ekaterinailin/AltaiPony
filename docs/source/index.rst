@@ -23,7 +23,7 @@ Jump to `Getting Started`_ to get an overview!
         tutorials/index
    	api/index
         faq
-	
+	changelog
 	
 Problems?
 ^^^^^^^^^

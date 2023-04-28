@@ -84,21 +84,21 @@ def mod_random(x, d=False, seed=667):
         np.random.seed()#do not remove: seed is fixed otherwise!
         return np.random.rand(x) 
 
-def flare_eqn(t,tpeak,fwhm,ampl):
+def flare_eqn(t, ampl):
     '''
     The equation that defines the shape for the Continuous Flare Model
     '''
     #Values were fit & calculated using MCMC 256 walkers and 30000 steps
 
-    A,B,C,D1,D2,f1 = [0.9687734504375167,-0.251299705922117,0.22675974948468916,
-                      0.15551880775110513,1.2150539528490194,0.12695865022878844]
+    A,B,C,D1,D2,f1 = [0.9687734504375167, -0.251299705922117, 0.22675974948468916,
+                      0.15551880775110513, 1.2150539528490194, 0.12695865022878844]
 
     # We include the corresponding errors for each parameter from the MCMC analysis
 
     A_err,B_err,C_err,D1_err,D2_err,f1_err = [0.007941622683556804,0.0004073709715788909,0.0006863488251125649,
                                               0.0013498012884345656,0.00453458098656645,0.001053149344530907 ]
 
-    f2 = 1-f1
+    f2 = 1 - f1
 
     eqn = ((1 / 2) * np.sqrt(np.pi) * A * C * f1 * np.exp(-D1 * t + ((B / C) + (D1 * C / 2)) ** 2)
                         * special.erfc(((B - t) / C) + (C * D1 / 2))) + ((1 / 2) * np.sqrt(np.pi) * A * C * f2
@@ -106,7 +106,7 @@ def flare_eqn(t,tpeak,fwhm,ampl):
     return eqn * ampl
 
 
-def flare_model_mendoza2022(t,tpeak, fwhm, ampl, upsample=False, uptime=10):
+def flare_model_mendoza2022(t, tpeak, fwhm, ampl, upsample=False, uptime=10):
     '''
     The Continuous Flare Model evaluated for single-peak (classical) flare events.
     Use this function for fitting classical flares with most curve_fit
@@ -134,21 +134,24 @@ def flare_model_mendoza2022(t,tpeak, fwhm, ampl, upsample=False, uptime=10):
         and can be parameterized by three parameters: center time (tpeak), FWHM, and ampitude
     '''
 
-    t_new = (t-tpeak)/fwhm
+    t_new = (t - tpeak) / fwhm
 
     if upsample:
+
         dt = np.nanmedian(np.diff(np.abs(t_new)))
+
         timeup = np.linspace(min(t_new) - dt, max(t_new) + dt, t_new.size * uptime)
 
-        flareup = flare_eqn(timeup,tpeak,fwhm,ampl)
+        flareup = flare_eqn(timeup, ampl)
 
         # and now downsample back to the original time...
 
         downbins = np.concatenate((t_new - dt / 2.,[max(t_new) + dt / 2.]))
+
         flare,_,_ = binned_statistic(timeup, flareup, statistic='mean',bins=np.sort(downbins))
     else:
 
-        flare = flare_eqn(t_new,tpeak,fwhm,ampl)
+        flare = flare_eqn(t_new, ampl)
 
     return flare 
 
