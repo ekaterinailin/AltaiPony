@@ -6,3 +6,4 @@ lightkurve
 progressbar2
 emcee
 corner
+altaipony
