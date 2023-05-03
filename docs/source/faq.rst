@@ -1,6 +1,18 @@
 Frequently Asked Questions
 =======================================
 
+`plt.show()` does not show any plots once I import AltaiPony. How can I fix this? 
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AltaiPony uses the 'agg' backend for plotting. This might not be the backend that will show you the plots. To change back to your preferred backend, use
+
+::
+
+    import matplotlib
+    matplotlib.use('<your backend>')
+
+
+You can figure out your backend by calling ``plt.get_backend()``, which will return the string, e.g., 'Tkagg'.
+
 
 What is detected as a flare and not a flare? 
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
