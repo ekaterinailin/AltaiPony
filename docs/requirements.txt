@@ -1,8 +1,9 @@
 numpydoc
 sphinx-automodapi
-git+https://github.com/OxES/k2sc.git
+sphinx==6.2.1
 matplotlib
 lightkurve
 progressbar2
 emcee
 corner
+altaipony
