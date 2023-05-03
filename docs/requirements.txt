@@ -1,6 +1,6 @@
 numpydoc
 sphinx-automodapi
-sphinx==7.0
+sphinx==6.2.1
 matplotlib
 lightkurve
 progressbar2
