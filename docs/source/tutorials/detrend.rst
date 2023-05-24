@@ -19,9 +19,11 @@ For ``<detrending method>`` you can pass one the following:
 You can use the custom de-trending method detailed in [6] that can be used to de-trend Kepler and TESS light curves as follows with AltaiPony
 
 ::
-      from funcs.customdetrend import custom_detrending
+ 
+
+     from funcs.customdetrend import custom_detrending
                                  
-      flcd = flc.detrend("custom", func=custom_detrending)
+     flcd = flc.detrend("custom", func=custom_detrending)
       
 
 .. [1] Ekaterina Ilin, Sarah J. Schmidt, Katja Poppenhäger, James R. A. Davenport, Martti H. Kristiansen, Mark Omohundro (2021). "Flares in Open Clusters with K2. II. Pleiades, Hyades, Praesepe, Ruprecht 147, and M67" Astronomy & Astrophysics, Volume 645, id.A42, 25 pp.  	https://doi.org/10.1051/0004-6361/202039198 
