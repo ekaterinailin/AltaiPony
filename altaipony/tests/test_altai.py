@@ -5,8 +5,8 @@ from ..altai import (find_flares,
                      find_flares_in_cont_obs_period,
                      chi_square,
                      equivalent_duration,
-                     find_iterative_median,
-                     detrend_savgol)
+                     find_iterative_median)
+
 from ..flarelc import FlareLightCurve
 from .test_flarelc import mock_flc
 

@@ -12,7 +12,7 @@ Call the de-trender on a ``FlareLightCurve`` with
 
 For ``<detrending method>`` you can pass one the following:
 
-* "k2sc" - if you wish to de-trend a K2 light curve, this is the best way to deal with, among other issues in K2, the Kepler spacecraft roll (see [1]_, [2]_ and [3]_ for details)
+* "k2sc" - DEPRECATED AND NO LONGER MAINTAINED, WILL BE REMOVED IN A FUTURE VERSION! If you wish to de-trend a K2 light curve, this is the best way to deal with, among other issues in K2, the Kepler spacecraft roll (see [1]_, [2]_ and [3]_ for details)
 * "savgol" - applies a Savitky-Golay [4]_ filter to the light curve. This method is quick and gives good results in both Kepler and TESS light curves, but you may have to play with the ``window_length`` keyword to get optimal results.
 * "custom" - you can use your own de-trending pipeline. Pass a function that takes a ``FlareLightCurve`` and returns a FlareLightCurve to ``flc.detrend("custom", func=<your custom de-trending function>)`` . 
 

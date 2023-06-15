@@ -224,23 +224,6 @@ def test_sample_flare_recovery():
     
     os.remove(path)
 
-#def test_to_fits():
-#    # with light curve only:
-#    flc = from_path(pathkepler, mode="LC", mission="Kepler")
-#    flc = flc.detrend("savgol")
-#    flc.to_fits(pathAltaiPony)
-#    flc = flc.find_flares()
-#    flc.to_fits(pathAltaiPony)
-#    flc = from_path(pathAltaiPony, mode="AltaiPony", mission="Kepler")
-#    
-#    # with TPF component which needs to be thrown away
-#    flc = from_path(pathk2TPF, mode="TPF", mission="K2")
-#    flc.flux_err = flc.flux_err * 100. # otherwise K2SC errors.
-#    flc = flc.detrend("k2sc", de_niter=3)
-#    flc.to_fits(pathAltaiPony)
-#    flc = flc.find_flares()
-#    flc.to_fits(pathAltaiPony)
-#    flc = from_path(pathAltaiPony, mode="AltaiPony", mission="K2")
 
 def test_repr():
     pass
@@ -271,38 +254,6 @@ def test_find_gaps():
     assert flc.gaps == [(0, 20), (20, 820)]
 
 def test_detrend():
-    # Test K2SC de-trending:
-    flc = mock_flc()
-    try:
-        flc = flc.detrend("k2sc", de_niter=2,)
-        shape = flc.flux.value.shape
-        for att in ["detrended_flux", "detrended_flux_err",
-                    "flux_err", "flux", "time", "quality"]:
-            assert getattr(flc, att).value.shape == shape
-    except np.linalg.linalg.LinAlgError:
-        warnings.warn('Detrending of mock LC failed, this happens.')
-        pass
-    
-    # Test K2SC detrending with custom splits    
-    flc = mock_flc()
-    try:
-        flc = flc.detrend("k2sc", de_niter=2, splits=[1.4, 2.2, 5.4])
-        shape = flc.flux.value.shape
-        for att in ["detrended_flux", "detrended_flux_err",
-                    "flux_err", "flux", "time", "quality"]:
-            assert getattr(flc, att).value.shape == shape
-
-    except np.linalg.linalg.LinAlgError:
-        warnings.warn('Detrending of mock LC failed, this happens.')
-        pass
-
-    #test non TPF derived LC fails
-    flc = mock_flc(origin='LC', detrended=False, ampl=1., dur=1)
-    with pytest.raises(ValueError) as e:
-        flc = flc.detrend("k2sc", de_niter=2,)
-    #test the shapes are the same for all
-    # test that the necessary attributes are kept
-    
     # Test SAVGOL detrending
     
     ampls = [100, 10., 1, .1, .01]
@@ -375,19 +326,11 @@ def test_detrend():
 def test_detrend_fails():
     """If detrend fails, an error is raised with given string."""
     
-    # K2SC de-trending fails because we need a TPF for it, not just a LC.
-    flc =  mock_flc(origin='KLC')
-    err_string = ('Only KeplerTargetPixelFile derived FlareLightCurves can be'
-                          ' passed to K2SC de-trending.')
-    with pytest.raises(ValueError) as err:
-        flc.detrend("k2sc", de_niter=3)
-    assert err_string == err.value.args[0]
-    
     # De-trending fails in general when an invalid mode is passed.
     # But also a helpful message is thrown out.
     flc =  mock_flc()
-    err_string = ('\nDe-trending mode blaaaah does not exist. Pass "k2sc" (K2 LCs)'
-                       ' or "savgol" (Kepler, TESS).')
+    err_string = ('\nDe-trending mode blaaaah does not exist. Pass "savgol"'
+                       ' or "custom" (to pass a custom detrending function to func=).')
     with pytest.raises(ValueError) as err:
         flc.detrend("blaaaah")
     assert err_string == err.value.args[0]
