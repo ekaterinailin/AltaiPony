@@ -402,7 +402,7 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
             return new_lc
         
         else:
-            err_str = (f'\nDe-trending mode {mode} does not exist. Pass "savgol" (for a Savitzky-Golay filter based detrending) '
+            err_str = (f'\nDe-trending mode {mode} does not exist. Pass "savgol" (for a Savitzky-Golay filter based detrending)'
                        ' or "custom" (to pass a custom detrending function to func=).')
             LOG.exception(err_str)
             raise ValueError(err_str)

@@ -330,7 +330,7 @@ def test_detrend_fails():
     # De-trending fails in general when an invalid mode is passed.
     # But also a helpful message is thrown out.
     flc =  mock_flc()
-    err_string = ('\nDe-trending mode blaaaah does not exist. Pass "savgol"'
+    err_string = ('\nDe-trending mode blaaaah does not exist. Pass "savgol" (for a Savitzky-Golay filter based detrending)'
                        ' or "custom" (to pass a custom detrending function to func=).')
     with pytest.raises(ValueError) as err:
         flc.detrend("blaaaah")
