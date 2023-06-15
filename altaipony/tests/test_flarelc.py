@@ -269,6 +269,7 @@ def test_detrend():
         print("FFFDF", daplc.detrended_flux)
         fff = find_iterative_median(daplc)
         print("DF", fff.detrended_flux)
+        shape = fff.flux.value.shape
         assert fff.it_med.value == pytest.approx(500., rel=0.01) #median stays the same roughly
         assert aplc.flux.value.shape[0] == daplc.detrended_flux.value.shape[0] #no NaNs to throw out
         assert daplc.flux.value.max() > daplc.detrended_flux.value.max() # flare sits on a LC part above quiescent level
@@ -276,7 +277,7 @@ def test_detrend():
         # Test that shapes of arrays are kept
         for att in ["detrended_flux", "detrended_flux_err",
             "flux_err", "flux", "time", "quality"]:
-            assert getattr(flc, att).value.shape == shape
+            assert getattr(fff, att).value.shape == shape
         
     # TEST CUSTOM DETRENDING
     
