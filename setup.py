@@ -5,7 +5,7 @@ with open("README.rst", "r") as fh:
 
 setuptools.setup(
     name="altaipony",
-    version="2.0.1",
+    version="2.1.0",
     author="Ekaterina Ilin",
     author_email="eilin@aip.de",
     description="Flare science in Kepler, K2 and TESS light curves",
@@ -14,7 +14,7 @@ setuptools.setup(
     url="https://github.com/ekaterinailin/AltaiPony",
     packages=setuptools.find_packages(),
     install_requires = ['numpy>=1.15.1', 'pybind11','lightkurve>=2.4','pandas>=2.0', 'george>=0.3',
-                        'progressbar2>=3.51.4','seaborn',  'astropy>=4.1', 'k2sc>=1.0.2', 'emcee','corner', 'scipy>1.5'],
+                        'progressbar2>=3.51.4','seaborn',  'astropy>=5', 'k2sc>=1.0.2', 'emcee','corner', 'scipy>1.5'],
 
     include_package_data=True,
     package_data={
