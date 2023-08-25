@@ -1,6 +1,12 @@
 Changelog (starting 04-2023)
 =======================================
 
+25-08-2023
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+* Removed K2SC tests for reading files, as it is not maintained anymore. The functionality is kept to keep a version of the code alive, but the tests are removed.
+* Updated requirements for astropy to be version 5.2.2. (latest version before 5.3, which currently breaks some lightkurve functionality, in particular periodograms). 
+
 
 15-06-2023
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
