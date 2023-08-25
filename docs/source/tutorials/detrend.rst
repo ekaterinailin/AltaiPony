@@ -12,9 +12,11 @@ Call the de-trender on a ``FlareLightCurve`` with
 
 For ``<detrending method>`` you can pass one the following:
 
+
 * "k2sc" - DEPRECATED AND NO LONGER MAINTAINED, WILL BE REMOVED IN A FUTURE VERSION! If you wish to de-trend a K2 light curve, this is the best way to deal with, among other issues in K2, the Kepler spacecraft roll (see [1]_, [2]_ and [3]_ for details)
 * "savgol" - applies a Savitky-Golay [4]_ filter to the light curve. This method is quick and gives good results in both Kepler and TESS light curves, but you may have to play with the ``window_length`` keyword to get optimal results.
 * "custom" - you can use your own de-trending pipeline. Pass a function that takes a ``FlareLightCurve`` and returns a FlareLightCurve to ``flc.detrend("custom", func=<your custom de-trending function>)`` . 
+
 
 You can use the custom de-trending method detailed in [6]_ that can be used to de-trend Kepler and TESS light curves as follows with AltaiPony
 
@@ -28,6 +30,7 @@ You can use the custom de-trending method detailed in [6]_ that can be used to d
 
 The ``custom_detrending`` function takes the following keyword arguments:
 
+
 * *spline_coarseness* (default=30) - time in hours to average over for the spline fit
 * *spline_order* (default=3) - the order of the spline fit 
 * *savgol1* (default=6) - window length of the first Savitzky-Golay filter
@@ -35,6 +38,7 @@ The ``custom_detrending`` function takes the following keyword arguments:
 * *max_sigma* (default=2.5) - the number of standard deviations above the median to clip the light curve at for de-trending (**not** for flare searching!) 
 * *longdecay* (default=6) - the number of consecutive clipped points times this parameter is additionally clipped at the end of the clipped points to avoid smoothing away flare decay 
 * *pad* (default=3) - outliers in Savitzky-Golay filter are padded with this number of data points to avoid cutting flares **after** applying the longdecay expansion. The padding is applied before and after the outliers.
+
 
 .. [1] Ekaterina Ilin, Sarah J. Schmidt, Katja Poppenhäger, James R. A. Davenport, Martti H. Kristiansen, Mark Omohundro (2021). "Flares in Open Clusters with K2. II. Pleiades, Hyades, Praesepe, Ruprecht 147, and M67" Astronomy & Astrophysics, Volume 645, id.A42, 25 pp.  	https://doi.org/10.1051/0004-6361/202039198 
 
