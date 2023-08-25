@@ -45,7 +45,8 @@ def from_mast(targetid, mission, c=None, mode="LC", campaign=None, sector=None,
     --------
     FlareLightCurve
     """
-    
+    warnings.warn("\nK2 functionality is deprecated and no longer maintained! It will be removed in version 3.0.")
+
     if mission=="K2":
         if mode == "LC":
             warnings.warn("\nYou cannot do K2SC de-trending on a light curve only." 

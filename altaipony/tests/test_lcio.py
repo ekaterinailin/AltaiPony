@@ -3,14 +3,12 @@ import pytest
 import numpy as np
 
 from ..lcio import from_path, from_mast, _from_path_AltaiPony
-from . import pathkepler, pathk2LC, pathk2TPF, pathtess
+from . import pathkepler, pathtess
 
 
 
 @pytest.mark.parametrize("path,mode,ID,mission,campaign,quarter,sector",
                          [(pathkepler,"LC", 10002792, "Kepler", None, 2, None ),
-                          (pathk2LC,"LC", 211117077, "K2", 4, None, None ),
-                          (pathk2TPF,"TPF", 211983544, "K2", 18, None, None ),
                           (pathtess,"LC", 358108509, "TESS", None, None, 1)
                           ])
 
@@ -63,13 +61,9 @@ def test__from_path_AltaiPony():
 
 @pytest.mark.parametrize("ID,mission,c,mode,cadence,sector,campaign,quarter,lflc",
                          [("TIC 395130640","TESS", 11,"LC", "short", 11, None, None,1 ),
-                          ("EPIC 211119999", "K2", 4, "LC", "long", None, 4, None,1),
-                          ("EPIC 211119999", "K2", 4, "TPF", "long", None, 4, None,1),
                           ("KIC 9726699", "Kepler", 6, "LC", "long", None, None, 6,1),
                           ("KIC 100004076", "Kepler", 14, "LC", "short", None, None, 14,3),
                           ("TIC 395130640","TESS", None,"LC", "short", 11, None, None,2),
-                          ("EPIC 211119999", "K2", None, "LC", "long", None, 4, None,1),
-                          ("EPIC 211119999", "K2", None, "TPF", "long", None, 4, None,1),
                           ("KIC 9726699", "Kepler", None, "LC", "long", None, None, 0,15),
                           ("KIC 100004076", "Kepler", None, "LC", "short", None, None, 14,3)
                           ])

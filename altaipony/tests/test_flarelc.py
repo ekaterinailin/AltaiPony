@@ -10,7 +10,7 @@ from ..flarelc import FlareLightCurve
 from ..altai import find_iterative_median
 
 from .. import PACKAGEDIR
-from . import test_ids, test_paths, pathkepler, pathAltaiPony, pathk2TPF
+from . import test_ids, test_paths, pathkepler, pathAltaiPony
 
 
 def mock_flc(origin='TPF', detrended=False, ampl=1., dur=1):
