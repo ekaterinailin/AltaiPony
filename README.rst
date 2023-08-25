@@ -23,7 +23,7 @@
 AltaiPony
 =========
 
-De-trend light curves from Kepler, K2, and TESS missions, and search them for flares. Inject and recover synthetic flares to account for de-trending and noise loss in flare energy and determine energy-dependent recovery probability for every flare candidate. Uses the ``K2SC`` and ``lightkurve`` under the cover, as well as ``pandas``, ``numpy``, ``pytest``, ``astropy`` and more.
+De-trend light curves from Kepler, and TESS missions, and search them for flares. Inject and recover synthetic flares to account for de-trending and noise loss in flare energy and determine energy-dependent recovery probability for every flare candidate. Uses ``lightkurve`` under the cover, as well as ``pandas``, ``numpy``, ``pytest``, ``astropy`` and more.
 
 Find the documentation at altaipony.readthedocs.io_
 
@@ -71,7 +71,7 @@ Depending on the methods you use, you may also want to cite
 
   - Maschberger and Kroupa (2009) [2]_ (MMLE power law fit)
   - Wheatland (2004) [3]_ (MCMC power law fit)
-  - Aigrain et al. (2016) [4]_ and their softwar [5]_ (K2SC de-trending)
+  - Aigrain et al. (2016) [4]_ and their software [5]_ (K2SC de-trending -- DEPRECATED)
   - Davenport et al. (2014) [6_] or Mendoza et al. (2022) [7_] (injection-recovery analysis)
 
 
