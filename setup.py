@@ -8,7 +8,7 @@ setuptools.setup(
     version="2.1.0",
     author="Ekaterina Ilin",
     author_email="eilin@aip.de",
-    description="Flare science in Kepler, K2 and TESS light curves",
+    description="Flare science in Kepler and TESS light curves",
     long_description=long_description,
     long_description_content_type="text/plain",
     url="https://github.com/ekaterinailin/AltaiPony",
