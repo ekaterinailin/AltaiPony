@@ -5,7 +5,7 @@ with open("README.rst", "r") as fh:
 
 setuptools.setup(
     name="altaipony",
-    version="2.1.0",
+    version="2.1.1",
     author="Ekaterina Ilin",
     author_email="eilin@aip.de",
     description="Flare science in Kepler and TESS light curves",
