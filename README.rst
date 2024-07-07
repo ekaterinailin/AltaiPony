@@ -101,4 +101,4 @@ Depending on the methods you use, you may also want to cite
 .. _notebook: https://github.com/ekaterinailin/AltaiPony/blob/master/notebooks/Getting_Started.ipynb
 .. _docs: https://altaipony.readthedocs.io/en/latest/
 .. _Github: https://github.com/ekaterinailin/AltaiPony/issues/new
-.. _email: eilin@aip.de
+.. _email: ilin@astron.nl
