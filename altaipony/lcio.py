@@ -158,6 +158,7 @@ def _handle_missions(flcfilelist, mission, flux_type,
         #lc = flcfile.get_lightcurve(flux_type)
 
         flc = _convert_LC_to_FLC(lc, origin=origin)
+        flc.meta["mission"] = mission.lower()
         return flc
 
     elif len(flcfilelist)>1:
@@ -168,6 +169,7 @@ def _handle_missions(flcfilelist, mission, flux_type,
         for flcfile in flcfiles:
          #   lc = flcfile.get_lightcurve(flux_type)
             flc = _convert_LC_to_FLC(flcfile, origin=origin)
+            flc.meta["mission"] = mission.lower()
             lclist.append(flc)
         return lclist    
 

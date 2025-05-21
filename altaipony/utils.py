@@ -1,5 +1,7 @@
 import copy
 
+from scipy.interpolate import interp1d
+import os
 import pandas as pd
 import numpy as np
 			
@@ -252,3 +254,48 @@ def generate_random_power_law_distribution(a, b, g, size=1, seed=None):
 
 
 
+
+
+def get_response_curve(mission=None, custom_path=None, base_dir="static"):
+    """
+    Load and interpolate a response curve either from a built-in mission or a user-specified file.
+
+    Returns
+    -------
+    wav : array
+        Wavelength grid (Angstroms)
+    resp : array
+        Instrumental response at each wavelength
+    """
+    if custom_path:
+        path = custom_path
+    else:
+        name_map = {
+            "kepler": "kepler_resp.csv",
+            "tess": "tess-response-function.csv"
+        }
+        if mission is None or mission.lower() not in name_map:
+            raise ValueError("Unknown mission or no mission provided.")
+
+        base_path = os.path.join(os.path.dirname(__file__), base_dir)
+        path = os.path.join(base_path, name_map[mission.lower()])
+
+    df = pd.read_csv(path)
+    
+    
+    required = {"lambda", "resp"}
+    missing = required - set(df.columns)
+    if missing:
+        raise ValueError(
+            f"Invalid response file format at {path}. "
+            f"Missing column(s): {', '.join(missing)}. "
+            f"Expected columns: ['lambda', 'resp']"
+            )
+
+    
+    wav_raw = df["lambda"].values
+    resp_raw = df["resp"].values
+    wav = np.linspace(wav_raw.min(), wav_raw.max(), 1000)
+    resp = interp1d(wav_raw, resp_raw, kind="cubic", fill_value=0, bounds_error=False)(wav)
+
+    return wav, resp

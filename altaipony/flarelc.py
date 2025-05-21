@@ -5,8 +5,11 @@ import copy
 import logging
 import progressbar
 import datetime
+import warnings
 
 
+from scipy.interpolate import interp1d
+from .flares import flare_factor
 
 from lightkurve import KeplerLightCurve, TessLightCurve
 from lightkurve.utils import KeplerQualityFlags
@@ -23,6 +26,7 @@ from .fakeflares import (merge_fake_and_recovered_events,
                          )
 from .injrecanalysis import wrap_characterization_of_flares, _heatmap
 from .utils import split_gaps
+from .utils import get_response_curve
 
 import time
 LOG = logging.getLogger(__name__)
@@ -408,6 +412,77 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
             raise ValueError(err_str)
 
 
+            
+            
+    def get_energies(self, teff, radius, resp=None, wav=None, mission=None, response_path=None, path=None):
+        
+        """
+        Compute and add bolometric flare energies to the flare table.
+
+        Parameters
+        ----------
+        teff : float
+            Effective temperature of the star [K]
+        radius : float
+            Stellar radius [R_sun]
+        resp : array-like, optional
+            Instrument response curve (same length as wav)
+        wav : array-like, optional
+            Wavelengths corresponding to resp [Angstrom]
+        mission : str, optional
+            Instrument name: 'kepler' or 'tess'
+        response_path : str, optional
+            Path to CSV file with 'lambda' and 'resp' columns
+        path : str, optional
+            Alias for response_path
+
+        Raises
+        ------
+        ValueError
+            If no flares are found, input arrays mismatch, or mission is invalid.
+
+        Returns
+        -------
+        FlareLightCurve
+            The light curve object with 'bolometric_energy_erg' column added.
+        """
+
+        if self.flares.empty:
+            raise ValueError("No flares found. Please run find_flares() before computing energies.")
+
+
+        # Support 'path=' as alias for 'response_path'
+        if path and not response_path:
+            response_path = path
+
+        # Check if both direct arrays and indirect loading are passed
+        if (wav is not None or resp is not None) and (mission or response_path):
+            warnings.warn("Ignoring mission/path because 'wav' and 'resp' were provided directly.")
+
+        # Validate custom response arrays
+        if wav is not None and resp is not None:
+            if len(wav) != len(resp):
+                raise ValueError("wav and resp must have the same length.")
+            if len(wav) < 10:
+                raise ValueError("wav and resp must contain at least ~10 points.")
+        else:
+            # Load from mission or file path
+            mission = mission or self.meta.get("mission", "").lower()
+            wav, resp = get_response_curve(mission=mission, custom_path=response_path)
+
+        # Compute and apply flare factor
+        ff = flare_factor(teff, radius, wav, resp).value
+        self.flares["bolometric_energy_erg"] = self.flares["ed_rec"] * ff
+
+        return self
+
+
+        
+            
+            
+            
+            
+            
     def find_flares(self, minsep=3, fake=False, **kwargs):
 
         '''
@@ -451,6 +526,7 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
             lc = find_iterative_median(lc)
             #find flares
             lc = find_flares(lc, minsep=minsep, **kwargs)
+            
 
         return lc
 
