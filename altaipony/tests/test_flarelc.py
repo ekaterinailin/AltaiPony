@@ -5,7 +5,7 @@ import pytest
 import os
 import warnings
 
-
+from altaipony.utils import get_response_curve
 from ..flarelc import FlareLightCurve
 from ..altai import find_iterative_median
 
@@ -351,7 +351,90 @@ def test_find_flares():
     assert flc.flares['tstop'][0] == pytest.approx(0.395833, rel=1e-4)
     assert flc.flares['total_n_valid_data_points'][0] == 1000
     assert flc.flares['ampl_rec'][0] == pytest.approx(1, rel=1e-3)
+
     
+def test_get_response_curve(tmp_path):
+    """Test all expected errors from get_response_curve()."""
+
+    #Unknown mission should raise ValueError
+    with pytest.raises(ValueError, match="Unknown mission"):
+        get_response_curve(mission="invalidmission")
+
+    #bad custom path
+    with pytest.raises(FileNotFoundError):
+        get_response_curve(custom_path=tmp_path / "does_not_exist.csv")
+
+    #invalid format in CSV
+    # Create a CSV file with bad headers
+    bad_csv = tmp_path / "bad_response.csv"
+    df = pd.DataFrame({"bad": [1, 2, 3], "wrong": [0.1, 0.2, 0.3]})
+    df.to_csv(bad_csv, index=False)
+
+    with pytest.raises(ValueError, match="Invalid response file format"):
+        get_response_curve(custom_path=bad_csv)
+    
+    
+
+def test_get_energies():
+    """Test that get_energies works and raises correct errors/warnings."""
+
+    import warnings
+
+    #no flares should raise ValueError
+    flc = mock_flc(detrended=True)
+    with pytest.raises(ValueError, match="No flares found"):
+        flc.get_energies(teff=5000, radius=0.9)
+
+    #flare light curve
+    flc = mock_flc(detrended=True)
+    flc = flc.find_flares()
+    ncols_before = flc.flares.shape[1]
+
+    #mismatched wav/resp lengths should raise ValueError
+    wav = np.array([1, 2, 3])
+    resp = np.array([1, 2])  # mismatch
+    with pytest.raises(ValueError, match="must have the same length"):
+        flc.get_energies(teff=5000, radius=0.9, wav=wav, resp=resp)
+
+    #too few wav/resp points should raise ValueError
+    wav = np.array([1, 2, 3])
+    resp = np.array([1, 2, 3])
+    with pytest.raises(ValueError, match="contain at least"):
+        flc.get_energies(teff=5000, radius=0.9, wav=wav, resp=resp)
+
+    #valid custom input should work
+    wav = np.linspace(300, 900, 100)
+    resp = np.ones(100)
+    flc = flc.get_energies(teff=5000, radius=0.9, wav=wav, resp=resp)
+    assert "bolometric_energy_erg" in flc.flares.columns
+    assert flc.flares.shape[1] == ncols_before + 1  #column count increase
+    assert flc.flares["bolometric_energy_erg"].notnull().all()
+    assert (flc.flares["bolometric_energy_erg"] > 0).all()
+    
+    # Invalid teff: string instead of float
+    with pytest.raises(ValueError, match="hot is not a valid unit"):
+        flc.get_energies(teff="hot", radius=0.9, wav=wav, resp=resp)
+    with pytest.raises(ValueError, match="big is not a valid unit"):
+        flc.get_energies(teff=5000, radius="big", wav=wav, resp=resp)
+
+    # Invalid radius: None instead of float
+    with pytest.raises(TypeError):
+        flc.get_energies(teff=5000, radius=None, wav=wav, resp=resp)
+    with pytest.raises(TypeError):
+        flc.get_energies(teff=None, radius=0.9, wav=wav, resp=resp)
+
+    #warn if both direct arrays and mission/path provided
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        flc.get_energies(teff=5000, radius=0.9, wav=wav, resp=resp, mission="kepler")
+        assert any("Ignoring mission/path" in str(warn.message) for warn in w)
+
+    #empty wav/resp arrays should raise ValueError
+    wav = np.array([])
+    resp = np.array([])
+    with pytest.raises(ValueError, match="contain at least"):
+        flc.get_energies(teff=5000, radius=0.9, wav=wav, resp=resp)
+
 
 def test_inject_fake_flares():
     flc = mock_flc(detrended=True)
