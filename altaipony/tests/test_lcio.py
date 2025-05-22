@@ -8,8 +8,8 @@ from . import pathkepler, pathtess
 
 
 @pytest.mark.parametrize("path,mode,ID,mission,campaign,quarter,sector",
-                         [(pathkepler,"LC", 10002792, "Kepler", None, 2, None ),
-                          (pathtess,"LC", 358108509, "TESS", None, None, 1)
+                         [(pathkepler,"LC", 10002792, "kepler", None, 2, None ),
+                          (pathtess,"LC", 358108509, "tess", None, None, 1)
                           ])
 
 def test_from_path(path, mode, ID, mission, campaign, quarter, sector):
@@ -38,7 +38,7 @@ def test_from_path(path, mode, ID, mission, campaign, quarter, sector):
     
     
 def test__from_path_AltaiPony():
-    flc = from_path("altaipony/examples/kplr010002792-2010174085026_llc.fits","LC", "Kepler")
+    flc = from_path("altaipony/examples/kplr010002792-2010174085026_llc.fits","LC", "kepler")
     path = "altaipony/examples/pony010002792-2010174085026_llc_test_from_path_AltaiPony.fits"
     #flc = from_path(pathkepler, mode="LC", mission="Kepler")
     flc.to_fits(path, overwrite=True)
@@ -47,7 +47,7 @@ def test__from_path_AltaiPony():
     assert rflc.quarter == flc.quarter
     assert rflc.ra == flc.ra
     assert rflc.dec == flc.dec
-    assert rflc.mission == "Kepler"
+    assert rflc.mission == "kepler"
     kws = ['time', 'flux', 'flux_err', 'centroid_col',
            'centroid_row', 'quality', 'cadenceno',
            'detrended_flux', 'detrended_flux_err',]
@@ -60,12 +60,12 @@ def test__from_path_AltaiPony():
     
 
 @pytest.mark.parametrize("ID,mission,c,mode,cadence,sector,campaign,quarter,lflc",
-                         [("TIC 395130640","TESS", 11,"LC", "short", 11, None, None,1 ),
-                          ("KIC 9726699", "Kepler", 6, "LC", "long", None, None, 6,1),
-                          ("KIC 100004076", "Kepler", 14, "LC", "short", None, None, 14,3),
-                          ("TIC 395130640","TESS", None,"LC", "short", 11, None, None,2),
-                          ("KIC 9726699", "Kepler", None, "LC", "long", None, None, 0,15),
-                          ("KIC 100004076", "Kepler", None, "LC", "short", None, None, 14,3)
+                         [("TIC 395130640","tess", 11,"LC", "short", 11, None, None,1 ),
+                          ("KIC 9726699", "kepler", 6, "LC", "long", None, None, 6,1),
+                          ("KIC 100004076", "kepler", 14, "LC", "short", None, None, 14,3),
+                          ("TIC 395130640","tess", None,"LC", "short", 11, None, None,2),
+                          ("KIC 9726699", "kepler", None, "LC", "long", None, None, 0,15),
+                          ("KIC 100004076", "kepler", None, "LC", "short", None, None, 14,3)
                           ])
 def test_from_mast(ID, mission, c, mode, cadence, sector, campaign, quarter, lflc):
     flc = from_mast(ID, mission, c, mode=mode, cadence=cadence)
