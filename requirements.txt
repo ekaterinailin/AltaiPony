@@ -9,6 +9,7 @@ corner
 progressbar2>=3.51.4
 gatspy
 seaborn
+k2sc
 
 
 
