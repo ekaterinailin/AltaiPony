@@ -467,7 +467,7 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
                 raise ValueError("wav and resp must contain at least ~10 points.")
         else:
             # Load from mission or file path
-            mission = mission or self.meta.get("mission", "").lower()
+            mission = mission or self.meta.get("mission", "")
             wav, resp = get_response_curve(mission=mission, custom_path=response_path)
 
         # Compute and apply flare factor
