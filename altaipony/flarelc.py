@@ -729,7 +729,7 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
                          LOG.info("Warning: Saturation is given as boolean flag. \n Choose return_level=False.")
                          return flc.get_saturation(factor=factor, return_level=False)
                     
-                 elif (isinstance(flc.saturation[0], np.float_) | isinstance(flc.saturation[0], np.float32)) :
+                 elif (isinstance(flc.saturation[0], np.float64) | isinstance(flc.saturation[0], np.float32)) :
                      if return_level == False:
                         flc.flares[colname] = flc.flares.apply(lambda x: (flc.saturation[x.istart: x.istop] > factor).any(),
                                                                axis=1)
