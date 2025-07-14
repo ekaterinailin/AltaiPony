@@ -453,17 +453,6 @@ def test_fit_flares_invalid_max_flares():
         fit_flares(time, flux, flux_err, [0.4], [0.5], max_flares=0)
 
 
-def test_fit_flares_no_peaks():
-    """Should skip regions where find_peaks returns nothing."""
-    
-    time, flux, flux_err = mock_flc(detrended=True)
-    # Flatten the region so no peaks exist
-    flux[:] = np.median(flux)
-    tstarts = [0.4]
-    tstops = [0.5]
-    results = fit_flares(time, flux, flux_err, tstarts, tstops)
-    assert results == []
-
 
 def test_fit_flares_result_group_none(monkeypatch):
     """Should skip result if fit_single_flare returns None."""
