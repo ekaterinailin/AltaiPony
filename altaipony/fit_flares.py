@@ -461,7 +461,7 @@ def group_peaks(tstarts, tstops, buffer=0.05):
 
 
 def fit_flares(time, flux, flux_err, tstarts, tstops,
-               buffer=0.05, max_flares=3, method="curve_fit", plot=False, debug_plot=False):
+               buffer=0.05, max_flares=3, method="emcee", delta_bic=0.0, plot=False, debug_plot=False):
     """
     Fit all detected flares in a light curve, including groups and individual members.
 
@@ -515,15 +515,19 @@ def fit_flares(time, flux, flux_err, tstarts, tstops,
     tstops = np.asarray(tstops)
     groups = group_peaks(tstarts, tstops, buffer=buffer)
     group_id = 1
-
+    plot_row_index = 0
+    ids = 0
+    
     for group in groups:
+        
         group_t0 = tstarts[group[0]] - buffer
         group_t1 = tstops[group[-1]] + buffer
         n_group = len(group)
-        print(f"\n Fitting region from {group_t0:.5f} to {group_t1:.5f} "
+        print(f"\n Fitting region from {group_t0:.5f} to {group_t1:.5f}; Region [{ids}]"
               f"(max_flares = {max_flares * n_group})")
         t_win, f_win, fe_win = extract_lc(time, flux, flux_err, group_t0, group_t1)
-
+        ids += 1
+        
         # Collect peaks + durations
         region_peaks, region_durations = [], []
         for idx in group:
@@ -596,7 +600,7 @@ def fit_flares(time, flux, flux_err, tstarts, tstops,
             tstarts[group], tstops[group],
             method=method,
             max_flares=max_flares * len(group),
-            debug_plot=debug_plot
+            delta_bic=delta_bic, debug_plot=debug_plot
         )
 
         if result_group is None:
@@ -617,7 +621,21 @@ def fit_flares(time, flux, flux_err, tstarts, tstops,
         results.append(result_group)
 
         if plot:
-            plot_flare_fit(t_win, f_win, result_group["model"], peaks, result_group["params"])
+            start_idx = plot_row_index
+            end_idx = plot_row_index + result_group["n_flares"] - 1
+        
+            if result_group["n_flares"] > 1:
+                title = f"Flare Fit – {result_group['fit_type']} (index = {start_idx}–{end_idx})"
+            else:
+                title = f"Flare Fit – {result_group['fit_type']} (index = {start_idx})"
+        
+            plot_flare_fit(t_win, f_win, result_group["model"], peaks, result_group["params"], title=title)
+        
+            # increment for the next result
+            plot_row_index += result_group["n_flares"]
+
+
+        
 
         # Add member-level results
         if len(group) > 1 or result_group["n_flares"] > 1:
@@ -645,8 +663,8 @@ def fit_flares(time, flux, flux_err, tstarts, tstops,
                 }
                 results.append(result_member)
 
-                if plot:
-                    plot_flare_fit(t_win, f_win, model, [tp], result_member)
+                #if plot:
+                    #plot_flare_fit(t_win, f_win, model, [tp], result_member)
 
             group_id += 1
 
@@ -655,8 +673,8 @@ def fit_flares(time, flux, flux_err, tstarts, tstops,
 
 def fit_single_flare(time, flux, flux_err,
                      flare_guess_all, bounds_lower_all, bounds_upper_all,
-                     tstarts, tstops,
-                     method="curve_fit", max_flares=3,
+                     tstarts, tstops, delta_bic=0.0,
+                     method="emcee", max_flares=3,
                      fixed_baseline=None, debug_plot=False):
     """
     Fit a flare or flare group using a baseline + multi-flare model.
@@ -741,7 +759,7 @@ def fit_single_flare(time, flux, flux_err,
                     plot_flare_fit(time, flux, model, t_peaks, full_params,
                                    title=f"Trial Fit: n = {n} flares, BIC = {score:.1f}")
 
-                if score < best_score:
+                if (best_score - score) > delta_bic:
                     best_result = {
                         "params": full_params,
                         "model": model,
@@ -802,7 +820,7 @@ def fit_single_flare(time, flux, flux_err,
                     plot_flare_fit(time, flux, model, t_peaks, full_params,
                                    title=f"Trial Fit: n = {n} flares, BIC = {score:.1f}")
 
-                if score < best_score:
+                if (best_score - score) > delta_bic:
                     best_result = {
                         "params": full_params,
                         "model": model,
@@ -918,8 +936,7 @@ def make_flare_table(results, include_group_rows=False):
                     "fwhm": "", "fwhm_err": "",
                     "amplitude": "", "amplitude_err": "",
                     "ed_rec": "", "fit_type": "group",
-                    "group_index": group_index,
-                    "n_flares": res.get("n_flares", 1),
+                    "group_index": group_index
                 })
 
             for i in range(res.get("n_flares", 0)):
@@ -945,7 +962,7 @@ def make_flare_table(results, include_group_rows=False):
                     "fwhm": fwhm, "fwhm_err": fwhm_err,
                     "amplitude": amp, "amplitude_err": amp_err,
                     "ed_rec": ed_rec, "fit_type": "group_member",
-                    "group_index": group_index, "n_flares": 1
+                    "group_index": group_index
                 })
 
         elif fit_type == "group_member":
@@ -980,8 +997,7 @@ def make_flare_table(results, include_group_rows=False):
                 "fwhm": fwhm, "fwhm_err": fwhm_err,
                 "amplitude": amp, "amplitude_err": amp_err,
                 "ed_rec": ed_rec, "fit_type": fit_type,
-                "group_index": group_index,
-                "n_flares": res.get("n_flares", 1)
+                "group_index": group_index
             })
 
     return pd.DataFrame(rows)
@@ -990,62 +1006,97 @@ def make_flare_table(results, include_group_rows=False):
 
 def plot_flare_fit(time, flux, model, t_peaks, params, residuals=True, title=None):
     """
-    Plot the flare fit with optional residuals.
+    Plot flare fit with all components + residuals.
 
-    Parameters
-    ----------
-    time : np.ndarray
-        Time array.
-    flux : np.ndarray
-        Observed flux.
-    model : np.ndarray
-        Fitted model flux.
-    t_peaks : list of float
-        Peak times for annotation.
-    params : dict or list
-        Fitted parameters. Can be dict with 'params' or a flat list.
-    residuals : bool
-        Whether to show residuals subplot.
-    title : str or None
-        Optional plot title.
+    Shows:
+    - Combined fit (model)
+    - Individual flare components (only if >1 flare)
+    - Baseline
+    - Residuals in a shared x-axis subplot
     """
     if isinstance(params, dict):
         params = params["params"]
 
     baseline = build_baseline(time, params[:5])
+    flare_params = params[5:]
+    n_flares = len(flare_params) // 3
     residual = flux - model
 
-    plt.figure(figsize=(10, 5))
+    fig, (ax1, ax2) = plt.subplots(
+        2, 1, sharex=True, figsize=(10, 5), height_ratios=[3, 1]
+    )
 
-    # Top: flux + model
-    plt.subplot(211)
-    plt.xlim(time[0], time[-1])
-    plt.plot(time, flux, label="Flux [e⁻/s]", lw=1)
-    plt.plot(time, model, label="Model", lw=2, linestyle="--")
-    plt.plot(time, baseline, label="Baseline", lw=1.5, linestyle="dotted", color="lime")
-    for tp in t_peaks:
-        plt.axvline(tp, color="r", linestyle=":", lw=0.8)
-    plt.xlabel("Time [days]")
-    plt.ylabel("Flux [e⁻/s]")
-    plt.legend()
-    if title:
-        plt.title(title)
-    else:
-        plt.title("Flare Fit")
+    # --- Top: Flux, model, baseline, flare components ---
+    ax1.plot(time, flux, label="Flux", lw=1)
+    ax1.plot(time, model, label="Model", lw=2, linestyle="--")
+    ax1.plot(time, baseline, label="Baseline", lw=1.5, linestyle="dotted", color="lime")
 
-    # Bottom: residuals
+    if n_flares > 1:
+        for i in range(n_flares):
+            tp = flare_params[3*i]
+            fwhm = flare_params[3*i + 1]
+            amp = flare_params[3*i + 2]
+            flare = flare_model_davenport2014(time, tp, fwhm, amp)
+            ax1.plot(time, baseline + flare, linestyle="--", alpha=0.5, label=f"Flare {i+1}")
+
+
+    ax1.set_ylabel("Flux [e⁻/s]")
+    ax1.legend(fontsize="small")
+    ax1.set_title(title or "Flare Fit")
+    ax1.set_xlim(time.min(), time.max())
+
+    # --- Bottom: Residuals ---
     if residuals:
-        plt.subplot(212)
-        plt.xlim(time[0], time[-1])
-        plt.plot(time, residual, label="Residual", lw=1)
-        plt.axhline(0, color="gray", linestyle="--")
-        plt.xlabel("Time [days]")
-        plt.ylabel("Residual")
-        plt.legend()
+        ax2.plot(time, residual, label="Residual", color="steelblue")
+        ax2.axhline(0, color="gray", linestyle="--")
+        ax2.set_xlabel("Time [days]")
+        ax2.set_ylabel("Residual")
+        ax2.set_xlim(time.min(), time.max())
+        ax2.legend(fontsize="small")
 
     plt.tight_layout()
     plt.show()
 
+    
+    
+def plot_corner(sampler, param_names=None, truths=None, **kwargs):
+    """
+    Plot corner plot from an emcee sampler.
+
+    Parameters
+    ----------
+    sampler : emcee.EnsembleSampler or ndarray
+        Either the full sampler object or sampler.get_chain(flat=True) output.
+    param_names : list of str
+        Labels for each parameter axis.
+    truths : list or array, optional
+        True values to overplot as reference lines.
+    kwargs : dict
+        Additional keyword arguments for corner.corner().
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+        The corner plot figure.
+    """
+    if hasattr(sampler, "get_chain"):
+        samples = sampler.get_chain(flat=True)
+    else:
+        samples = sampler
+
+    fig = corner.corner(
+        samples,
+        labels=param_names,
+        truths=truths,
+        show_titles=True,
+        title_fmt=".2f",
+        **kwargs
+    )
+    plt.close(fig)
+    
+    return fig
+
+    
     
 def plot_all_fits(time, flux, results):
     """

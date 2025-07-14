@@ -10,6 +10,9 @@ import warnings
 
 from scipy.interpolate import interp1d
 from .flares import flare_factor
+from .fit_flares import fit_flares as fit_flares_func
+from .fit_flares import make_flare_table
+from .fit_flares import plot_corner
 
 from lightkurve import KeplerLightCurve, TessLightCurve
 from lightkurve.utils import KeplerQualityFlags
@@ -28,6 +31,7 @@ from .injrecanalysis import wrap_characterization_of_flares, _heatmap
 from .utils import split_gaps
 from .utils import get_response_curve
 
+from IPython.display import display
 import time
 LOG = logging.getLogger(__name__)
 
@@ -1036,6 +1040,114 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
         elif self.mission in ["TESS"]:
             self.__class__ = TessLightCurve
             self.to_fits(*args, cadenceno=self.cadenceno, **kwargs)
+
+            
+    def fit_flares(self, method="emcee", buffer=0.05, max_flares=3, delta_bic=0.0, plot=True, debug_plot=False, **kwargs):
+        """
+        Fit flares using a polynomial baseline + analytic flare model (Davenport et al. 2014).
+
+        This method automatically uses:
+        - time
+        - flux and flux_err
+        - 'tstart' and 'tstop' as fitting regions
+
+        Parameters
+        ----------
+        method : str
+            One of "curve_fit" or "emcee" (default: "curve_fit").
+        buffer : float
+            Time buffer in days added before/after each flare region (default: 0.05).
+        max_flares : int
+            Maximum number of flare components to try per region (default: 3).
+        plot : bool
+            Whether to show plots for each best-fit flare region (default: True).
+        debug_plot : bool
+            Show all intermediate trial models (useful for debugging; default: False).
+        **kwargs : dict
+            Additional keyword arguments passed to the fitting backend.
+
+        Returns
+        -------
+        results : list
+            A list of fitted model results.
+        """
+        results = fit_flares_func(
+            time=self.time.value,
+            flux=self.flux.value,
+            flux_err=self.flux_err.value,
+            tstarts=self.flares["tstart"].values,
+            tstops=self.flares["tstop"].values,
+            method=method,
+            buffer=buffer,
+            max_flares=max_flares,
+            plot=plot,
+            debug_plot=debug_plot,
+            **kwargs
+        )
+        self._flare_fit_results = results
+        return results
+
+
+    def flare_table(self, results, include_group_rows=False):
+        """
+        Build a summary table of fitted flare parameters.
+
+        This method wraps around `make_flare_table()` and is intended to be called
+        after running `flcd.fit_flares()`.
+
+        Parameters
+        ----------
+        results : list
+            Output from `fit_flares()`, containing fitted flare results.
+        include_group_rows : bool
+            If True, include rows for group-level fits in addition to individual flare components.
+    
+        Returns
+        -------
+        pandas.DataFrame
+            Table with columns: t_peak, fwhm, amplitude, ed_rec, fit_type, group_index, etc.
+        """
+        
+        return make_flare_table(results, include_group_rows=include_group_rows)
+
+
+
+    def corner(self, index=0, param_names=None, **kwargs):
+        """
+        Plot corner plot aligned with the flare table row index.
+    
+        If the selected row is a group member, this function redirects to the group-level posterior.
+        """
+        if not hasattr(self, "_flare_fit_results"):
+            raise ValueError("Run `fit_flares()` first before calling `corner()`.")
+    
+        results = self._flare_fit_results
+    
+        if index >= len(results):
+            raise IndexError(f"Flare table has only {len(results)} entries, but index {index} was requested.")
+    
+        res = results[index]
+    
+        # Redirect to group fit if this is a group_member
+        if res["fit_type"] == "group_member":
+            group_idx = res["group_index"]
+            group_result = next((r for r in results if r["fit_type"] == "group" and r["group_index"] == group_idx), None)
+            if group_result is None:
+                raise ValueError(f"Group fit for group_index={group_idx} not found.")
+            res = group_result
+    
+        samples = res.get("posterior_samples")
+        if samples is None:
+            raise ValueError("No posterior samples available (likely not fitted with emcee).")
+    
+        nf = res["n_flares"]
+        if param_names is None:
+            param_names = [f"c{i}" for i in range(5)] + \
+                          [f"tp{i}" for i in range(nf)] + \
+                          [f"fwhm{i}" for i in range(nf)] + \
+                          [f"amp{i}" for i in range(nf)]
+    
+        return plot_corner(samples, param_names=param_names, **kwargs)
 
 
 
