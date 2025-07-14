@@ -31,7 +31,6 @@ from .injrecanalysis import wrap_characterization_of_flares, _heatmap
 from .utils import split_gaps
 from .utils import get_response_curve
 
-from IPython.display import display
 import time
 LOG = logging.getLogger(__name__)
 
