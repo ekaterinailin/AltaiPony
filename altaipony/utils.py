@@ -271,9 +271,9 @@ def get_response_curve(mission=None, custom_path=None, base_dir="static"):
         path = custom_path
     else:
         name_map = {
-            "Kepler": "kepler_resp.csv",
-            "K2": "kepler_resp.csv",
-            "TESS": "tess-response-function.csv"
+            "kepler": "kepler_resp.csv",
+            "k2": "kepler_resp.csv",
+            "tess": "tess-response-function.csv"
         }
         if mission is None or mission.lower() not in name_map:
             raise ValueError("Unknown mission or no mission provided.")
