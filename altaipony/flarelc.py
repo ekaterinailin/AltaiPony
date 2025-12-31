@@ -176,6 +176,20 @@ class FlareLightCurve(LightCurve):
     def gaps(self, gaps):
         self.meta["gaps"] = gaps 
 
+    @property
+    def cadenceno(self) -> np.array:
+        """Cadence number for each observation."""
+        try:
+            return self["cadenceno"]
+        except KeyError:
+            # Initialize with sequential integers if not present
+            self["cadenceno"] = np.arange(len(self.time), dtype=int)
+            return self["cadenceno"]
+
+    @cadenceno.setter
+    def cadenceno(self, cadenceno):
+        self["cadenceno"] = cadenceno
+
     def _init_flare_table(self, flares=None, fake_flares=None):
 
         if flares is None:
@@ -231,7 +245,7 @@ class FlareLightCurve(LightCurve):
         self.meta['TARGETID'] = self.targetid
 
         extra_columns = {}
-        for col in ['detrended_flux', 'detrended_flux_err', 'it_med']:
+        for col in ['cadenceno', 'detrended_flux', 'detrended_flux_err', 'it_med']:
             self._add_column_if_valid(extra_columns, col)
         
         # Create FITS HDU

@@ -533,7 +533,7 @@ def measure_flare(flc, sta, sto):
     # get amplitude
     ampl_rec = np.max(flc.detrended_flux.value[sta:sto]) / flc.it_med.value[sta] - 1. 
     
-    # get cadence numberspip l
+    # get cadence numbers
     cstart = flc.cadenceno.value[sta]
     cstop = flc.cadenceno.value[sto]
     

@@ -164,7 +164,8 @@ class TestToFlareLightCurve:
         flux = np.random.normal(1.0, 0.01, 100)
         flux_err = np.full(100, 0.01)
         
-        lc = LightCurve(time=time, flux=flux, flux_err=flux_err, meta={})
+        lc = LightCurve(time=time, flux=flux, flux_err=flux_err, meta={'TIMEDEL': 0.0206833})
+        
         flc = to_flare_lightcurve(lc)
         
         assert flc.meta['qcs'] is None
@@ -267,3 +268,24 @@ class TestToFlareLightCurve:
         assert len(flc.flares) == 0
         assert len(flc.fake_flares) == 0
 
+    def test_cadenceno_retained(self):
+        """Test that cadenceno is retained from LightCurve"""
+        time = Time(np.linspace(2450000, 2450010, 100), format='jd')
+        flux = np.random.normal(1.0, 0.01, 100)
+        flux_err = np.full(100, 0.01)
+        
+        # Create LightCurve with specific cadenceno values
+        lc = LightCurve(time=time, flux=flux, flux_err=flux_err, 
+                    meta={'TARGETID': 123456, 'TIMEDEL': 0.0206833})
+        lc['cadenceno'] = np.arange(5000, 5100)  # Custom cadence numbers
+        
+        # Convert to FlareLightCurve
+        flc = to_flare_lightcurve(lc)
+        
+        # Verify cadenceno is retained
+        assert 'cadenceno' in flc.colnames
+        assert len(flc.cadenceno) == 100
+        assert np.all(flc.cadenceno == np.arange(5000, 5100))
+        
+        # Verify it's the correct data type
+        assert isinstance(flc.cadenceno, np.ndarray)
