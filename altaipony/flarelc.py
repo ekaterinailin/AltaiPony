@@ -7,6 +7,12 @@ import progressbar
 import datetime
 import warnings
 
+from astropy.io import fits
+from astropy.table import Table
+import astropy.units as u
+from astropy.utils.exceptions import AstropyWarning
+import warnings
+
 
 from scipy.interpolate import interp1d
 from .flares import flare_factor
@@ -14,11 +20,10 @@ from .fit_flares import fit_flares as fit_flares_func
 from .fit_flares import make_flare_table
 from .fit_flares import plot_corner
 
-from lightkurve import KeplerLightCurve, TessLightCurve
+from lightkurve import LightCurve
 from lightkurve.utils import KeplerQualityFlags
 
 
-from .k2scmod import k2sc_lc
 from .altai import (find_flares,
                     find_iterative_median, 
                     detrend_savgol)
@@ -42,70 +47,29 @@ FLARE_COLUMNS = ['istart', 'istop', 'cstart', 'cstop', 'tstart',
 FAKE_FLARE_COLUMNS = ['duration_d', 'amplitude', 'ed_inj', 'peak_time']
 
 
-class FlareLightCurve(KeplerLightCurve, TessLightCurve):
+class FlareLightCurve(LightCurve):
     """
-    Flare light curve class that unifies properties of ``K2SC``-de-trended and
-    Kepler's ``lightkurve.KeplerLightCurve``.
+    Flare light curve class inheriting from Lightkurve's LightCurve class.
 
-    Attributes
-    -------------
+    Attributes inherited from LightCurve:
+    -------------------------------------
     time : array-like
         Time measurements.
     flux : array-like
         Flux count for every time point.
     flux_err : array-like
         Uncertainty on each flux data point.
-    pixel_flux : multi-dimensional array
-        Flux in the target pixels from the KeplerTargetPixelFile.
-    pixel_flux_err : multi-dimensional array
-        Uncertainty on pixel_flux.
-    pipeline_mask : multi-dimensional boolean array
-        TargetPixelFile mask for aperture photometry.
-    time_format : str
-        String specifying how an instant of time is represented,
-        e.g., 'bkjd' or ‘jd'.
-    time_scale : str
-        String that specifies how the time is measured, e.g.,
-        tdb', ‘tt', ‘ut1', or 'utc'.
-    time_unit : astropy.unit
-        Astropy unit object defining unit of time.
-    centroid_col : array-like
-        Centroid column coordinates as a function of time.
-    centroid_row : array-like
-        Centroid row coordinates as a function of time.
-    quality : array-like
-        Kepler quality flags.
-    quality_bitmask : str
-        Can be 'none', 'default', 'hard' or 'hardest'.
-    channel : int
-        Channel number, where aperture is located on the CCD.
-    campaign : int
-        K2 campaign number.
-    quarter : int
-        Kepler Quarter number.
-    sector : int
-        TESS sector number
-    mission : string
-        Mission identifier, e.g., 'TESS', 'K2' or 'Kepler'.
-    cadenceno : array-like
-        Cadence number - unique identifier.
-    object : str
-        target ID.
-    ra : float
-        RA in deg.
-    dec : float
-        Declination in deg.
-    label : string
-        'EPIC xxxxxxxxx'.
     meta : dict
-        Free-form metadata associated with the LightCurve. Not populated in
-        general.
+        Metadata associated with the LightCurve. 
+
+    Attributes specific to FlareLightCurve:
+    ---------------------------------------
+    meta["qcs"] : integer
+        Quarter, Campaign, or Sector number.
     detrended_flux : array-like
         K2SC detrend flux, same units as flux.
     detrended_flux_err : array-like
         K2SC detrend flux error, same units as flux.
-    flux_trends : array-like
-        Astrophysical variability as derived by K2SC.
     gaps : list of tuples of ints
         Each tuple contains the start and end indices of observation gaps. See
         ``find_gaps``.
@@ -119,6 +83,7 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
 
 
     """
+
 
     @property
     def detrended_flux_err(self) -> np.array:
@@ -145,17 +110,6 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
     def detrended_flux(self, detrended_flux):
         self["detrended_flux"] = detrended_flux 
 
-    @property
-    def cadenceno(self):
-        try:
-            return self["cadenceno"]
-        except KeyError:
-            self["cadenceno"] = np.full_like(self.time.value, np.nan)
-            return self["cadenceno"]
-
-    @cadenceno.setter
-    def cadenceno(self, cadenceno):
-        self["cadenceno"] = cadenceno
 
     @property
     def it_med(self):
@@ -182,19 +136,6 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
         self.meta["origin"] = origin 
 
 
-
-    
-    @property
-    def saturation(self):
-        try:
-            return self.meta["saturation"]
-        except KeyError:
-            self.meta["saturation"] = []
-            return self.meta["saturation"]
-
-    @saturation.setter
-    def saturation(self, saturation):
-        self.meta["saturation"] = saturation 
 
     @property
     def flares(self) -> pd.DataFrame:
@@ -248,17 +189,168 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
         else:
             self.fake_flares = fake_flares
 
-    def _add_tpf_columns(self, pixel_flux=None, pixel_flux_err=None, pipeline_mask=None):
-
-        self.pixel_flux = pixel_flux
-        self.pixel_flux_err = pixel_flux_err
-        self.pipeline_mask = pipeline_mask
 
     def __repr__(self):
-        return('FlareLightCurve(ID: {})'.format(self.targetid))
+        mission = self.meta.get("mission", "Unknown")
+        qcs = self.meta.get("qcs", "Unknown")
+        
+        return(f'FlareLightCurve(ID: {self.targetid:<9} |' \
+            f' Mission: {mission:<6} |' \
+            f' QCS: {qcs:>3} |' \
+            f' Cadence: {self.meta.get("cadence", "Unknown"):.0f} s')
 
+    
+    def __str__(self):
+        return self.__repr__()  
+    
+    def _repr_html_(self):
+        return f"<pre>{self.__repr__()}</pre>"
 
+    def save_to_fits(self, loc=None, name=None, overwrite=True):
+        """
+        Save FlareLightCurve to a FITS file.
+        
+        Parameters
+        ----------
+        loc : str
+            Path to folder to save the FITS file. If None, current directory.
+        name : str, optional
+            Name of the FITS file. If None, default name.
+        """
+        if loc is None:
+            loc = os.getcwd()
+        if name is None:
+            name = f"flc_{self.targetid}_" \
+                f"{self.meta.get('mission','Unknown')}_" \
+                f"{self.meta.get('qcs','Unknown')}_" \
+                f"{self.meta.get('cadence','Unknown'):.0f}.fits"
+        
+        path = os.path.join(loc, name)
+        
+        # Add targetid to metadata
+        self.meta['TARGETID'] = self.targetid
 
+        extra_columns = {}
+        for col in ['detrended_flux', 'detrended_flux_err', 'it_med']:
+            self._add_column_if_valid(extra_columns, col)
+        
+        # Create FITS HDU
+        hdul = self.to_fits(flux_column_name='flux', **extra_columns)
+        
+        # Add simple metadata entries to PRIMARY header (HDU 0)
+        for key, value in self.meta.items():
+            # Only add simple types that FITS can handle
+            if isinstance(value, (str, int, float, bool, np.integer, np.floating)):
+                try:
+                    # FITS header keys must be 8 chars or less, convert to uppercase
+                    fits_key = key[:8].upper()
+                    hdul[0].header[fits_key] = value
+                except:
+                    pass
+        
+        # Write to file
+        hdul.writeto(path, overwrite=overwrite)
+        
+        return path
+
+    def _add_column_if_valid(self, extra_columns, col_name):
+        """Add column to dict if it exists and contains non-NaN data."""
+        try:
+            if col_name in self.colnames and not np.all(np.isnan(self[col_name])):
+                extra_columns[col_name] = self[col_name]
+        except (KeyError, AttributeError):
+            pass
+
+    @classmethod
+    def read_from_fits(cls, path):
+        """
+        Read a FlareLightCurve from a FITS file.
+        
+        Parameters
+        ----------
+        path : str
+            Path to the FITS file.
+        
+        Returns
+        -------
+        flc : FlareLightCurve
+            FlareLightCurve object loaded from the FITS file.
+        """
+        from astropy.io import fits
+        from astropy.table import Table
+        import astropy.units as u
+        from astropy.utils.exceptions import AstropyWarning
+        import warnings
+        
+        # Suppress UnitsWarning for non-standard FITS units
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore', category=AstropyWarning, 
+                                    message='.*did not parse as fits unit.*')
+            
+            # Read the FITS file as a table
+            table = Table.read(path, format='fits', hdu=1)
+        
+        # Normalize all column names to lowercase
+        for col in table.colnames:
+            table.rename_column(col, col.lower())
+        
+        # Extract metadata from PRIMARY header (HDU 0)
+        with fits.open(path) as hdul:
+            header = hdul[0].header
+            meta = {}
+            for key in header.keys():
+                if key:
+                    meta[key.lower()] = header[key]
+        
+        # Find and extract required columns (now all lowercase)
+        time_col = flux_col = flux_err_col = None
+        
+        for col in table.colnames:
+            if col == 'time':
+                time_col = col
+            elif col == 'flux':
+                flux_col = col
+            elif col == 'flux_err':
+                flux_err_col = col
+        
+        if time_col is None:
+            raise ValueError(f"No time column found. Available: {table.colnames}")
+        if flux_col is None:
+            raise ValueError(f"No flux column found. Available: {table.colnames}")
+        
+        # Extract time, flux, flux_err
+        time_data = table[time_col]
+        flux_data = table[flux_col]
+        flux_err_data = table[flux_err_col] if flux_err_col else None
+        
+        # Handle non-standard units
+        if hasattr(time_data, 'unit') and str(time_data.unit) == 'bkjd':
+            time_data = time_data.value * u.day
+        
+        if hasattr(flux_data, 'unit') and str(flux_data.unit) == 'electron / s':
+            flux_data = flux_data.value * (u.electron / u.s)
+        
+        if flux_err_data is not None and hasattr(flux_err_data, 'unit') and str(flux_err_data.unit) == 'electron / s':
+            flux_err_data = flux_err_data.value * (u.electron / u.s)
+        
+        # Remove these columns from table (will pass separately)
+        table.remove_column(time_col)
+        table.remove_column(flux_col)
+        if flux_err_col:
+            table.remove_column(flux_err_col)
+        
+        print(f"Remaining columns: {table.colnames}")
+        
+        # Create FlareLightCurve with explicit time, flux, flux_err
+        flc = cls(time=time_data, flux=flux_data, flux_err=flux_err_data, 
+                data=table, meta=meta)
+        
+        # Restore targetid
+        if 'targetid' in meta:
+            flc.targetid = meta['targetid']
+        
+        return flc
+    
     def find_gaps(self, maxgap=0.09, minspan=10, splits=[]):
         '''
         Find gaps in light curve and stores them in the gaps attribute.
@@ -649,7 +741,7 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
  
     def mark_flagged_flares(self, explain=False):
         """
-        Mark all flares that coincide with K2 flagged cadences.
+        Mark all flares that coincide with flagged cadences.
         Explain the flags if needed.
 
         Parameters
@@ -1031,14 +1123,6 @@ class FlareLightCurve(KeplerLightCurve, TessLightCurve):
         return flc
     
 
-    def to_fits(self, *args, **kwargs):
-        if self.mission in ["Kepler", "K2"]:
-            self.__class__ = KeplerLightCurve
-            self.to_fits(*args, cadenceno=self.cadenceno, **kwargs)
-
-        elif self.mission in ["TESS"]:
-            self.__class__ = TessLightCurve
-            self.to_fits(*args, cadenceno=self.cadenceno, **kwargs)
 
             
     def fit_flares(self, method="emcee", buffer=0.05, max_flares=3, delta_bic=0.0, plot=True, debug_plot=False, **kwargs):

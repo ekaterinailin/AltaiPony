@@ -73,26 +73,6 @@ def split_gaps(gaps, splits):
     return gaps2 
 
 
-def k2sc_quality_cuts(data):
-    """
-    Apply all the quality checks that K2SC (Aigrain et al. 2016) 
-    uses internally.
-
-    Parameters
-    ------------
-    data : KeplerLightCurve or TargetPixelFile
-
-    Return
-    --------
-    KeplerLightCurve or TargetPixelFile where ``time``, ``centroid_col``, and
-    ``centroid_row`` all have finite values.
-    """
-
-    data2 = data[np.isfinite(data.time.value) &
-                 np.isfinite(data.pos_corr1.value) &
-                 np.isfinite(data.pos_corr2.value)]
-
-    return data2
 
 
 def medsig(a):
@@ -173,7 +153,7 @@ def sigma_clip(a, max_iter=10, max_sigma=3.,
             # Okay values are finite and not outliers
             mask = mexc & mhigh & mlow
             
-            LOG.debug(f"iteration {i} at normalized median flux {med:.5f} \pm {sig:.5f}")
+            LOG.debug(f"iteration {i} at normalized median flux {med:.5f} +- {sig:.5f}")
             LOG.debug(f"upper mask size before expansion = {mhigh.shape[0]}")
        
             # Expand the mask left and right
@@ -243,7 +223,7 @@ def expand_mask(a, longdecay=1):
 
 
 def generate_random_power_law_distribution(a, b, g, size=1, seed=None):
-    """Power-law generator for pdf(x)\propto x^{g-1}
+    """Power-law generator for pdf(x) ~ x^{g-1}
     for a<=x<=b
     """
     if seed is not None:
@@ -300,3 +280,5 @@ def get_response_curve(mission=None, custom_path=None, base_dir="static"):
     resp = interp1d(wav_raw, resp_raw, kind="cubic", fill_value=0, bounds_error=False)(wav)
 
     return wav, resp
+
+
