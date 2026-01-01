@@ -10,6 +10,7 @@ import warnings
 
 from astropy.io import fits
 from astropy.table import Table
+from astropy.time import Time
 import astropy.units as u
 from astropy.utils.exceptions import AstropyWarning
         
@@ -290,7 +291,7 @@ class FlareLightCurve(LightCurve):
         flc : FlareLightCurve
             FlareLightCurve object loaded from the FITS file.
         """
-
+        
         # Suppress UnitsWarning for non-standard FITS units
         with warnings.catch_warnings():
             warnings.filterwarnings('ignore', category=AstropyWarning, 
@@ -328,14 +329,25 @@ class FlareLightCurve(LightCurve):
             raise ValueError(f"No flux column found. Available: {table.colnames}")
         
         # Extract time, flux, flux_err
-        time_data = table[time_col]
+        time_array = table[time_col]
         flux_data = table[flux_col]
         flux_err_data = table[flux_err_col] if flux_err_col else None
         
-        # Handle non-standard units
-        if hasattr(time_data, 'unit') and str(time_data.unit) == 'bkjd':
-            time_data = time_data.value * u.day
+        # Convert time to Time object with proper format
+        # Check what format/unit the time has
+        if hasattr(time_array, 'unit'):
+            time_unit_str = str(time_array.unit)
+            if time_unit_str in ['bkjd', 'd', 'day']:
+                # Time in days - convert to Time object with JD format
+                time_data = Time(time_array.value, format='jd')
+            else:
+                # Try to create Time object directly
+                time_data = Time(time_array.value, format='jd')
+        else:
+            # No unit, assume JD
+            time_data = Time(time_array, format='jd')
         
+        # Handle non-standard flux units
         if hasattr(flux_data, 'unit') and str(flux_data.unit) == 'electron / s':
             flux_data = flux_data.value * (u.electron / u.s)
         
@@ -347,8 +359,6 @@ class FlareLightCurve(LightCurve):
         table.remove_column(flux_col)
         if flux_err_col:
             table.remove_column(flux_err_col)
-        
-        print(f"Remaining columns: {table.colnames}")
         
         # Create FlareLightCurve with explicit time, flux, flux_err
         flc = cls(time=time_data, flux=flux_data, flux_err=flux_err_data, 

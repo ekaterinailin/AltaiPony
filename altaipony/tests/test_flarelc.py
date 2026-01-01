@@ -13,9 +13,10 @@ from ..altai import find_iterative_median
 
 from astropy.io import fits
 from astropy.time import Time
+from astropy.table import Table
+
 import astropy.units as u
 from lightkurve import LightCurve
-
 
 def mock_flc(origin='TPF', detrended=False, ampl=1., dur=1):
     """
@@ -693,4 +694,364 @@ class TestSaveToFits:
             # it_med should not be in columns since it's all NaN
             assert 'it_med' not in colnames
 
+
+# -------- TESTING SAVE TO FITS: END ---------
+
+
+# ------------------------------------------------------------------------------
+# TESTING READ FROM FITS
+# ------------------------------------------------------------------------------
+
+class TestReadFromFits:
+    """Test suite for FlareLightCurve.read_from_fits()"""
+    
+    @pytest.fixture
+    def mock_flc(self):
+        """Create a minimal FlareLightCurve for testing"""
+        time = Time(np.linspace(2450000, 2450010, 100), format='jd')
+        flux = np.random.normal(1.0, 0.01, 100) * (u.electron / u.s)
+        flux_err = np.full(100, 0.01) * (u.electron / u.s)
+        cadenceno = np.arange(100) + 1000
+        
+        meta = {
+            'TARGETID': 123456789,
+            'MISSION': 'Kepler',
+            'QUARTER': 5,
+            'TIMEDEL': 0.0206833,
+        }
+        
+        lc = LightCurve(time=time, flux=flux, flux_err=flux_err, 
+                        cadenceno=cadenceno, meta=meta)
+        flc = to_flare_lightcurve(lc)
+        flc['detrended_flux'] = np.random.normal(0, 0.001, 100)
+        flc['detrended_flux_err'] = flux_err.value
+        
+        return flc
+    
+    @pytest.fixture
+    def saved_fits_file(self, mock_flc, tmp_path):
+        """Save a FITS file for reading tests"""
+        path = mock_flc.save_to_fits(loc=str(tmp_path), name="test.fits")
+        return path
+    
+    # ========== Test Group A: Correct Reading ==========
+    
+    def test_returns_flarelightcurve_instance(self, saved_fits_file):
+        """Test that read returns a FlareLightCurve object"""
+        flc = FlareLightCurve.read_from_fits(saved_fits_file)
+        
+        assert isinstance(flc, FlareLightCurve)
+        assert flc.__class__ == FlareLightCurve
+    
+    def test_loads_all_required_data(self, saved_fits_file, mock_flc):
+        """Test that time, flux, and flux_err are loaded correctly"""
+        flc = FlareLightCurve.read_from_fits(saved_fits_file)
+        
+        # Check arrays exist and have correct length
+        assert len(flc.time) == len(mock_flc.time)
+        assert len(flc.flux) == len(mock_flc.flux)
+        assert len(flc.flux_err) == len(mock_flc.flux_err)
+        assert len(flc.cadenceno) == len(mock_flc.cadenceno)
+        
+        # Check values match
+        assert np.allclose(flc.time.value, mock_flc.time.value, rtol=1e-6)
+        assert np.allclose(flc.flux.value, mock_flc.flux.value, rtol=1e-6)
+        assert np.allclose(flc.flux_err.value, mock_flc.flux_err.value, rtol=1e-6)
+    
+    def test_loads_optional_columns(self, saved_fits_file):
+        """Test that optional columns are loaded"""
+        flc = FlareLightCurve.read_from_fits(saved_fits_file)
+        
+        # Check optional columns exist
+        assert 'detrended_flux' in flc.colnames
+        assert 'detrended_flux_err' in flc.colnames
+        assert 'cadenceno' in flc.colnames
+        
+        # Check they have correct length
+        assert len(flc.detrended_flux) == len(flc.time)
+        assert len(flc.cadenceno) == len(flc.time)
+    
+    def test_loads_metadata(self, saved_fits_file, mock_flc):
+        """Test that metadata is loaded correctly"""
+        flc = FlareLightCurve.read_from_fits(saved_fits_file)
+        
+        # Check metadata exists
+        assert flc.meta is not None
+        assert isinstance(flc.meta, dict)
+        
+        # Check specific metadata values
+        assert flc.meta['targetid'] == 123456789
+        assert flc.meta['mission'] == 'Kepler'
+        assert flc.meta['qcs'] == 5
+        assert np.isclose(flc.meta['cadence'], 1785.0, rtol=0.1)  # Allow some tolerance
+    
+    def test_metadata_keys_are_lowercase(self, saved_fits_file):
+        """Test that all metadata keys are converted to lowercase"""
+        flc = FlareLightCurve.read_from_fits(saved_fits_file)
+        
+        # All keys should be lowercase
+        for key in flc.meta.keys():
+            assert key.islower(), f"Key {key} is not lowercase"
+        
+        # Check specific keys exist in lowercase
+        assert 'targetid' in flc.meta
+        assert 'mission' in flc.meta
+        assert 'qcs' in flc.meta
+    
+    def test_targetid_attribute_set(self, saved_fits_file):
+        """Test that targetid attribute is set from metadata"""
+        flc = FlareLightCurve.read_from_fits(saved_fits_file)
+        
+        assert hasattr(flc, 'targetid')
+        assert flc.targetid == 123456789
+        assert flc.targetid == flc.meta['targetid']
+    
+    def test_round_trip_preservation(self, mock_flc, tmp_path):
+        """Test that save → load → save → load preserves all data"""
+        # First save
+        path1 = mock_flc.save_to_fits(loc=str(tmp_path), name="roundtrip1.fits")
+        
+        # First load
+        flc1 = FlareLightCurve.read_from_fits(path1)
+        
+        # Second save
+        path2 = flc1.save_to_fits(loc=str(tmp_path), name="roundtrip2.fits")
+        
+        # Second load
+        flc2 = FlareLightCurve.read_from_fits(path2)
+        
+        # Compare original and twice-cycled data
+        assert np.allclose(flc2.flux.value, mock_flc.flux.value, rtol=1e-6)
+        assert np.allclose(flc2.time.value, mock_flc.time.value, rtol=1e-6)
+        assert flc2.targetid == mock_flc.targetid
+        assert flc2.meta['qcs'] == mock_flc.meta['qcs']
+    
+    # ========== Test Group B: Missing Components ==========
+    
+    def test_missing_time_column_raises_error(self, tmp_path):
+        """Test that missing TIME column raises ValueError"""
+        # Create a FITS file without TIME column
+        flux_col = fits.Column(name='FLUX', format='E', array=np.ones(10))
+        hdu = fits.BinTableHDU.from_columns([flux_col])
+        hdul = fits.HDUList([fits.PrimaryHDU(), hdu])
+        
+        path = tmp_path / "no_time.fits"
+        hdul.writeto(path, overwrite=True)
+        
+        with pytest.raises(ValueError, match="No time column found"):
+            FlareLightCurve.read_from_fits(str(path))
+    
+    def test_missing_flux_column_raises_error(self, tmp_path):
+        """Test that missing FLUX column raises ValueError"""
+        # Create a FITS file without FLUX column
+        time_col = fits.Column(name='TIME', format='D', array=np.linspace(0, 10, 10))
+        hdu = fits.BinTableHDU.from_columns([time_col])
+        hdul = fits.HDUList([fits.PrimaryHDU(), hdu])
+        
+        path = tmp_path / "no_flux.fits"
+        hdul.writeto(path, overwrite=True)
+        
+        with pytest.raises(ValueError, match="No flux column found"):
+            FlareLightCurve.read_from_fits(str(path))
+    
+    def test_missing_flux_err_handled_gracefully(self, tmp_path):
+        """Test that missing FLUX_ERR is handled without error"""
+        # Create a FITS file without FLUX_ERR
+        time_col = fits.Column(name='TIME', format='D', unit='d', 
+                              array=np.linspace(2450000, 2450010, 10))
+        flux_col = fits.Column(name='FLUX', format='E', unit='electron / s',
+                              array=np.ones(10))
+        
+        hdu = fits.BinTableHDU.from_columns([time_col, flux_col])
+        hdul = fits.HDUList([fits.PrimaryHDU(), hdu])
+        
+        path = tmp_path / "no_flux_err.fits"
+        hdul.writeto(path, overwrite=True)
+        
+        # Should not raise error
+        flc = FlareLightCurve.read_from_fits(str(path))
+        
+        # flux_err should be None or filled with default values
+        assert flc is not None
+        assert len(flc.time) == 10
+    
+    def test_missing_file_raises_error(self):
+        """Test that non-existent file raises appropriate error"""
+        with pytest.raises((FileNotFoundError, OSError)):
+            FlareLightCurve.read_from_fits("/nonexistent/file.fits")
+    
+    def test_invalid_fits_file_raises_error(self, tmp_path):
+        """Test that invalid FITS file raises appropriate error"""
+        # Create a non-FITS file
+        bad_file = tmp_path / "bad.fits"
+        bad_file.write_text("This is not a FITS file")
+        
+        with pytest.raises((OSError, ValueError)):
+            FlareLightCurve.read_from_fits(str(bad_file))
+    
+    # ========== Test Group C: Unit Handling ==========
+    
+    def test_bkjd_unit_conversion(self, tmp_path):
+        """Test that bkjd units are converted to days"""
+        # Create FITS with bkjd time unit
+        time_col = fits.Column(name='TIME', format='D', unit='bkjd',
+                              array=np.linspace(2450000, 2450010, 100))
+        flux_col = fits.Column(name='FLUX', format='E', unit='electron / s',
+                              array=np.ones(100))
+        flux_err_col = fits.Column(name='FLUX_ERR', format='E', unit='electron / s',
+                                   array=np.full(100, 0.01))
+        
+        hdu = fits.BinTableHDU.from_columns([time_col, flux_col, flux_err_col])
+        primary = fits.PrimaryHDU()
+        primary.header['TARGETID'] = 123456
+        hdul = fits.HDUList([primary, hdu])
+        
+        path = tmp_path / "bkjd_units.fits"
+        hdul.writeto(path, overwrite=True)
+        
+        # Should handle bkjd units without error
+        flc = FlareLightCurve.read_from_fits(str(path))
+        
+        assert flc is not None
+        assert hasattr(flc.time, 'value')
+        assert len(flc.time) == 100
+    
+    def test_electron_per_s_unit_conversion(self, tmp_path):
+        """Test that 'electron / s' units are converted properly"""
+        # Create FITS with electron/s flux units
+        time_col = fits.Column(name='TIME', format='D', unit='d',
+                              array=np.linspace(2450000, 2450010, 100))
+        flux_col = fits.Column(name='FLUX', format='E', unit='electron / s',
+                              array=np.ones(100))
+        flux_err_col = fits.Column(name='FLUX_ERR', format='E', unit='electron / s',
+                                   array=np.full(100, 0.01))
+        
+        hdu = fits.BinTableHDU.from_columns([time_col, flux_col, flux_err_col])
+        primary = fits.PrimaryHDU()
+        primary.header['TARGETID'] = 123456
+        hdul = fits.HDUList([primary, hdu])
+        
+        path = tmp_path / "electron_units.fits"
+        hdul.writeto(path, overwrite=True)
+        
+        # Should handle electron/s units without error
+        flc = FlareLightCurve.read_from_fits(str(path))
+        
+        assert flc is not None
+        assert hasattr(flc.flux, 'unit')
+        assert len(flc.flux) == 100
+    
+    def test_standard_units_preserved(self, saved_fits_file, mock_flc):
+        """Test that standard units are preserved correctly"""
+        flc = FlareLightCurve.read_from_fits(saved_fits_file)
+        
+        # Check units exist
+        assert hasattr(flc.flux, 'unit')
+        assert hasattr(flc.flux_err, 'unit')
+        
+        # Units should match original
+        assert flc.flux.unit == mock_flc.flux.unit
+        assert flc.flux_err.unit == mock_flc.flux_err.unit
+    
+    # ========== Test Group D: Metadata Validation ==========
+    
+    def test_reads_metadata_from_primary_header(self, tmp_path):
+        """Test that metadata is read from PRIMARY HDU (HDU 0)"""
+        # Create FITS with metadata in primary header
+        time_col = fits.Column(name='TIME', format='D', unit='d',
+                              array=np.linspace(2450000, 2450010, 10))
+        flux_col = fits.Column(name='FLUX', format='E', unit='electron / s',
+                              array=np.ones(10))
+        
+        hdu = fits.BinTableHDU.from_columns([time_col, flux_col])
+        primary = fits.PrimaryHDU()
+        primary.header['TARGETID'] = 999888777
+        primary.header['MISSION'] = 'TESS'
+        primary.header['SECTOR'] = 42
+        primary.header['CADENCE'] = 120.0
+        
+        hdul = fits.HDUList([primary, hdu])
+        path = tmp_path / "with_metadata.fits"
+        hdul.writeto(path, overwrite=True)
+        
+        flc = FlareLightCurve.read_from_fits(str(path))
+        
+        # Check metadata was loaded
+        assert flc.meta['targetid'] == 999888777
+        assert flc.meta['mission'] == 'TESS'
+        assert flc.meta['sector'] == 42
+        assert flc.meta['cadence'] == 120.0
+    
+    def test_missing_targetid_handled_gracefully(self, tmp_path):
+        """Test that missing TARGETID doesn't crash but attribute may be None"""
+        # Create FITS without TARGETID
+        time_col = fits.Column(name='TIME', format='D', unit='d',
+                              array=np.linspace(2450000, 2450010, 10))
+        flux_col = fits.Column(name='FLUX', format='E', unit='electron / s',
+                              array=np.ones(10))
+        
+        hdu = fits.BinTableHDU.from_columns([time_col, flux_col])
+        hdul = fits.HDUList([fits.PrimaryHDU(), hdu])
+        
+        path = tmp_path / "no_targetid.fits"
+        hdul.writeto(path, overwrite=True)
+        
+        # Should not crash
+        flc = FlareLightCurve.read_from_fits(str(path))
+        
+        assert flc is not None
+        # targetid might be None or not set
+        assert 'targetid' not in flc.meta or flc.meta.get('targetid') is None
+    
+    def test_column_names_normalized_to_lowercase(self, tmp_path):
+        """Test that column names are normalized to lowercase"""
+        # Create FITS with UPPERCASE column names
+        time_col = fits.Column(name='TIME', format='D', unit='d',
+                              array=np.linspace(2450000, 2450010, 10))
+        flux_col = fits.Column(name='FLUX', format='E', unit='electron / s',
+                              array=np.ones(10))
+        flux_err_col = fits.Column(name='FLUX_ERR', format='E', unit='electron / s',
+                                   array=np.full(10, 0.01))
+        custom_col = fits.Column(name='CUSTOM_DATA', format='E',
+                                array=np.random.random(10))
+        
+        hdu = fits.BinTableHDU.from_columns([time_col, flux_col, flux_err_col, custom_col])
+        primary = fits.PrimaryHDU()
+        primary.header['TARGETID'] = 123456
+        hdul = fits.HDUList([primary, hdu])
+        
+        path = tmp_path / "uppercase_cols.fits"
+        hdul.writeto(path, overwrite=True)
+        
+        flc = FlareLightCurve.read_from_fits(str(path))
+        
+        # All column names should be lowercase
+        for col in flc.colnames:
+            assert col.islower(), f"Column {col} is not lowercase"
+        
+        # Specific columns should exist in lowercase
+        assert 'time' in flc.colnames
+        assert 'flux' in flc.colnames
+        assert 'flux_err' in flc.colnames
+    
+    def test_empty_metadata_handled(self, tmp_path):
+        """Test that FITS with minimal/empty metadata is handled"""
+        # Create minimal FITS
+        time_col = fits.Column(name='TIME', format='D', unit='d',
+                              array=np.linspace(2450000, 2450010, 10))
+        flux_col = fits.Column(name='FLUX', format='E', unit='electron / s',
+                              array=np.ones(10))
+        
+        hdu = fits.BinTableHDU.from_columns([time_col, flux_col])
+        hdul = fits.HDUList([fits.PrimaryHDU(), hdu])
+        
+        path = tmp_path / "minimal.fits"
+        hdul.writeto(path, overwrite=True)
+        
+        # Should read successfully
+        flc = FlareLightCurve.read_from_fits(str(path))
+        
+        assert flc is not None
+        assert isinstance(flc.meta, dict)
+        assert len(flc) == 10
 
