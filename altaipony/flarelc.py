@@ -7,8 +7,12 @@ import progressbar
 import datetime
 import warnings
 
-import warnings
 
+from astropy.io import fits
+from astropy.table import Table
+import astropy.units as u
+from astropy.utils.exceptions import AstropyWarning
+        
 
 from .flares import flare_factor
 from .fit_flares import fit_flares as fit_flares_func
@@ -286,12 +290,7 @@ class FlareLightCurve(LightCurve):
         flc : FlareLightCurve
             FlareLightCurve object loaded from the FITS file.
         """
-        from astropy.io import fits
-        from astropy.table import Table
-        import astropy.units as u
-        from astropy.utils.exceptions import AstropyWarning
-        import warnings
-        
+
         # Suppress UnitsWarning for non-standard FITS units
         with warnings.catch_warnings():
             warnings.filterwarnings('ignore', category=AstropyWarning, 
@@ -420,7 +419,7 @@ class FlareLightCurve(LightCurve):
         Parameters:
         ----------
         mode : str
-            "k2sc" or "savgol" or "custom"
+            "savgol" or "custom"
         de_niter : int
             Differential Evolution global optimizer parameter. K2SC
             default is 150, here set to 30 as a safety net to avoid
@@ -453,41 +452,7 @@ class FlareLightCurve(LightCurve):
                 new_lc.to_fits(path)
             return new_lc
         
-        elif mode == "k2sc":
-                
-            #make sure there is no detrended_flux already
-            if self.origin != 'TPF':
-                err_str = ('Only KeplerTargetPixelFile derived FlareLightCurves can be'
-                          ' passed to K2SC de-trending.')
-                LOG.exception(err_str)
-                raise ValueError(err_str)
 
-            else:
-                new_lc = copy.deepcopy(self)
-                new_lc.meta["keplerid"] = self.targetid
-
-                #K2SC MAGIC
-                new_lc.__class__ = k2sc_lc
-                try:
-                    new_lc.k2sc(de_niter=de_niter, max_sigma=max_sigma, **kwargs)
-                    new_lc["detrended_flux"] = (new_lc.corr_flux.value - new_lc.tr_time.value
-                                             + np.nanmedian(new_lc.tr_time.value))
-                    new_lc["detrended_flux_err"] = copy.copy(new_lc.flux_err) # does k2sc share their uncertainties somewhere?
-                    new_lc["flux_trends"] = new_lc.tr_time.value
-                    if new_lc.detrended_flux.shape != self.flux.value.shape:
-                        LOG.error('De-detrending messed up the flux arrays.')
-                    else:
-                        LOG.info('De-trending successfully completed.')
-
-                except np.linalg.linalg.LinAlgError as e:
-                    LOG.error(e)
-                    LOG.error('Detrending failed because probably Cholesky '
-                              'decomposition failed. Try again, you shall succeed.')
-                new_lc.__class__ = FlareLightCurve
-                if save == True:
-                    new_lc.to_fits(path)
-                return new_lc
-        
         elif mode=="custom":
             
             if func is None:
