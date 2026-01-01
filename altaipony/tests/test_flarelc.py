@@ -3,14 +3,18 @@ import pandas as pd
 import pytest
 
 import os
-import warnings
+from pathlib import Path
 
-from altaipony.utils import get_response_curve
+from ..utils import get_response_curve
 from ..flarelc import FlareLightCurve
+from ..lcio import to_flare_lightcurve
 from ..altai import find_iterative_median
 
-from .. import PACKAGEDIR
-from . import test_ids, test_paths, pathkepler, pathAltaiPony
+
+from astropy.io import fits
+from astropy.time import Time
+import astropy.units as u
+from lightkurve import LightCurve
 
 
 def mock_flc(origin='TPF', detrended=False, ampl=1., dur=1):
@@ -101,8 +105,8 @@ def test_sample_flare_recovery():
     # Custom case
     
     def func(flc):
-        flc.detrended_flux =  flc.flux/2.
-        flc.detrended_flux_err =  flc.flux_err/2.
+        flc["detrended_flux"] =  flc.flux/2.
+        flc["detrended_flux_err"] =  flc.flux_err/2.
         return flc
     
     flc = mock_flc(detrended=True)
@@ -122,8 +126,8 @@ def test_sample_flare_recovery():
     # Custom case with detrend_kwargs
     
     def func(flc, kw=0):
-        flc.detrended_flux =  flc.flux/2.
-        flc.detrended_flux_err =  flc.flux_err/2.
+        flc["detrended_flux"] =  flc.flux/2.
+        flc["detrended_flux_err"] =  flc.flux_err/2.
         a = kw + 3
         assert a ==20
         return flc
@@ -247,8 +251,8 @@ def test_detrend():
 
     # -- test a minimum function that does the job    
     def custom_detrending(flc):
-        flc.detrended_flux = flc.flux
-        flc.detrended_flux_err = flc.flux_err
+        flc["detrended_flux"] = flc.flux
+        flc["detrended_flux_err"] = flc.flux_err
         return flc    
         
     new_flc = flc.detrend(mode="custom", func=custom_detrending)
@@ -257,8 +261,8 @@ def test_detrend():
 
     # -- test a minimum function that does the job and has kwargs
     def custom_detrending(flc, kw=0):
-        flc.detrended_flux = flc.flux
-        flc.detrended_flux_err = flc.flux_err
+        flc["detrended_flux"] = flc.flux
+        flc["detrended_flux_err"] = flc.flux_err
         a = kw + 3 
         assert a == 20
         return flc    
@@ -460,4 +464,233 @@ def test_plot_recovery_probability_heatmap():
 
 
 # ------------------------------------------------------------------------------
+# TESTING save_to_fits()
+# ------------------------------------------------------------------------------
+
+#
+
+
+
+class TestSaveToFits:
+    """Test suite for FlareLightCurve.save_to_fits()"""
+    
+    @pytest.fixture
+    def mock_flc(self):
+        """Create a minimal FlareLightCurve for testing"""
+        time = Time(np.linspace(2450000, 2450010, 100), format='jd')
+        flux = np.random.normal(1.0, 0.01, 100) * (u.electron / u.s)
+        flux_err = np.full(100, 0.01) * (u.electron / u.s)
+        
+        meta = {
+            'TARGETID': 123456789,
+            'MISSION': 'Kepler',
+            'QUARTER': 5,
+            'TIMEDEL': 1765./24./3600.,  # Kepler long cadence in days
+        }
+        
+        lc = LightCurve(time=time, flux=flux, flux_err=flux_err, meta=meta)
+        flc = to_flare_lightcurve(lc)
+        flc["detrended_flux"] = np.random.normal(0, 0.001, 100)
+        flc["detrended_flux_err"] = flux_err.value
+        
+        return flc
+    
+    @pytest.fixture
+    def temp_dir(self, tmp_path):
+        """Provide a temporary directory for file operations"""
+        return tmp_path
+    
+    # ========== Test Group A: File Naming ==========
+    
+    def test_default_filename_format(self, mock_flc, temp_dir):
+        """Test that default filename follows expected pattern without bad characters"""
+        path = mock_flc.save_to_fits(loc=str(temp_dir))
+        filename = Path(path).name
+        
+        # Check pattern: flc_{targetid}_{mission}_{qcs}_{cadence}.fits
+        assert filename.startswith('flc_123456789_')
+        assert 'Kepler' in filename
+        assert filename.endswith('.fits')
+        
+        # No spaces or problematic characters
+        assert ' ' not in filename
+        assert '\t' not in filename
+        assert '\n' not in filename
+        for bad_char in ['/', '\\', ':', '*', '?', '"', '<', '>', '|']:
+            assert bad_char not in filename
+    
+    def test_custom_filename(self, mock_flc, temp_dir):
+        """Test that custom filename is respected"""
+        custom_name = "my_custom_file.fits"
+        path = mock_flc.save_to_fits(loc=str(temp_dir), name=custom_name)
+        
+        assert Path(path).name == custom_name
+    
+    def test_filename_with_missing_metadata(self, mock_flc, temp_dir):
+        """Test filename generation when metadata fields are missing"""
+        del mock_flc.meta['mission']
+        del mock_flc.meta['qcs']
+        
+        path = mock_flc.save_to_fits(loc=str(temp_dir))
+        filename = Path(path).name
+        
+        # Should use 'Unknown' for missing fields
+        assert 'Unknown' in filename
+        assert filename.endswith('.fits')
+    
+    # ========== Test Group B: File Location ==========
+    
+    def test_saves_to_specified_location(self, mock_flc, temp_dir):
+        """Test that file is saved to specified directory"""
+        path = mock_flc.save_to_fits(loc=str(temp_dir))
+        
+        assert Path(path).exists()
+        assert Path(path).parent == temp_dir
+    
+    def test_saves_to_current_directory_by_default(self, mock_flc, monkeypatch):
+        """Test that file saves to current directory when loc=None"""
+        test_dir = Path.cwd() / "test_fits_output"
+        test_dir.mkdir(exist_ok=True)
+        
+        try:
+            monkeypatch.chdir(test_dir)
+            path = mock_flc.save_to_fits()
+            
+            assert Path(path).exists()
+            assert Path(path).parent == test_dir
+        finally:
+            # Cleanup
+            if Path(path).exists():
+                Path(path).unlink()
+            test_dir.rmdir()
+    
+    def test_returns_full_path(self, mock_flc, temp_dir):
+        """Test that function returns the full path to saved file"""
+        path = mock_flc.save_to_fits(loc=str(temp_dir))
+        
+        assert isinstance(path, str)
+        assert Path(path).is_absolute()
+        assert Path(path).exists()
+    
+    # ========== Test Group C: HDU Contents ==========
+    
+    def test_hdu_structure(self, mock_flc, temp_dir):
+        """Test that FITS file has correct HDU structure"""
+        path = mock_flc.save_to_fits(loc=str(temp_dir))
+        
+        with fits.open(path) as hdul:
+            # Should have at least 2 HDUs: Primary + Table
+            assert len(hdul) >= 2
+            assert isinstance(hdul[0], fits.PrimaryHDU)
+            assert isinstance(hdul[1], fits.BinTableHDU)
+    
+    def test_metadata_in_primary_header(self, mock_flc, temp_dir):
+        """Test that metadata is written to primary HDU header"""
+        path = mock_flc.save_to_fits(loc=str(temp_dir))
+        
+        with fits.open(path) as hdul:
+            header = hdul[0].header
+            
+            # Check that metadata keys are present (uppercase, max 8 chars)
+            assert 'TARGETID' in header
+            assert header['TARGETID'] == 123456789
+            assert 'MISSION' in header
+            assert header['MISSION'] == 'Kepler'
+            assert 'QCS' in header
+            assert header['QCS'] == 5
+            assert 'CADENCE' in header
+            assert np.isclose(header['CADENCE'], 1765.0)
+    
+    def test_required_columns_in_table(self, mock_flc, temp_dir):
+        """Test that all required columns are in the table HDU"""
+        path = mock_flc.save_to_fits(loc=str(temp_dir))
+        
+        with fits.open(path) as hdul:
+            table = hdul[1].data
+            colnames = [col.lower() for col in hdul[1].columns.names]
+            
+            # Required columns
+            assert 'time' in colnames
+            assert 'flux' in colnames
+            assert 'flux_err' in colnames
+            assert 'cadenceno' in colnames
+    
+    def test_optional_columns_preserved(self, mock_flc, temp_dir):
+        """Test that optional columns are preserved when present"""
+        path = mock_flc.save_to_fits(loc=str(temp_dir))
+        
+        with fits.open(path) as hdul:
+            colnames = [col.lower() for col in hdul[1].columns.names]
+            
+            # Optional columns that were set
+            assert 'detrended_flux' in colnames
+            assert 'detrended_flux_err' in colnames
+    
+    def test_data_preservation(self, mock_flc, temp_dir):
+        """Test that data values are correctly preserved"""
+        original_flux = mock_flc.flux.value.copy()
+        original_time = mock_flc.time.value.copy()
+        
+        path = mock_flc.save_to_fits(loc=str(temp_dir))
+        
+        with fits.open(path) as hdul:
+            table = hdul[1].data
+            
+            # Data should match original (within numerical precision)
+            saved_flux = table['flux']
+            saved_time = table['time']
+            
+            assert np.allclose(saved_flux, original_flux, rtol=1e-6)
+            assert np.allclose(saved_time, original_time, rtol=1e-6)
+    
+    # ========== Test Group D: Error Handling ==========
+    
+    def test_missing_targetid_raises_error(self, temp_dir):
+        """Test that missing targetid raises appropriate error"""
+        time = Time(np.linspace(2450000, 2450010, 100), format='jd')
+        flux = np.random.normal(1.0, 0.01, 100) * (u.electron / u.s)
+        flux_err = np.full(100, 0.01) * (u.electron / u.s)
+        
+        lc = LightCurve(time=time, flux=flux, flux_err=flux_err)
+        lc.__class__ = FlareLightCurve
+        
+        # Should raise AttributeError or similar when accessing targetid
+        with pytest.raises((AttributeError, KeyError, TypeError)):
+            lc.save_to_fits(loc=str(temp_dir))
+    
+    def test_invalid_path_raises_error(self, mock_flc):
+        """Test that invalid path raises appropriate error"""
+        invalid_path = "/nonexistent/directory/that/does/not/exist"
+        
+        with pytest.raises((OSError, FileNotFoundError)):
+            mock_flc.save_to_fits(loc=invalid_path)
+    
+    def test_overwrite_behavior(self, mock_flc, temp_dir):
+        """Test that overwrite parameter works correctly"""
+        # Save once
+        path = mock_flc.save_to_fits(loc=str(temp_dir), name="test_overwrite.fits")
+        assert Path(path).exists()
+        
+        # Save again with overwrite=True (default)
+        path2 = mock_flc.save_to_fits(loc=str(temp_dir), name="test_overwrite.fits", overwrite=True)
+        assert path2 == path
+        assert Path(path2).exists()
+        
+        # Save again with overwrite=False should raise error
+        with pytest.raises(OSError):
+            mock_flc.save_to_fits(loc=str(temp_dir), name="test_overwrite.fits", overwrite=False)
+    
+    def test_nan_handling_in_optional_columns(self, mock_flc, temp_dir):
+        """Test that columns with all NaN are handled correctly"""
+        # it_med defaults to all NaN
+        assert np.all(np.isnan(mock_flc.it_med))
+        
+        # Should save without error (it_med should be excluded by _add_column_if_valid)
+        path = mock_flc.save_to_fits(loc=str(temp_dir))
+        
+        with fits.open(path) as hdul:
+            colnames = [col.lower() for col in hdul[1].columns.names]
+            # it_med should not be in columns since it's all NaN
+            assert 'it_med' not in colnames
+
 

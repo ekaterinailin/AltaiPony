@@ -289,3 +289,6 @@ class TestToFlareLightCurve:
         
         # Verify it's the correct data type
         assert isinstance(flc.cadenceno, np.ndarray)
+
+
+

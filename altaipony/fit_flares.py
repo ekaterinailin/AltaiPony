@@ -590,8 +590,7 @@ def fit_flares(time, flux, flux_err, tstarts, tstops,
         # Fit the full group
         result_group = fit_single_flare(
             t_win, f_win, fe_win,
-            flare_guess_all, bounds_lower_all, bounds_upper_all,
-            tstarts[group], tstops[group],
+            flare_guess_all, 
             max_flares=max_flares * len(group),
             delta_bic=delta_bic, debug_plot=debug_plot
         )

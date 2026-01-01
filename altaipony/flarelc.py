@@ -236,11 +236,12 @@ class FlareLightCurve(LightCurve):
         
         path = os.path.join(loc, name)
         
-        # Add targetid to metadata
+        # Add targetid and qcs to metadata
         self.meta['TARGETID'] = self.targetid
+        self.meta['QCS'] = self.meta.get('qcs', 'Unknown')
 
         extra_columns = {}
-        for col in ['cadenceno', 'detrended_flux', 'detrended_flux_err', 'it_med']:
+        for col in ['detrended_flux', 'detrended_flux_err', 'it_med']:
             self._add_column_if_valid(extra_columns, col)
         
         # Create FITS HDU

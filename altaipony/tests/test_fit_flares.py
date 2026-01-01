@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from altaipony.tests.test_flarelc import mock_flc as mock
+import matplotlib.pyplot as plt
 
 from altaipony.fit_flares import (
     combined_model,
@@ -433,7 +434,7 @@ def test_fit_flares_empty_flares():
     
     time, flux, flux_err = mock_flc(detrended=True)
     with pytest.raises(ValueError, match="No flare intervals"):
-        fit_flares(time, flux, flux_err, [], [])
+        fit_flares(time, flux, flux_err, [], [], plot=False)
 
 
 def test_fit_flares_nan_in_flux():
@@ -442,7 +443,7 @@ def test_fit_flares_nan_in_flux():
     time, flux, flux_err = mock_flc(detrended=True)
     flux[10] = np.nan
     with pytest.raises(ValueError, match="NaN or inf"):
-        fit_flares(time, flux, flux_err, [0.4], [0.5])
+        fit_flares(time, flux, flux_err, [0.4], [0.5], plot=False)
 
 
 def test_fit_flares_invalid_max_flares():
@@ -484,7 +485,7 @@ def test_fit_flares_out_of_bounds_group():
 def test_fit_single_flare_empty_input():
     """Should return None if input arrays are empty."""
     
-    result = fit_single_flare([], [], [], [], [], [], [], [], method="curve_fit")
+    result = fit_single_flare([], [], [], [], [], [], [], [])
     assert result is None
 
 
@@ -494,9 +495,8 @@ def test_fit_single_flare_mismatched_lengths():
     time = np.linspace(0, 1, 100)
     flux = np.ones(99)
     flux_err = np.ones(100)
-    result = fit_single_flare(time, flux, flux_err, flare_guess_all=[0, 0.01, 1.0],
-                              bounds_lower_all=[], bounds_upper_all=[],
-                              tstarts=[0], tstops=[1])
+    result = fit_single_flare(time, flux, flux_err, flare_guess_all=[0, 0.01, 1.0])
+
     assert result is None
 
 
@@ -508,12 +508,8 @@ def test_fit_single_flare_nan_input():
     t_peak = time[485]
     result = fit_single_flare(
         time, flux, flux_err,
-        [t_peak, 0.01, 1.0],
-        [t_peak - 0.005, 0.001, 0.5],
-        [t_peak + 0.005, 0.1, 2.0],
-        [t_peak - 0.01], [t_peak + 0.01],
-        method="curve_fit"
-    )
+        [t_peak, 0.01, 1.0])
+    
     assert result is None
 
 
@@ -526,10 +522,6 @@ def test_fit_single_flare_with_fixed_baseline():
     result = fit_single_flare(
         time, flux, flux_err,
         [t_peak, 0.01, 1.0],
-        [t_peak - 0.005, 0.001, 0.5],
-        [t_peak + 0.005, 0.1, 2.0],
-        [t_peak - 0.01], [t_peak + 0.01],
-        method="curve_fit",
         fixed_baseline=fixed_baseline
     )
     assert isinstance(result, dict)
@@ -544,30 +536,11 @@ def test_fit_single_flare_debug_plot():
     result = fit_single_flare(
         time, flux, flux_err,
         [t_peak, 0.01, 1.0],
-        [t_peak - 0.005, 0.001, 0.5],
-        [t_peak + 0.005, 0.1, 2.0],
-        [t_peak - 0.01], [t_peak + 0.01],
-        method="curve_fit",
         debug_plot=True
     )
     assert isinstance(result, dict)
+    plt.close("all")
 
-
-def test_fit_single_flare_curve_fit_exception():
-    """Should handle failure inside curve_fit and return None."""
-    
-    time, flux, flux_err = mock_flc(detrended=True)
-    t_peak = time[485]
-    # Intentionally bad bounds (upper < lower)
-    result = fit_single_flare(
-        time, flux, flux_err,
-        [t_peak, 0.01, 1.0],
-        [t_peak + 0.005, 0.01, 1.0],   # upper < lower
-        [t_peak - 0.005, 0.001, 0.5],
-        [t_peak - 0.01], [t_peak + 0.01],
-        method="curve_fit"
-    )
-    assert result is None
 
 
 def test_fit_single_flare_emcee_runs():
@@ -578,10 +551,6 @@ def test_fit_single_flare_emcee_runs():
     result = fit_single_flare(
         time, flux, flux_err,
         flare_guess_all=[t_peak, 0.01, 1.0],
-        bounds_lower_all=[t_peak - 0.005, 0.001, 0.5],
-        bounds_upper_all=[t_peak + 0.005, 0.05, 2.0],
-        tstarts=[t_peak - 0.01], tstops=[t_peak + 0.01],
-        method="emcee",
         max_flares=1
     )
     assert isinstance(result, dict)
@@ -641,7 +610,7 @@ def test_make_flare_table():
     time, flux, flux_err = mock_flc(detrended=True)
     tstarts = np.array([0.475])
     tstops = np.array([0.495])
-    results = fit_flares(time, flux, flux_err, tstarts, tstops, method="curve_fit", plot=False)
+    results = fit_flares(time, flux, flux_err, tstarts, tstops, plot=False)
 
     # Generate normal table
     table = make_flare_table(results)
@@ -687,6 +656,7 @@ def test_plot_flare_fit():
     try:
         plot_flare_fit(t_fit, result["flux"], model,
                        result.get("t_peaks", []), result.get("params", []))
+        plt.close('all')  # Close plot to avoid display during tests
     except Exception as e:
         pytest.fail(f"plot_flare_fit raised an exception: {e}")
 
@@ -699,9 +669,10 @@ def test_plot_all_fits():
 
     tstarts = np.array([0.475])
     tstops = np.array([0.495])
-    results = fit_flares(time, flux, flux_err, tstarts, tstops, method="curve_fit", plot=False)
+    results = fit_flares(time, flux, flux_err, tstarts, tstops, plot=False)
 
     try:
         plot_all_fits(time, flux, results)
+        plt.close()
     except Exception as e:
         assert False, f"plot_all_fits raised an exception: {e}"
