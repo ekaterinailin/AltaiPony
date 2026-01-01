@@ -2,11 +2,10 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from scipy.signal import find_peaks, peak_widths, medfilt, peak_prominences
-from scipy.optimize import curve_fit
+from altaipony.fakeflares import flare_model_davenport2014
+
 import emcee
 import corner
-
-from altaipony.fakeflares import flare_model_davenport2014
 
 __all__ = [
 
@@ -461,7 +460,7 @@ def group_peaks(tstarts, tstops, buffer=0.05):
 
 
 def fit_flares(time, flux, flux_err, tstarts, tstops,
-               buffer=0.05, max_flares=3, method="emcee", delta_bic=0.0, plot=False, debug_plot=False):
+               buffer=0.05, max_flares=3, delta_bic=0.0, plot=False, debug_plot=False):
     """
     Fit all detected flares in a light curve, including groups and individual members.
 
@@ -479,8 +478,6 @@ def fit_flares(time, flux, flux_err, tstarts, tstops,
         Time buffer before/after each flare or group.
     max_flares : int
         Max flares to model per group.
-    method : str
-        "curve_fit" or "emcee"
     plot : bool
         Whether to show plots.
     debug_plot : bool
@@ -506,9 +503,6 @@ def fit_flares(time, flux, flux_err, tstarts, tstops,
         
     if max_flares < 1:
         raise ValueError("max_flares must be >= 1")
-
-    if method not in {"curve_fit", "emcee"}:
-        raise ValueError("method must be 'curve_fit' or 'emcee'")
     
     results = []
     tstarts = np.asarray(tstarts)
@@ -598,7 +592,6 @@ def fit_flares(time, flux, flux_err, tstarts, tstops,
             t_win, f_win, fe_win,
             flare_guess_all, bounds_lower_all, bounds_upper_all,
             tstarts[group], tstops[group],
-            method=method,
             max_flares=max_flares * len(group),
             delta_bic=delta_bic, debug_plot=debug_plot
         )
@@ -625,9 +618,9 @@ def fit_flares(time, flux, flux_err, tstarts, tstops,
             end_idx = plot_row_index + result_group["n_flares"] - 1
         
             if result_group["n_flares"] > 1:
-                title = f"Flare Fit – {result_group['fit_type']} (index = {start_idx}–{end_idx})"
+                title = f"Flare Fit - {result_group['fit_type']} (index = {start_idx}-{end_idx})"
             else:
-                title = f"Flare Fit – {result_group['fit_type']} (index = {start_idx})"
+                title = f"Flare Fit - {result_group['fit_type']} (index = {start_idx})"
         
             plot_flare_fit(t_win, f_win, result_group["model"], peaks, result_group["params"], title=title)
         
@@ -663,8 +656,6 @@ def fit_flares(time, flux, flux_err, tstarts, tstops,
                 }
                 results.append(result_member)
 
-                #if plot:
-                    #plot_flare_fit(t_win, f_win, model, [tp], result_member)
 
             group_id += 1
 
@@ -672,9 +663,11 @@ def fit_flares(time, flux, flux_err, tstarts, tstops,
 
 
 def fit_single_flare(time, flux, flux_err,
-                     flare_guess_all, bounds_lower_all, bounds_upper_all,
-                     tstarts, tstops, delta_bic=0.0,
-                     method="emcee", max_flares=3,
+                     flare_guess_all, dtp=0.01, delta_bic=0.0,
+                     max_flares=3,n_steps=3000, nwalkers=50,
+                     discard = 500, thin=10,
+                     min_amp=0.001, max_amp_factor=2.0,
+                     fwhm_bounds=(0.001, 0.1),
                      fixed_baseline=None, debug_plot=False):
     """
     Fit a flare or flare group using a baseline + multi-flare model.
@@ -689,14 +682,24 @@ def fit_single_flare(time, flux, flux_err,
         Uncertainties.
     flare_guess_all : list of float
         Flattened initial guesses for all flares.
-    bounds_lower_all, bounds_upper_all : list of float
-        Corresponding lower/upper bounds.
-    tstarts, tstops : list of float
-        Bounds for each flare (used in priors).
-    method : str
-        "curve_fit" or "emcee".
+    dtp : float
+        Allowed deviation in t_peak from initial guess.
     max_flares : int
         Max number of flares to fit.
+    n_steps : int
+        Number of MCMC steps. Default is 3000.
+    nwalkers : int
+        Number of MCMC walkers. Default is 50.
+    discard : int
+        Number of initial MCMC steps to discard as burn-in.
+    thin : int
+        Thinning factor for MCMC chains.
+    min_amp : float
+        Minimum flare amplitude.
+    max_amp_factor : float  
+        Max amplitude factor relative to max flux.
+    fwhm_bounds : tuple of float
+        (fwhm_min, fwhm_max) bounds for flares.
     fixed_baseline : list of float, optional
         Fixed polynomial baseline if provided.
     debug_plot : bool
@@ -724,8 +727,6 @@ def fit_single_flare(time, flux, flux_err,
 
     for n in range(1, n_detected + 1):
         flare_guess = flare_guess_all[:3 * n]
-        bounds_lower = bounds_lower_all[:3 * n]
-        bounds_upper = bounds_upper_all[:3 * n]
 
         if fixed_baseline is not None:
             baseline_guess = fixed_baseline
@@ -733,113 +734,68 @@ def fit_single_flare(time, flux, flux_err,
             baseline_guess = [np.median(flux), 0, 0, 0, 0]
 
         try:
-            if method == "curve_fit":
-                if fixed_baseline is not None:
-                    def flare_only(t, *p): return combined_model(t, *(fixed_baseline + list(p)))
-                    p0 = flare_guess
-                    popt, _ = curve_fit(flare_only, time, flux, p0=p0,
-                                        bounds=(bounds_lower, bounds_upper),
-                                        sigma=flux_err, absolute_sigma=True, maxfev=10000)
-                    full_params = fixed_baseline + list(popt)
-                else:
-                    p0 = baseline_guess + flare_guess
-                    popt, _ = curve_fit(combined_model, time, flux, p0=p0,
-                                        bounds=( [-np.inf]*5 + bounds_lower, [np.inf]*5 + bounds_upper ),
-                                        sigma=flux_err, absolute_sigma=True, maxfev=10000)
-                    full_params = list(popt)
+        
+            t_bounds = []
+            for i in range(n):
+                tp = flare_guess_all[3 * i] # t_peak
+                t_bounds += [tp - dtp, tp + dtp] # give it some wiggle room
 
-                model = combined_model(time, *full_params)
-                score = model_selection(model, flux, flux_err, full_params, method="bic")
+            amp_bounds = (min_amp, max_amp_factor*np.max(flux))
 
-                if debug_plot:
-                    print(f"✓ Accepted model with n = {n}, BIC = {score:.1f}")
-    
-                t_peaks = [flare_guess_all[3*i] for i in range(n)]
-                if debug_plot:
-                    plot_flare_fit(time, flux, model, t_peaks, full_params,
-                                   title=f"Trial Fit: n = {n} flares, BIC = {score:.1f}")
+            if fixed_baseline is not None:
+                guess = flare_guess
+                ndim = len(guess)
+                pos = np.array(guess) + 1e-5 * np.random.randn(max(2 * ndim, 50), ndim)
 
-                if (best_score - score) > delta_bic:
-                    best_result = {
-                        "params": full_params,
-                        "model": model,
-                        "n_flares": n,
-                        "score": score,
-                        "t_peaks": [full_params[5 + 3*i] for i in range(n)],
-                        "fwhms":  [full_params[5 + 3*i + 1] for i in range(n)],
-                        "amplitudes": [full_params[5 + 3*i + 2] for i in range(n)]
-                    }
-                    best_score = score
-                    
+                def logpost_fixed(params, *args):
+                    return log_posterior(fixed_baseline + list(params), *args)
+
+                sampler = emcee.EnsembleSampler(len(pos), ndim, logpost_fixed,
+                                                args=(time, flux, flux_err, t_bounds, amp_bounds, fwhm_bounds))
+            else:
+                guess = baseline_guess + flare_guess
+                ndim = len(guess)
+                pos = np.array(guess) + 1e-5 * np.random.randn(max(2 * ndim, nwalkers), ndim)
+
+                sampler = emcee.EnsembleSampler(len(pos), ndim, log_posterior,
+                                                args=(time, flux, flux_err, t_bounds, amp_bounds, fwhm_bounds))
+
+            sampler.run_mcmc(pos, n_steps, progress=True)
+            samples = sampler.get_chain(discard=discard, thin=thin, flat=True)
+            best_fit = np.median(samples, axis=0)
+
+            full_params = fixed_baseline + list(best_fit) if fixed_baseline else list(best_fit)
+            model = combined_model(time, *full_params)
+            score = model_selection(model, flux, flux_err, full_params, method="bic")
+
+            if debug_plot:
+                print(f"Accepted model with n = {n}, BIC = {score:.1f}")
+
+            t_peaks = [flare_guess_all[3*i] for i in range(n)]
+            if debug_plot:  
+                plot_flare_fit(time, flux, model, t_peaks, full_params,
+                                title=f"Trial Fit: n = {n} flares, BIC = {score:.1f}")
+
+            if (best_score - score) > delta_bic:
+                best_result = {
+                    "params": full_params,
+                    "model": model,
+                    "n_flares": n,
+                    "score": score,
+                    "posterior_samples": samples,
+                    "t_peaks": [full_params[5 + 3*i] for i in range(n)],
+                    "fwhms":  [full_params[5 + 3*i + 1] for i in range(n)],
+                    "amplitudes": [full_params[5 + 3*i + 2] for i in range(n)]
+                }
+                best_score = score
+
                 if n == 1:
                     best_result["t_peak"] = full_params[5]
                     best_result["fwhm"] = full_params[6]
                     best_result["amplitude"] = full_params[7]
 
-
-            elif method == "emcee":
-                t_bounds = []
-                for i in range(n):
-                    tp = flare_guess_all[3 * i]
-                    t_bounds += [tp - 0.005, tp + 0.005]
-
-                amp_bounds = (0.001, np.max(flux))
-                fwhm_bounds = (0.001, 0.1)
-
-                if fixed_baseline is not None:
-                    guess = flare_guess
-                    ndim = len(guess)
-                    pos = np.array(guess) + 1e-5 * np.random.randn(max(2 * ndim, 50), ndim)
-
-                    def logpost_fixed(params, *args):
-                        return log_posterior(fixed_baseline + list(params), *args)
-
-                    sampler = emcee.EnsembleSampler(len(pos), ndim, logpost_fixed,
-                                                    args=(time, flux, flux_err, t_bounds, amp_bounds, fwhm_bounds))
-                else:
-                    guess = baseline_guess + flare_guess
-                    ndim = len(guess)
-                    pos = np.array(guess) + 1e-5 * np.random.randn(max(2 * ndim, 50), ndim)
-
-                    sampler = emcee.EnsembleSampler(len(pos), ndim, log_posterior,
-                                                    args=(time, flux, flux_err, t_bounds, amp_bounds, fwhm_bounds))
-
-                sampler.run_mcmc(pos, 3000, progress=True)
-                samples = sampler.get_chain(discard=500, thin=10, flat=True)
-                best_fit = np.median(samples, axis=0)
-
-                full_params = fixed_baseline + list(best_fit) if fixed_baseline else list(best_fit)
-                model = combined_model(time, *full_params)
-                score = model_selection(model, flux, flux_err, full_params, method="bic")
-
-                if debug_plot:
-                    print(f"✓ Accepted model with n = {n}, BIC = {score:.1f}")
-
-                t_peaks = [flare_guess_all[3*i] for i in range(n)]
-                if debug_plot:  
-                    plot_flare_fit(time, flux, model, t_peaks, full_params,
-                                   title=f"Trial Fit: n = {n} flares, BIC = {score:.1f}")
-
-                if (best_score - score) > delta_bic:
-                    best_result = {
-                        "params": full_params,
-                        "model": model,
-                        "n_flares": n,
-                        "score": score,
-                        "posterior_samples": samples,
-                        "t_peaks": [full_params[5 + 3*i] for i in range(n)],
-                        "fwhms":  [full_params[5 + 3*i + 1] for i in range(n)],
-                        "amplitudes": [full_params[5 + 3*i + 2] for i in range(n)]
-                    }
-                    best_score = score
-
-                    if n == 1:
-                        best_result["t_peak"] = full_params[5]
-                        best_result["fwhm"] = full_params[6]
-                        best_result["amplitude"] = full_params[7]
-
         except Exception as e:
-            print(f"{method} failed (n={n}): {e}")
+            print(f"MCMC sampling failed (n={n}): {e}")
             continue
 
     return best_result

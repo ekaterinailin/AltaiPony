@@ -7,14 +7,9 @@ import progressbar
 import datetime
 import warnings
 
-from astropy.io import fits
-from astropy.table import Table
-import astropy.units as u
-from astropy.utils.exceptions import AstropyWarning
 import warnings
 
 
-from scipy.interpolate import interp1d
 from .flares import flare_factor
 from .fit_flares import fit_flares as fit_flares_func
 from .fit_flares import make_flare_table
