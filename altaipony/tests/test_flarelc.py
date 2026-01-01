@@ -862,8 +862,12 @@ class TestReadFromFits:
         flux_col = fits.Column(name='FLUX', format='E', unit='electron / s',
                               array=np.ones(10))
         
+        # add TARGETID in primary header
+        primary = fits.PrimaryHDU()
+        primary.header['TARGETID'] = 123456
+        
         hdu = fits.BinTableHDU.from_columns([time_col, flux_col])
-        hdul = fits.HDUList([fits.PrimaryHDU(), hdu])
+        hdul = fits.HDUList([primary, hdu])
         
         path = tmp_path / "no_flux_err.fits"
         hdul.writeto(path, overwrite=True)
@@ -874,7 +878,8 @@ class TestReadFromFits:
         # flux_err should be None or filled with default values
         assert flc is not None
         assert len(flc.time) == 10
-    
+        assert np.isnan(flc.flux_err).all()
+
     def test_missing_file_raises_error(self):
         """Test that non-existent file raises appropriate error"""
         with pytest.raises((FileNotFoundError, OSError)):
@@ -915,6 +920,11 @@ class TestReadFromFits:
         assert flc is not None
         assert hasattr(flc.time, 'value')
         assert len(flc.time) == 100
+
+        # assert that the time values are in days and match original
+        expected_time = np.linspace(2450000, 2450010, 100)
+        assert np.allclose(flc.time.jd, expected_time, rtol=1e-6)
+
     
     def test_electron_per_s_unit_conversion(self, tmp_path):
         """Test that 'electron / s' units are converted properly"""
@@ -939,6 +949,8 @@ class TestReadFromFits:
         
         assert flc is not None
         assert hasattr(flc.flux, 'unit')
+        # confirm that the unit is electron / s
+        assert flc.flux.unit == u.electron / u.s
         assert len(flc.flux) == 100
     
     def test_standard_units_preserved(self, saved_fits_file, mock_flc):
@@ -981,14 +993,22 @@ class TestReadFromFits:
         assert flc.meta['mission'] == 'TESS'
         assert flc.meta['sector'] == 42
         assert flc.meta['cadence'] == 120.0
-    
-    def test_missing_targetid_handled_gracefully(self, tmp_path):
-        """Test that missing TARGETID doesn't crash but attribute may be None"""
+
+        # check with TIMEDEL
+        primary.header['TIMEDEL'] = 120.0 / 24./3600.  # in days
+        hdul = fits.HDUList([primary, hdu])
+        path = tmp_path / "with_metadata.fits"
+        hdul.writeto(path, overwrite=True)
+        flc = FlareLightCurve.read_from_fits(str(path))
+        assert flc.meta['cadence'] == 120.0
+        
+    def test_missing_targetid_raises_error(self, tmp_path):
+        """Test that missing TARGETID raises ValueError"""
         # Create FITS without TARGETID
         time_col = fits.Column(name='TIME', format='D', unit='d',
-                              array=np.linspace(2450000, 2450010, 10))
+                            array=np.linspace(2450000, 2450010, 10))
         flux_col = fits.Column(name='FLUX', format='E', unit='electron / s',
-                              array=np.ones(10))
+                            array=np.ones(10))
         
         hdu = fits.BinTableHDU.from_columns([time_col, flux_col])
         hdul = fits.HDUList([fits.PrimaryHDU(), hdu])
@@ -996,12 +1016,9 @@ class TestReadFromFits:
         path = tmp_path / "no_targetid.fits"
         hdul.writeto(path, overwrite=True)
         
-        # Should not crash
-        flc = FlareLightCurve.read_from_fits(str(path))
-        
-        assert flc is not None
-        # targetid might be None or not set
-        assert 'targetid' not in flc.meta or flc.meta.get('targetid') is None
+        # Should raise ValueError
+        with pytest.raises(ValueError, match="TARGETID not found in FITS header"):
+            FlareLightCurve.read_from_fits(str(path))
     
     def test_column_names_normalized_to_lowercase(self, tmp_path):
         """Test that column names are normalized to lowercase"""
@@ -1048,10 +1065,6 @@ class TestReadFromFits:
         path = tmp_path / "minimal.fits"
         hdul.writeto(path, overwrite=True)
         
-        # Should read successfully
-        flc = FlareLightCurve.read_from_fits(str(path))
-        
-        assert flc is not None
-        assert isinstance(flc.meta, dict)
-        assert len(flc) == 10
-
+        # Should throw ValueError due to missing TARGETID
+        with pytest.raises(ValueError, match="TARGETID not found in FITS header"):
+            FlareLightCurve.read_from_fits(str(path))

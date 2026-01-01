@@ -367,6 +367,8 @@ class FlareLightCurve(LightCurve):
         # Restore targetid
         if 'targetid' in meta:
             flc.targetid = meta['targetid']
+        else:
+            raise ValueError("TARGETID not found in FITS header.")
         
         return flc
     
