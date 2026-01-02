@@ -25,7 +25,7 @@ from lightkurve.utils import KeplerQualityFlags
 
 
 from .altai import (find_flares,
-                    find_iterative_median, 
+                    _find_iterative_median, 
                     detrend_savgol)
 from .fakeflares import (merge_fake_and_recovered_events,
                          generate_fake_flare_distribution,
@@ -205,12 +205,18 @@ class FlareLightCurve(LightCurve):
 
 
     def __repr__(self):
+        print("call")
         mission = self.meta.get("mission", "Unknown")
         qcs = self.meta.get("qcs", "Unknown")
+
+        try:
+            targetid = self.targetid
+        except (AttributeError, KeyError):
+            targetid = "Unknown"
         
-        return(f'FlareLightCurve(ID: {self.targetid:<9} |' \
+        return(f'FlareLightCurve(ID: {targetid!s:<9} |' \
             f' Mission: {mission:<6} |' \
-            f' QCS: {qcs:>3} |' \
+            f' QCS: {qcs!s:>3} |' \
             f' Cadence: {self.meta.get("cadence", "Unknown"):.0f} s')
 
     
@@ -371,6 +377,48 @@ class FlareLightCurve(LightCurve):
             raise ValueError("TARGETID not found in FITS header.")
         
         return flc
+    
+    def find_iterative_median(self, n=30, **kwargs):
+        """
+        Find the iterative median value for a continuous observation period using
+        sigma clipping to identify outliers.
+
+        Parameters
+        ----------
+        n : int, optional
+            Maximum number of iterations (currently unused, reserved for future use)
+            Default is 30.
+        **kwargs : dict
+            Keyword arguments to pass to sigma_clip
+
+        Returns
+        -------
+        self : FlareLightCurve
+            Returns self with it_med attribute updated
+            
+        Examples
+        --------
+        >>> flc.find_iterative_median()
+        >>> # Or chain methods:
+        >>> flc.find_gaps().find_iterative_median()
+        """
+        # Extract arrays from self
+        time = self.time.value
+        detrended_flux = self.detrended_flux
+        
+        # Get gaps (find them if not already computed)
+        gaps = self.gaps
+        if gaps is None:
+            self.find_gaps()
+            gaps = self.gaps
+        
+        # Call internal function
+        it_med = _find_iterative_median(detrended_flux, gaps, **kwargs)
+        
+        # Set result on self
+        self.it_med = it_med
+        
+        return self
     
     def find_gaps(self, maxgap=0.09, minspan=10, splits=[]):
         '''
@@ -605,7 +653,7 @@ class FlareLightCurve(LightCurve):
             #find continuous observing periods
             lc = lc.find_gaps()
             #find the true median value iteratively
-            lc = find_iterative_median(lc)
+            lc = lc.find_iterative_median()
             #find flares
             lc = find_flares(lc, minsep=minsep, **kwargs)
             
@@ -650,7 +698,7 @@ class FlareLightCurve(LightCurve):
             lc = lc.detrend(mode, func=func, **detrend_kwargs)
         lc = lc.find_gaps()
         lc = lc.find_flares()
-        lc = find_iterative_median(lc)
+        lc = lc.find_iterative_median()
         
         lc_ = copy.deepcopy(lc)
         
@@ -903,7 +951,7 @@ class FlareLightCurve(LightCurve):
                        )
         
         # Use a light curve where you know the median flux
-        fake_lc = find_iterative_median(fake_lc)
+        fake_lc = fake_lc.find_iterative_median()
         
         # Init arrays for the synthetic flare parameters
         t0_fake = np.zeros(nfakesum, dtype='float') # peak times
@@ -1112,7 +1160,7 @@ class FlareLightCurve(LightCurve):
 
 
             
-    def fit_flares(self, method="emcee", buffer=0.05, max_flares=3, delta_bic=0.0, plot=True, debug_plot=False, **kwargs):
+    def fit_flares(self, buffer=0.05, max_flares=3, delta_bic=0.0, plot=True, debug_plot=False, **kwargs):
         """
         Fit flares using a polynomial baseline + analytic flare model (Davenport et al. 2014).
 
@@ -1123,8 +1171,6 @@ class FlareLightCurve(LightCurve):
 
         Parameters
         ----------
-        method : str
-            One of "curve_fit" or "emcee" (default: "curve_fit").
         buffer : float
             Time buffer in days added before/after each flare region (default: 0.05).
         max_flares : int
@@ -1147,7 +1193,6 @@ class FlareLightCurve(LightCurve):
             flux_err=self.flux_err.value,
             tstarts=self.flares["tstart"].values,
             tstops=self.flares["tstop"].values,
-            method=method,
             buffer=buffer,
             max_flares=max_flares,
             plot=plot,
@@ -1155,10 +1200,10 @@ class FlareLightCurve(LightCurve):
             **kwargs
         )
         self._flare_fit_results = results
-        return results
+        
 
 
-    def flare_table(self, results, include_group_rows=False):
+    def flare_table(self, include_group_rows=False):
         """
         Build a summary table of fitted flare parameters.
 
@@ -1178,7 +1223,7 @@ class FlareLightCurve(LightCurve):
             Table with columns: t_peak, fwhm, amplitude, ed_rec, fit_type, group_index, etc.
         """
         
-        return make_flare_table(results, include_group_rows=include_group_rows)
+        return make_flare_table(self._flare_fit_results, include_group_rows=include_group_rows)
 
 
 

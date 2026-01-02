@@ -8,7 +8,6 @@ from pathlib import Path
 from ..utils import get_response_curve
 from ..flarelc import FlareLightCurve
 from ..lcio import to_flare_lightcurve
-from ..altai import find_iterative_median
 
 
 from astropy.io import fits
@@ -220,9 +219,7 @@ def test_detrend():
             lcs.append(daplc)
 
     for daplc in lcs:
-        print("FFFDF", daplc.detrended_flux)
-        fff = find_iterative_median(daplc)
-        print("DF", fff.detrended_flux)
+        fff = daplc.find_iterative_median()
         shape = fff.flux.value.shape
         assert fff.it_med.value == pytest.approx(500., rel=0.01) #median stays the same roughly
         assert aplc.flux.value.shape[0] == daplc.detrended_flux.value.shape[0] #no NaNs to throw out

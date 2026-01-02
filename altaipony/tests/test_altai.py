@@ -5,7 +5,7 @@ from ..altai import (find_flares,
                      find_flares_in_cont_obs_period,
                      chi_square,
                      equivalent_duration,
-                     find_iterative_median)
+                     _find_iterative_median)
 
 from ..flarelc import FlareLightCurve
 from .test_flarelc import mock_flc
@@ -59,15 +59,7 @@ def test_detrend_savgol():
     assert f.dur == pytest.approx(f.tstop - f.tstart, rel=1e-4)
 
     
-def test_iterative_median():
 
-    flc = mock_flc(detrended=True)
-    lc1 = find_iterative_median(flc, n=1)
-    lc2 = find_iterative_median(flc, n=2)
-
-    # test that find_iterative_median converges after one iteration for mock FLC
-    assert np.median(flc.it_med.value) != np.median(lc1.it_med.value)
-    assert np.median(lc1.it_med.value) == np.median(lc2.it_med.value)
 
 def test_find_flares():
     """

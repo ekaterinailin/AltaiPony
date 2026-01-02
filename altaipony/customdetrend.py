@@ -15,9 +15,11 @@ import copy
 import numpy as np
 import pandas as pd
 
-from .altai import find_iterative_median, equivalent_duration
+from .altai import _find_iterative_median, equivalent_duration
 from .utils import sigma_clip
 from .flarelc import FlareLightCurve
+from lightkurve import LightCurve
+
 
 
 import astropy.units as u
@@ -28,7 +30,7 @@ from scipy import optimize
 
 
 
-def custom_detrending(lc, spline_coarseness=30, spline_order=3,
+def custom_detrending(lc, spline_coarseness=8, spline_order=3,
                       savgol1=6., savgol2=3., pad=3, max_sigma=2.5, 
                       longdecay=6,):
     """Custom de-trending for TESS and Kepler 
@@ -65,24 +67,22 @@ def custom_detrending(lc, spline_coarseness=30, spline_order=3,
     FlareLightCurve with detrended_flux attribute
     """
     dt = np.mean(np.diff(lc.time.value))
+    gaps = lc.find_gaps(maxgap = 0.04).gaps
+
+    time, flux = lc.time.value, lc.flux.value
 
     # fit a spline to the general trends
-    lc1, model = fit_spline(lc, spline_order=spline_order,
+    m2flux, _ = fit_spline(time, flux, gaps, spline_order=spline_order,
                             spline_coarseness=spline_coarseness)
-
-    # replace for next step
-    lc1.flux = lc1.detrended_flux.value
-
-    # removes strong and fast variability on 5 day to 4.8 hours 
-    # simple sines are probably because rotational variability is 
-    # either weak and transient or strong and persistent on the timescales
-    lc2 = remove_sines_iteratively(lc1)
     
     # choose a 6 hour window
     w = int((np.rint(savgol1 / 24. / dt) // 2) * 2 + 1)
 
+    # lc.flux = m2flux * u.electron / u.s
+    lc["spline_detrended_flux"] = m2flux  # add for debugging
+
     # use Savitzy-Golay to iron out the rest
-    lc3 = lc2.detrend("savgol", window_length=w, pad=pad)
+    lc3 = lc.detrend("savgol", window_length=w, pad=pad)
 
     # choose a three hour window
     w = int((np.rint(savgol2 / 24. / dt) // 2) * 2 + 1)
@@ -92,16 +92,12 @@ def custom_detrending(lc, spline_coarseness=30, spline_order=3,
                         max_sigma=max_sigma,longdecay=longdecay)
     
     # find median value
-    lc4 = find_iterative_median(lc4)
+    lc4.find_iterative_median()
 
     # replace for next step
-    lc4.flux = lc4.detrended_flux.value
-    
-    # remove exopential fringes that neither spline, 
-    # nor sines, nor SavGol can remove.
-    lc5 = remove_exponential_fringes(lc4)
+    lc4.flux = lc4.detrended_flux
   
-    return lc5
+    return lc4
 
 
 def detrend_savgol(lc, max_sigma=2.5, longdecay=6, 
@@ -130,15 +126,15 @@ def detrend_savgol(lc, max_sigma=2.5, longdecay=6,
     lcn = lc.normalize()
     
     # sigma clip
-    m = sigma_clip(lcn.flux.value, max_sigma=2.5, longdecay=6)
+    m = sigma_clip(lcn.flux, max_sigma=2.5, longdecay=6)
 
     # convert bool to int
     mask = ~m * 1
 
     # from Appaloosa:
     # convert mask to start and stop
-    reverse_counts = np.zeros_like(lcn.flux.value, dtype='int')
-    for k in range(2, len(lcn.flux.value)):
+    reverse_counts = np.zeros_like(lcn.flux, dtype='int')
+    for k in range(2, len(lcn.flux)):
         reverse_counts[-k] = (mask[-k]
                                 * (reverse_counts[-(k-1)]
                                 + mask[-k]))
@@ -175,7 +171,7 @@ def detrend_savgol(lc, max_sigma=2.5, longdecay=6,
         # linearinterpolate below the flare
         interpolation_ij = np.interp(lcn.time.value[mask_ij],
                                      [lcn.time.value[i],lcn.time.value[j]],
-                                     [lcn.flux.value[i],lcn.flux.value[j]])
+                                     [lcn.flux[i],lcn.flux[j]])
         # plt.plot(lcn.time.value[mask], fill)
         # plt.plot(lcn.time.value[mask], x)
         # plt.scatter( [lcn.time.value[mask[0]],lcn.time.value[mask[-1]]],
@@ -203,215 +199,7 @@ def detrend_savgol(lc, max_sigma=2.5, longdecay=6,
     
     return lcrsf
 
-def remove_sines_iteratively(flcd, niter=5, freq_unit=1/u.day, 
-                             maximum_frequency=12., 
-                             minimum_frequency=0.2,
-                             max_sigma=3.5, longdecay=2):
-    
-    """Iteratively remove strong sinusoidal signal
-    from light curve. Each iteration calculates a Lomb-Scargle 
-    periodogram and LSQ-fits a cosine function using the dominant
-    frequency as starting point. 
-    
-    
-    Parameters:
-    ------------
-    flcd : FlareLightCurve
-        light curve from which to remove 
-    niter : int
-        Maximum number of iterations. 
-    freq_unit : astropy.units
-        unit in which maximum_frequency and minimum_frequency
-        are given
-    maximum_frequency: float
-        highest frequency to calculate the Lomb-Scargle periodogram
-    minimum_frequency: float
-        lowest frequency to calculate the Lomb-Scargle periodogram
-    max_sigma : float
-        Passed to altaipony.utils.sigma_clip. 
-        Above this value data points
-        are flagged as outliers.
-    longdecay : 2
-        altaipony.utils.sigma_clip expands the mask for series
-        of outliers by sqrt(length of series). Longdecay doubles
-        the mask expansion in the decay phase of what may be flares.
-        
-    Return:
-    -------
-    FlareLightCurve with detrended_flux attribute
-            
-    """
-    
-    # define cosine function
-    def cosine(x, a, b, c, d):
-        return a * np.cos(b * x + c) + d
 
-    # make a copy of the original LC
-    flcd.flux = flcd.flux.value
-    flcd.flux_err = flcd.flux_err.value
-    flct = copy.deepcopy(flcd)
-    
-    # iterate over chunks
-    for le, ri in flct.find_gaps().gaps:
-        
-        # again make a copy of the chunk to manipulate safely
-        flc = copy.deepcopy(flct[le:ri])
-        
-        # find median of LC
-        flc = find_iterative_median(flc)
-        
-        # mask flares
-        mask = sigma_clip(flc.flux.value, max_sigma=3.5, longdecay=2)
-
-        # how many data points comprise the fastest period at maximum_frequency?
-        full_fastest_period = 1. / maximum_frequency / np.nanmin(np.diff(flc.remove_nans().time.value))
-        
-        # only remove sines if LC chunk is larger than one full period of the fastest frequency
-        if flc.flux.value.shape[0] > full_fastest_period:
-            
-            n = 0 # start counter
-            snr = 3 # go into while loop at least once
-            
-            # iterate while there is signal, but not more than n times
-            while ((snr > 1) & (n < niter)):
-                t = time.process_time()
-                # mask NaNs and outliers
-                cond = np.invert(np.isnan(flc.time.value)) & np.invert(np.isnan(flc.flux.value)) & mask
-                
-                # calculate periodogram
-                pg = flc[cond].to_periodogram(freq_unit=freq_unit,
-                                                      maximum_frequency=maximum_frequency,
-                                                      minimum_frequency=minimum_frequency)
-
-                # fit sinusoidal
-                p, p_cov = optimize.curve_fit(cosine, flc.time.value[cond], flc.flux.value[cond],
-                                              p0=[np.nanstd(flc.flux.value),
-                                              2*np.pi*pg.frequency_at_max_power.value,
-                                              0, np.nanmean(flc.flux.value)], ftol=1e-6)
-                t1 = time.process_time()
-                # replace with de-trended flux but without subtracting the median
-                flc.flux = flc.flux.value - cosine(flc.time.value, p[0], p[1], p[2], 0.)
-
-                # update SNR
-                snr = pg.flatten().max_power
-                
-                # bump iterator
-                n += 1
-                tf = time.process_time()
-#                 print(snr, n, tf-t, tf-t1, t1-t)
-      
-            # replace the empty array with the fitted detrended flux
-            flcd.detrended_flux[le:ri] = flc.flux.value
-        
-    return flcd
-
-def remove_exponential_fringes(flcd, demask=10, max_sigma=3.5, longdecay=2):
-    """Remove exponential fringes from light curve chunks.
-    
-    Parameters:
-    -----------
-    flcd : FlareLightCurve
-        Mostly de-trended light curves 
-        with possibly fringy fringes that need a haircut.
-    demask : int
-        fraction of light curve to keep in the fit even it
-        deviates from the median, applied to the end and start
-        of each light curve chunk.
-    max_sigma : float
-        Passed to altaipony.utils.sigma_clip. 
-        Above this value data points
-        are flagged as outliers.
-    longdecay : 2
-        altaipony.utils.sigma_clip expands the mask for series
-        of outliers by sqrt(length of series). Longdecay doubles
-        the mask expansion in the decay phase of what may be flares.
-        
-    """
-   
-    def twoexps(x, a, b, c, d, e, f, g):
-        return a * np.exp(b * (c - x)) + d * np.exp(e * (f - x)) + g
-    
-    flct = copy.deepcopy(flcd)
-    
-    # initiate a detrended flux array
-    flct.detrended_flux = np.full_like(flct.flux.value, np.nan)
-    
-    for le, ri in flct.find_gaps().gaps:
- 
-        f_ = copy.deepcopy(flct[le:ri])
-    
-        # mask outliers 
-        mask = sigma_clip(f_.flux.value, max_sigma=max_sigma, longdecay=longdecay)
-        ff = f_[mask]
-
-        # get the median as a guess for the least square fit
-        median = np.nanmedian(ff.it_med.value)
-        
-        # get noise level from the fully 
-        std = np.nanstd(ff.flux.value)
-        
-        
-        # demask the fringes because they are otherwise likely to be 
-        # masked by sigma clipping
-        mask[:len(f_.flux.value) // demask] = 1
-        mask[-len(f_.flux.value) // demask:] = 1
-        
-        ff = f_[mask]
-        
-        # get the amplitude of the fringes
-        sta, fin = ff.flux.value[0] - median, ff.flux.value[-1] - median
-        
-        # don't fit the fringes if they not even there
-        # i.e. smaller than global noise of outlier-free LC
-        noleft = np.abs(sta) < std
-        noright = np.abs(fin) < std
-        
-        # adjust the LSQ function to number of fringes
-        # also fix time offset 
-        
-        # only end of LC chunk fringes
-        if (not noright) & (noleft):
-            
-            def texp(x, d, e, g):
-                return twoexps(x, 0., 0., 0., d, e, ff.time.value[-1], g)
-            p0 = [fin, -10., median]
-            
-        # only start of LC chunk fringes
-        if (not noleft) & (noright):
-            
-            def texp(x, a, b, g):
-                return twoexps(x, a, b, ff.time.value[0], 0., 0., 0., g)
-            p0 = [sta, 10., median]
-        
-        # no fringes at all
-        if (noleft) & (noright):
-            
-            def texp(x, g):
-                return twoexps(x, 0., 0., 0., 0., 0., 0., g)
-            p0 = [median]
-        
-        # both sides of LC chunk fringe
-        if (not noleft) & (not noright):
-            def texp(x, a, b, d, e, g):
-                return twoexps(x, a, b, ff.time.value[0], d, e, ff.time.value[-1], g)
-            p0 = [sta, 10., fin, -10., median]
-
-        # do the LSQ fit
-        
-        p, p_cov = optimize.curve_fit(texp, ff.time.value, ff.flux.value,
-                                      p0=p0, sigma=np.full_like(ff.flux.value, std),
-                                      absolute_sigma=True, ftol=1e-6)
-        # Remove the fit from the LC
-        # median + full flux - model
-        nflux = p[-1] + ff.flux.value - texp(ff.time.value, *p)
-
-        # replace NaNs in detrended flux with solution
-        flcd.detrended_flux[le:ri][mask] = nflux
-        
-        # re-introduce outliers and flare candidates
-        flcd.detrended_flux[le:ri][~mask] = flcd.flux[le:ri][~mask].value
-        
-    return flcd
 
 def estimate_detrended_noise(flc, mask_pos_outliers_sigma=2.5, 
                              std_window=100, ):
@@ -422,20 +210,20 @@ def estimate_detrended_noise(flc, mask_pos_outliers_sigma=2.5,
     for (le, ri) in flcc.gaps:
 
         flcd = copy.deepcopy(flcc[le:ri])
-        mask = sigma_clip(flcd.detrended_flux.value, max_sigma=mask_pos_outliers_sigma, longdecay=2)
+        mask = sigma_clip(flcd.detrended_flux, max_sigma=mask_pos_outliers_sigma, longdecay=2)
 
         flcd.detrended_flux[~mask] = np.nan
         # apply rolling window std and interpolate the masked values
-        flcd.detrended_flux_err[:] = pd.Series(flcd.detrended_flux.value).rolling(std_window,
+        flcd.detrended_flux_err[:] = pd.Series(flcd.detrended_flux).rolling(std_window,
                                                                  center=True,
                                                                  min_periods=1).std().interpolate().values
         
         # and refine it:
-        flcd = find_iterative_median(flcd)
+        flcd = flcd.find_iterative_median()
         
         
         # make a copy first
-        filtered = copy.deepcopy(flcd.detrended_flux.value)
+        filtered = copy.deepcopy(flcd.detrended_flux)
         
         # get right bound of flux array
         tf = filtered.shape[0]
@@ -458,7 +246,7 @@ def estimate_detrended_noise(flc, mask_pos_outliers_sigma=2.5,
 
 
 
-def fit_spline(flc, spline_coarseness=30, spline_order=3):
+def fit_spline(time, flux, gaps, spline_coarseness=30, spline_order=3):
     """Do a spline fit on a coarse sampling of data points.
     
     Parameters:
@@ -468,48 +256,46 @@ def fit_spline(flc, spline_coarseness=30, spline_order=3):
     spline_coarseness : int
  
     spline_order : int
-        order of spline fit
+        order of spline fitflux
         
     Return:
     --------
     FlareLightCurve with new flux attribute
     """
-    flc = flc[np.where(np.isfinite(flc.flux.value))]
-    flcp = copy.deepcopy(flc)
-
-    flcp = flcp.find_gaps()
-    flux_med = np.nanmedian(flcp.flux.value)
+    flux_med = _find_iterative_median(flux, gaps)
     n = int(np.rint(spline_coarseness / 
                                    24 / 
-            (flcp.time.value[1] - flcp.time.value[0]))) #default 30h window
+            (np.nanmin(np.diff(time))))) #default 30h window
     k = spline_order
-#     print(n)
-    #do a first round
-    model = np.full_like(flcp.flux.value, np.nan)
-    for le, ri in flcp.gaps:
 
-        rip = flcp.flux[le:ri].value.shape[0] + le
-        t, f = np.zeros((rip - le)//n+2), np.zeros((rip - le)//n+2)
-        if (rip - le)//n == 0:
-            flcp.detrended_flux[le:ri] = flcp.flux.value[le:ri]
-        elif (rip - le)//n > 0:
-            news, news_mod = (rip - le)//n, (rip - le)%n 
-            t[1:-1] = np.mean(flcp.time.value[le:rip - news_mod].reshape(news, n), axis=1)
-            f[1:-1] =  np.median(flcp.flux.value[le:rip - news_mod].reshape(news, n), axis=1)
-            t[0], t[-1] = flcp.time.value[le], flcp.time.value[rip-1]
-            f[0], f[-1] = flcp.flux.value[le], flcp.flux.value[rip-1]
+    model = np.full_like(flux, np.nan)
+    newflux = np.full_like(flux, np.nan)
+    for le, ri in gaps:
+
+        t, f = np.zeros((ri - le)//n+2), np.zeros((ri - le)//n+2)
+        
+        if (ri - le)//n == 0:
+            newflux[le:ri] = flux[le:ri]
+        elif (ri - le)//n > 0:
+            news, news_mod = (ri - le)//n, (ri - le)%n 
+            t[1:-1] = np.mean(time[le:ri - news_mod].reshape(news, n), axis=1)
+            f[1:-1] =  np.median(flux[le:ri - news_mod].reshape(news, n), axis=1)
+            t[0], t[-1] = time[le], time[ri-1]
+            f[0], f[-1] = flux[le], flux[ri-1]
             
-        # if the LC chunk is too short, skip spline fit
+        # if the LC chunk is too short, fit a linear function to the full data
         if t.shape[0] <= k:
-            flcp.detrended_flux[le:ri] = flcp.flux.value[le:ri] 
+            p2 = np.polyfit(time[le:ri], flux[le:ri], 1)
+            newflux[le:ri] = flux[le:ri] - np.polyval(p2, time[le:ri]) + flux_med[le:ri]
+            model[le:ri] = np.polyval(p2, time[le:ri])
             
         # otherwise fit a spline
         else:
             p3 = UnivariateSpline(t, f, k=k, s=0)
-            flcp.detrended_flux[le:ri] = flcp.flux.value[le:ri] - p3(flcp.time.value[le:ri]) + flux_med
-            model[le:ri] = p3(flcp.time.value[le:ri])
+            newflux[le:ri] = flux[le:ri] - p3(time[le:ri]) + flux_med[le:ri]
+            model[le:ri] = p3(time[le:ri])
     
-    return flcp, model
+    return newflux, model
 
 
 def measure_flare(flc, sta, sto):
@@ -598,7 +384,7 @@ def interpolate_missing_cadences(lc, **kwargs):
         newcadence.append(newx)
 
         # interpolate flux error
-        f = interp1d(oldx, gaplc.flux_err.value)
+        f = interp1d(oldx, gaplc.flux_err)
         flux_err.append(f(newx))
 
         # interpolate time

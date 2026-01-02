@@ -353,39 +353,48 @@ def detrend_savgol(lc, window_length=None, pad=3, printwl=False, **kwargs):
     return lc
 
 
-def find_iterative_median(flc, n=30, **kwargs):
-
+def _find_iterative_median(detrended_flux, gaps, **kwargs):
     """
-    Find the iterative median value for a continuous observation period using
-    flare finding to identify outliers.
-
+    Internal function to compute iterative median from arrays.
+    
     Parameters
-    -----------
-    flc : FlareLightCurve
-
-    n : 50 or int
-        maximum number of iterations
-    kwargs : dict
-        keyword arguments to pass to sigma_clip
-
-    Return
+    ----------
+    detrended_flux : np.ndarray
+        Detrended flux array
+    gaps : list of tuples or None
+        List of (start_idx, end_idx) tuples defining continuous segments
+    **kwargs : dict
+        Keyword arguments to pass to sigma_clip
+    
+    Returns
     -------
-    FlareLightCurve with the it_med attribute set.
+    it_med : np.ndarray
+        Iterative median array matching the length of detrended_flux
     """
+    # Initialize it_med with global median
+    it_med = np.full_like(detrended_flux, np.nanmedian(detrended_flux))
+    
+    # If no gaps provided, treat entire array as one segment
+    if gaps is None or len(gaps) == 0:
+        good_mask = sigma_clip(detrended_flux, **kwargs)
+        good_flux = detrended_flux[good_mask]
+        if len(good_flux) > 0:
+            it_med[:] = np.nanmedian(good_flux)
+    else:
+        # Process each gap segment
+        for (le, ri) in gaps:
+            flux_segment = detrended_flux[le:ri]
+            
+            # Find median that is not skewed by outliers
+            good_mask = sigma_clip(flux_segment, **kwargs)
+            good_flux = flux_segment[good_mask]
+            
+            if len(good_flux) > 0:
+                it_med[le:ri] = np.nanmedian(good_flux)
+    
+    return it_med
 
-    lc = copy.deepcopy(flc)
 
-    lc.it_med = np.full_like(flc.detrended_flux, np.median(flc.detrended_flux))
-    if lc.gaps is None:
-        lc = lc.find_gaps()
-    for (le,ri) in lc.gaps:
-        flux = flc.detrended_flux[le:ri]
-        #find a median that is not skewed by outliers
-        good = sigma_clip(flux)
-        goodflux = flux[good]
-        lc.it_med[le:ri] = np.nanmedian(goodflux)
-
-    return lc
 
 def equivalent_duration(lc, start, stop, err=False):
 

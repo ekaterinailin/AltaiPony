@@ -518,7 +518,7 @@ def fit_flares(time, flux, flux_err, tstarts, tstops,
         group_t1 = tstops[group[-1]] + buffer
         n_group = len(group)
         print(f"\n Fitting region from {group_t0:.5f} to {group_t1:.5f}; Region [{ids}]"
-              f"(max_flares = {max_flares * n_group})")
+              f"(max. number of flares in group = {max_flares} x {n_group})")
         t_win, f_win, fe_win = extract_lc(time, flux, flux_err, group_t0, group_t1)
         ids += 1
         
