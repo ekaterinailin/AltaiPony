@@ -32,7 +32,7 @@ from scipy import optimize
 
 def custom_detrending(lc, spline_coarseness=8, spline_order=3,
                       savgol1=6., savgol2=3., pad=3, max_sigma=2.5, 
-                      longdecay=6,maxgap=10):
+                      longdecay=6, maxgap=10):
     """Custom de-trending for TESS and Kepler 
     short cadence light curves, including TESS Cycle 3 20s
     cadence.
@@ -69,14 +69,16 @@ def custom_detrending(lc, spline_coarseness=8, spline_order=3,
     FlareLightCurve with detrended_flux attribute
     """
     dt = np.mean(np.diff(lc.time.value))
-    gaps = lc.find_gaps(maxgap = maxgap * dt).gaps
+    gaps = lc.find_gaps(maxgap=maxgap * dt).gaps
 
     time, flux = lc.time.value, lc.flux.value
-    or_flux = copy.deepcopy(flux)
+    
+    # Store original flux as a column so it survives filtering operations
+    lc["original_flux"] = lc.flux.value.copy()
 
     # fit a spline to the general trends
     m2flux, _ = fit_spline(time, flux, gaps, spline_order=spline_order,
-                            spline_coarseness=spline_coarseness)
+                           spline_coarseness=spline_coarseness)
     
     # choose a 6 hour window
     w = int((np.rint(savgol1 / 24. / dt) // 2) * 2 + 1)
@@ -92,16 +94,20 @@ def custom_detrending(lc, spline_coarseness=8, spline_order=3,
 
     # use Savitzy-Golay to iron out the rest
     lc4 = lc3.detrend("savgol", window_length=w, pad=pad, 
-                        max_sigma=max_sigma,longdecay=longdecay)
+                      max_sigma=max_sigma, longdecay=longdecay)
     
-    lc4.flux = or_flux * u.electron / u.s
-    lc.flux = lc4.flux
+    # Restore original flux from the column (now properly filtered to match lc4's length)
+    lc4.flux = lc4["original_flux"] * u.electron / u.s
+    
+    # Clean up the temporary column
+    lc4.remove_column("original_flux")
+    lc.flux = lc["original_flux"] * u.electron / u.s
+    lc.remove_column("original_flux")
     
     # find median value
     lc4.find_iterative_median()
  
     return lc4
-
 
 def detrend_savgol(lc, max_sigma=2.5, longdecay=6, 
                    w=121, break_tolerance=10, **kwargs):
