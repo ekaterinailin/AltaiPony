@@ -746,8 +746,6 @@ def fit_single_flare(time, flux, flux_err,
 
             amp_bounds = (min_amp, max_amp_factor*np.max(flux))
 
-            print("CHECK 1")
-
             if fixed_baseline is not None:
                 guess = flare_guess
                 ndim = len(guess)
@@ -756,18 +754,12 @@ def fit_single_flare(time, flux, flux_err,
                 def logpost_fixed(params, *args):
                     return log_posterior(fixed_baseline + list(params), *args)
                 
-                print("CHECK 2")
-
                 sampler = emcee.EnsembleSampler(len(pos), ndim, logpost_fixed,
                                                 args=(time, flux, flux_err, t_bounds, amp_bounds, fwhm_bounds))
             else:
-                print(baseline_guess, flare_guess)
                 guess = baseline_guess + flare_guess
                 ndim = len(guess)
-                print("CHECK 2.5")
                 pos = np.array(guess) + 1e-5 * np.random.randn(max(2 * ndim, nwalkers), ndim)
-                print("CHECK 3")
-                print(len(pos), ndim)
                 sampler = emcee.EnsembleSampler(len(pos), ndim, log_posterior,
                                                 args=(time, flux, flux_err, t_bounds, amp_bounds, fwhm_bounds))
 
