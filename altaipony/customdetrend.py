@@ -32,7 +32,7 @@ from scipy import optimize
 
 def custom_detrending(lc, spline_coarseness=8, spline_order=3,
                       savgol1=6., savgol2=3., pad=3, max_sigma=2.5, 
-                      longdecay=6,):
+                      longdecay=6,maxgap=10):
     """Custom de-trending for TESS and Kepler 
     short cadence light curves, including TESS Cycle 3 20s
     cadence.
@@ -60,6 +60,8 @@ def custom_detrending(lc, spline_coarseness=8, spline_order=3,
         Outlier rejection threshold in sigma. Defaults to 2.5.
     longdecay : int
         Long decay time for outlier rejection. Defaults to 6.
+    maxgap : float
+        Maximum gap size in days for spline fitting. Defaults to 10 x cadence size.
 
         
     Return:
@@ -67,9 +69,10 @@ def custom_detrending(lc, spline_coarseness=8, spline_order=3,
     FlareLightCurve with detrended_flux attribute
     """
     dt = np.mean(np.diff(lc.time.value))
-    gaps = lc.find_gaps(maxgap = 0.04).gaps
+    gaps = lc.find_gaps(maxgap = maxgap * dt).gaps
 
     time, flux = lc.time.value, lc.flux.value
+    or_flux = copy.deepcopy(flux)
 
     # fit a spline to the general trends
     m2flux, _ = fit_spline(time, flux, gaps, spline_order=spline_order,
@@ -78,7 +81,7 @@ def custom_detrending(lc, spline_coarseness=8, spline_order=3,
     # choose a 6 hour window
     w = int((np.rint(savgol1 / 24. / dt) // 2) * 2 + 1)
 
-    # lc.flux = m2flux * u.electron / u.s
+    lc.flux = m2flux * u.electron / u.s
     lc["spline_detrended_flux"] = m2flux  # add for debugging
 
     # use Savitzy-Golay to iron out the rest
@@ -91,12 +94,12 @@ def custom_detrending(lc, spline_coarseness=8, spline_order=3,
     lc4 = lc3.detrend("savgol", window_length=w, pad=pad, 
                         max_sigma=max_sigma,longdecay=longdecay)
     
+    lc4.flux = or_flux * u.electron / u.s
+    lc.flux = lc4.flux
+    
     # find median value
     lc4.find_iterative_median()
-
-    # replace for next step
-    lc4.flux = lc4.detrended_flux
-  
+ 
     return lc4
 
 
@@ -202,47 +205,80 @@ def detrend_savgol(lc, max_sigma=2.5, longdecay=6,
 
 
 def estimate_detrended_noise(flc, mask_pos_outliers_sigma=2.5, 
-                             std_window=100, ):
-
-    flcc = copy.deepcopy(flc)
-    flcc = flcc.find_gaps()
-
-    for (le, ri) in flcc.gaps:
-
-        flcd = copy.deepcopy(flcc[le:ri])
-        mask = sigma_clip(flcd.detrended_flux, max_sigma=mask_pos_outliers_sigma, longdecay=2)
-
-        flcd.detrended_flux[~mask] = np.nan
-        # apply rolling window std and interpolate the masked values
-        flcd.detrended_flux_err[:] = pd.Series(flcd.detrended_flux).rolling(std_window,
-                                                                 center=True,
-                                                                 min_periods=1).std().interpolate().values
-        
-        # and refine it:
-        flcd = flcd.find_iterative_median()
-        
-        
-        # make a copy first
-        filtered = copy.deepcopy(flcd.detrended_flux)
-        
-        # get right bound of flux array
-        tf = filtered.shape[0]
-
-        # pick outliers
-        mask = sigma_clip(filtered, max_sigma=mask_pos_outliers_sigma, longdecay=2)
-
-        filtered[~mask] = np.nan    
-
-        # apply rolling window std and interpolate the masked values
-        flcc.detrended_flux_err[le:ri]= pd.Series(filtered).rolling(std_window,
-                                                                 center=True,
-                                                                 min_periods=1).std().interpolate().values
-        
-        # make it a series again so that formatting is consistent
-        flcc.detrended_flux_err = pd.Series(flcc.detrended_flux_err)
+                             std_window=100):
+    """
+    Estimate detrended flux uncertainties using rolling standard deviation.
     
-    return flcc
+    Parameters
+    ----------
+    flc : FlareLightCurve
+        Light curve with detrended_flux attribute
+    mask_pos_outliers_sigma : float
+        Sigma threshold for masking positive outliers (likely flares)
+    std_window : int
+        Window size for rolling standard deviation calculation
+    
+    Returns
+    -------
+    flc : FlareLightCurve
+        Input light curve with detrended_flux_err attribute updated
+    """
+    # Find gaps if not already done
+    if flc.gaps is None:
+        flc = flc.find_gaps()
+    
+    # Extract arrays we need (avoids repeated attribute access)
+    detrended_flux = flc.detrended_flux
+    n_points = len(detrended_flux)
+    
+    # Initialize output array
+    detrended_flux_err = np.full(n_points, np.nan)
+    
+    # Process each gap segment
+    for (le, ri) in flc.gaps:
+        # Extract segment
+        flux_segment = detrended_flux[le:ri].copy()  # Copy just this segment
+        
+        # First pass: mask outliers and compute initial error estimate
+        mask = sigma_clip(flux_segment, max_sigma=mask_pos_outliers_sigma, 
+                         longdecay=2)
+        
+        # Set outliers to NaN for error calculation
+        flux_segment_masked = flux_segment.copy()
+        flux_segment_masked[~mask] = np.nan
+        
+        # Second pass: refine by finding iterative median
+        it_med_segment = _find_iterative_median(
+            flux_segment, 
+            gaps=[(0, ri - le)]
+        )
+        
+        # Subtract iterative median for better outlier detection
+        flux_normalized = flux_segment - it_med_segment
+        
+        # Mask outliers again
+        mask_refined = sigma_clip(flux_normalized, 
+                                 max_sigma=mask_pos_outliers_sigma, 
+                                 longdecay=2)
+                
+        # Set outliers to NaN
+        flux_normalized_masked = flux_normalized.copy()
+        flux_normalized_masked[~mask_refined] = np.nan
+        
+        # Compute final rolling std
+        final_err = (pd.Series(flux_normalized_masked)
+                    .rolling(std_window, center=True, min_periods=1)
+                    .std()
+                    .interpolate()
+                    .values)
 
+        # Store in output array
+        detrended_flux_err[le:ri] = final_err
+    
+    # Set the result on the original lightcurve
+    flc.detrended_flux_err = detrended_flux_err
+    
+    return flc
 
 
 

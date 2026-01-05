@@ -205,7 +205,6 @@ class FlareLightCurve(LightCurve):
 
 
     def __repr__(self):
-        print("call")
         mission = self.meta.get("mission", "Unknown")
         qcs = self.meta.get("qcs", "Unknown")
 

@@ -4,6 +4,11 @@ from astropy.constants import sigma_sb
 import numpy as np
 
 
+try:
+    from numpy import trapezoid as trapz
+except ImportError:
+    from numpy import trapz
+
 def flare_factor(teff, radius, wav, resp,  tflare=10000):
     """Calculate the flare energy factor in ergs, following Shibayama et al. (2013).
     	Equivalent duration [s] x flare_factor [erg/s] = flare energy [erg]

@@ -460,7 +460,8 @@ def group_peaks(tstarts, tstops, buffer=0.05):
 
 
 def fit_flares(time, flux, flux_err, tstarts, tstops,
-               buffer=0.05, max_flares=3, delta_bic=0.0, plot=False, debug_plot=False):
+               buffer=0.05, max_flares=3, delta_bic=0.0,
+               plot=False, debug_plot=False, **kwargs):
     """
     Fit all detected flares in a light curve, including groups and individual members.
 
@@ -482,6 +483,8 @@ def fit_flares(time, flux, flux_err, tstarts, tstops,
         Whether to show plots.
     debug_plot : bool
         Whether to show trial fits.
+    **kwargs : dict
+        Additional arguments for `fit_single_flare`.
 
     Returns
     -------
@@ -520,6 +523,7 @@ def fit_flares(time, flux, flux_err, tstarts, tstops,
         print(f"\n Fitting region from {group_t0:.5f} to {group_t1:.5f}; Region [{ids}]"
               f"(max. number of flares in group = {max_flares} x {n_group})")
         t_win, f_win, fe_win = extract_lc(time, flux, flux_err, group_t0, group_t1)
+        
         ids += 1
         
         # Collect peaks + durations
@@ -592,7 +596,8 @@ def fit_flares(time, flux, flux_err, tstarts, tstops,
             t_win, f_win, fe_win,
             flare_guess_all, 
             max_flares=max_flares * len(group),
-            delta_bic=delta_bic, debug_plot=debug_plot
+            delta_bic=delta_bic, debug_plot=debug_plot,
+            **kwargs
         )
 
         if result_group is None:
@@ -741,6 +746,8 @@ def fit_single_flare(time, flux, flux_err,
 
             amp_bounds = (min_amp, max_amp_factor*np.max(flux))
 
+            print("CHECK 1")
+
             if fixed_baseline is not None:
                 guess = flare_guess
                 ndim = len(guess)
@@ -748,14 +755,19 @@ def fit_single_flare(time, flux, flux_err,
 
                 def logpost_fixed(params, *args):
                     return log_posterior(fixed_baseline + list(params), *args)
+                
+                print("CHECK 2")
 
                 sampler = emcee.EnsembleSampler(len(pos), ndim, logpost_fixed,
                                                 args=(time, flux, flux_err, t_bounds, amp_bounds, fwhm_bounds))
             else:
+                print(baseline_guess, flare_guess)
                 guess = baseline_guess + flare_guess
                 ndim = len(guess)
+                print("CHECK 2.5")
                 pos = np.array(guess) + 1e-5 * np.random.randn(max(2 * ndim, nwalkers), ndim)
-
+                print("CHECK 3")
+                print(len(pos), ndim)
                 sampler = emcee.EnsembleSampler(len(pos), ndim, log_posterior,
                                                 args=(time, flux, flux_err, t_bounds, amp_bounds, fwhm_bounds))
 

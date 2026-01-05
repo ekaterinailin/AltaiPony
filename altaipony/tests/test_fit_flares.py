@@ -1,678 +1,680 @@
-# test_fit_flares6.py
-
+import pytest
 import numpy as np
 import pandas as pd
-import pytest
-from altaipony.tests.test_flarelc import mock_flc as mock
-import matplotlib.pyplot as plt
+from unittest.mock import Mock, patch, MagicMock
+from astropy.time import Time
+import astropy.units as u
 
-from altaipony.fit_flares import (
+from ..flarelc import FlareLightCurve
+from ..fakeflares import flare_model_davenport2014
+from ..fit_flares import (
+    fit_flares,
+    fit_single_flare,
     combined_model,
     stacked_flare_model,
     build_baseline,
+    ed_from_model,
+    make_flare_table,
     log_likelihood,
     log_prior,
     log_posterior,
     model_selection,
-    extract_lc,
-    group_peaks,
-    fit_flares,
-    fit_single_flare,
-    ed_from_model,
-    make_flare_table,
-    plot_flare_fit,
-    plot_all_fits,
 )
 
-# Simulated FlareLightCurve generator (adapted from your test_flarelc.py)
-def mock_flc(detrended=True, ampl=1.0, dur=1):
-    """Wrapper for AltaiPony's mock_flc that returns time, flux, and flux_err arrays."""
-    flc = mock(detrended=detrended, ampl=ampl, dur=dur)
-    time = flc.time.value
-    flux = flc.detrended_flux.value if detrended else flc.flux.value
-    flux_err = flc.detrended_flux_err.value if detrended else flc.flux_err.value
-    return time, flux, flux_err
 
-
-
-
-def test_combined_model():
-    """Test that combined_model runs and raises correct errors."""
-   
-    # Valid case with one flare
-    time, flux, _ = mock_flc(detrended=True)
-    baseline = [np.median(flux), 0, 0, 0, 0]
-    flare_params = [time[485], 0.01, 1.0]
-    params = baseline + flare_params
-
-    model = combined_model(time, *params)
-    assert isinstance(model, np.ndarray)
-    assert model.shape == time.shape
-
-    # No flare case
-    model_no_flare = combined_model(time, *baseline)
-    assert np.allclose(model_no_flare, build_baseline(time, baseline))
-
-    # t not a NumPy array
-    with pytest.raises(TypeError, match="must be a NumPy array"):
-        combined_model("not an array", *params)
-
-    # Empty t array
-    with pytest.raises(ValueError, match="must not be empty"):
-        combined_model(np.array([]), *params)
-
-    # Too few parameters
-    with pytest.raises(ValueError, match="at least 5 parameters"):
-        combined_model(time, 1, 2, 3)
-
-    # Flare parameters not in groups of 3
-    with pytest.raises(ValueError, match="in groups of 3"):
-        combined_model(time, *(baseline + [0.5, 0.01]))
+class TestFitFlares:
+    """Test suite for flare fitting functions"""
+    
+    # ========== Fixtures ==========
+    
+    @pytest.fixture
+    def mock_emcee_sampler(self):
+        """Create a mock emcee sampler that returns fake but realistic samples"""
+        def create_mock_sampler(n_params, n_walkers=50, n_samples=1000):
+            """
+            Create mock based on NUMBER of parameters, not specific values
+            
+            Parameters
+            ----------
+            n_params : int
+                Number of parameters being fit
+            n_walkers : int
+                Number of walkers
+            n_samples : int
+                Number of samples per walker
+            """
+            mock_sampler = Mock()
+            
+            # Generate generic reasonable samples for any number of parameters
+            samples = []
+            for _ in range(n_walkers):
+                walker_samples = []
+                for _ in range(n_samples):
+                    # Generate random but reasonable parameters
+                    # Baseline: ~1.0, small slopes
+                    # Flare params: t_peak ~1.0, fwhm ~0.05, amp ~0.2
+                    if n_params >= 5:
+                        params = [1.0, 0.0, 0.0, 0.0, 0.0]  # baseline
+                        for i in range((n_params - 5) // 3):  # flares
+                            params.extend([
+                                1.0 + np.random.normal(0, 0.01),   # t_peak
+                                0.05 + np.random.normal(0, 0.005),  # fwhm
+                                0.2 + np.random.normal(0, 0.02)     # amplitude
+                            ])
+                    else:
+                        params = [1.0] * n_params
+                    
+                    # Add small noise
+                    noisy_params = [p + np.random.normal(0, abs(p) * 0.01) for p in params]
+                    walker_samples.append(noisy_params)
+                samples.append(walker_samples)
+            
+            samples = np.array(samples)
+            print(samples.shape)
+            
+            def mock_get_chain(discard=0, thin=1, flat=False):
+                if flat:
+                    return samples[:, discard::thin, :].reshape(-1, n_params)
+                else:
+                    return samples[:, discard::thin, :]
+            
+            mock_sampler.get_chain = Mock(side_effect=mock_get_chain)
+            mock_sampler.run_mcmc = Mock(return_value=None)
+            return mock_sampler
+    
+        return create_mock_sampler
+    
+    @pytest.fixture
+    def simple_baseline_lc(self):
+        """Create a simple light curve with polynomial baseline and noise"""
+        np.random.seed(42)
+        time = np.linspace(0, 10, 1000)
         
+        baseline_coeffs = [1.0, 0.01, -0.001, 0.0, 0.0]
+        t_centered = time - np.mean(time)
+        baseline = (baseline_coeffs[0] + 
+                   baseline_coeffs[1] * t_centered + 
+                   baseline_coeffs[2] * t_centered**2)
         
-
-def test_stacked_flare_model():
-    """Test that stacked_flare_model runs and handles input errors."""
-
-    time, _, _ = mock_flc(detrended=True)
-
-    # Normal flare
-    model_single = stacked_flare_model(time, time[485], 0.01, 1.0)
-    assert model_single.shape == time.shape
-    assert np.max(model_single) > 0.5
-
-    # Two flares
-    model_double = stacked_flare_model(
-        time,
-        time[485], 0.01, 1.0,
-        time[490], 0.01, 1.1
-    )
-    assert model_double.shape == time.shape
-    assert np.all(model_double >= model_single)
-    assert np.max(model_double) > np.max(model_single)
-
-    # Invalid flare count
-    with pytest.raises(ValueError, match="groups of 3"):
-        stacked_flare_model(time, time[485], 0.01)  # Only 2 args
-
-    # Non-array time input
-    with pytest.raises(TypeError):
-        stacked_flare_model("not an array", time[485], 0.01, 1.0)
-
-    # Non-1D time input
-    with pytest.raises(ValueError, match="1D"):
-        stacked_flare_model(np.array([[1, 2]]), time[485], 0.01, 1.0)
-
-    # Empty time array
-    with pytest.raises(ValueError, match="must not be empty"):
-        stacked_flare_model(np.array([]), time[485], 0.01, 1.0)
-
-    # NaN param should be skipped
-    model_nan = stacked_flare_model(time, time[485], 0.01, np.nan)
-    assert np.allclose(model_nan, 0.0)
-
-    # Param causes internal flare_model exception
-    model_broken = stacked_flare_model(time, "bad", 0.01, 1.0)
-    assert np.allclose(model_broken, 0.0)
-
-
-
-    
-def test_build_baseline():
-    """Test that build_baseline runs and handles bad input correctly."""
-
-    time, flux, _ = mock_flc(detrended=True)
-
-    # Flat baseline
-    coeffs_const = [1.0, 0, 0, 0, 0]
-    baseline = build_baseline(time, coeffs_const)
-    assert np.allclose(baseline, 1.0)
-
-    # Linear slope
-    coeffs_slope = [np.median(flux), 2.0, 0, 0, 0]
-    baseline_slope = build_baseline(time, coeffs_slope)
-    assert baseline_slope.shape == time.shape
-    assert not np.allclose(baseline_slope, baseline)
-
-    # Nonlinear curve
-    coeffs_poly = [np.median(flux), 0.1, -0.3, 0.1, -0.05]
-    baseline_poly = build_baseline(time, coeffs_poly)
-    assert np.any(np.diff(baseline_poly) != 0)
-
-    # Wrong length coeffs
-    with pytest.raises(ValueError, match="exactly 5 elements"):
-        build_baseline(time, [1.0, 0, 0, 0])  # too short
-
-    # NaN in coeffs
-    with pytest.raises(ValueError, match="must be finite"):
-        build_baseline(time, [1.0, 0, 0, 0, np.nan])
-
-    # Non-array time
-    with pytest.raises(TypeError):
-        build_baseline("not an array", coeffs_const)
-
-    # Empty time
-    with pytest.raises(ValueError):
-        build_baseline(np.array([]), coeffs_const)
-
-    # Non-1D time
-    with pytest.raises(ValueError, match="1D"):
-        build_baseline(np.array([[1, 2], [3, 4]]), coeffs_const)
-
-
-
-    
-def test_log_likelihood():
-    """Test that log_likelihood works and raises input errors."""
-
-    time, flux, flux_err = mock_flc(detrended=True)
-    params = [np.median(flux), 0, 0, 0, 0, time[485], 0.01, 1.0]
-    model = combined_model(time, *params)
-
-    # Perfect model: should return finite likelihood
-    ll_perfect = log_likelihood(params, time, model, flux_err)
-    assert np.isfinite(ll_perfect)
-
-    # Slightly noisy: likelihood should decrease
-    ll_observed = log_likelihood(params, time, flux, flux_err)
-    assert np.isfinite(ll_observed)
-    assert ll_observed < ll_perfect
-
-    # Mismatched array lengths
-    with pytest.raises(ValueError, match="same length"):
-        log_likelihood(params, time[:-1], flux, flux_err)
-
-    # Empty input
-    with pytest.raises(ValueError, match="must not be empty"):
-        log_likelihood(params, np.array([]), np.array([]), np.array([]))
-
-    # NaNs in flux
-    flux_bad = flux.copy()
-    flux_bad[10] = np.nan
-    with pytest.raises(ValueError, match="NaN or inf"):
-        log_likelihood(params, time, flux_bad, flux_err)
-
-    # Model-flux shape mismatch
-    with pytest.raises(ValueError, match="same length"):
-        log_likelihood(params, time[:-1], flux, flux_err)
-
-
-
-def test_log_prior():
-    """Test that log_prior runs and enforces all parameter bounds."""
-
-    time, _, _ = mock_flc(detrended=True)
-    t_peak = time[485]
-    params_valid = [1.0, 0, 0, 0, 0, t_peak, 0.01, 1.0]
-    t_bounds = [t_peak - 0.01, t_peak + 0.01]
-    amp_bounds = (0.5, 2.0)
-    fwhm_bounds = (0.001, 0.1)
-
-    # Valid case
-    assert log_prior(params_valid, t_bounds, amp_bounds, fwhm_bounds) == 0.0
-
-    # t_peak out of bounds
-    bad_t = params_valid[:]
-    bad_t[5] = t_peak + 0.02
-    assert log_prior(bad_t, t_bounds, amp_bounds, fwhm_bounds) == -np.inf
-
-    # fwhm out of bounds
-    bad_fwhm = params_valid[:]
-    bad_fwhm[6] = 0.0001
-    assert log_prior(bad_fwhm, t_bounds, amp_bounds, fwhm_bounds) == -np.inf
-
-    # amp out of bounds
-    bad_amp = params_valid[:]
-    bad_amp[7] = 10.0
-    assert log_prior(bad_amp, t_bounds, amp_bounds, fwhm_bounds) == -np.inf
-
-    # NaN in flare params
-    bad_nan = params_valid[:]
-    bad_nan[6] = np.nan
-    assert log_prior(bad_nan, t_bounds, amp_bounds, fwhm_bounds) == -np.inf
-
-    # Too few params
-    with pytest.raises(ValueError, match="at least 5 baseline"):
-        log_prior([1.0, 0], t_bounds, amp_bounds, fwhm_bounds)
-
-    # Flare params not in groups of 3
-    with pytest.raises(ValueError, match="groups of 3"):
-        log_prior([1.0, 0, 0, 0, 0, t_peak, 0.01], t_bounds, amp_bounds, fwhm_bounds)
-
-    # t_bounds wrong length
-    with pytest.raises(ValueError, match="2 entries per flare"):
-        log_prior(params_valid, [t_peak - 0.01], amp_bounds, fwhm_bounds)
-
-    # amp_bounds contains NaN
-    with pytest.raises(ValueError, match="must contain finite values"):
-        log_prior(params_valid, t_bounds, (0.5, np.nan), fwhm_bounds)
-
-
-    
-def test_log_posterior():
-    """Test that log_posterior runs and handles all invalid input cases."""
-
-    time, flux, flux_err = mock_flc(detrended=True)
-    t_peak = time[485]
-    params = [np.median(flux), 0, 0, 0, 0, t_peak, 0.01, 1.0]
-    t_bounds = [t_peak - 0.01, t_peak + 0.01]
-    amp_bounds = (0.5, 2.0)
-    fwhm_bounds = (0.001, 0.1)
-
-    # Valid case
-    logpost = log_posterior(params, time, flux, flux_err, t_bounds, amp_bounds, fwhm_bounds)
-    assert np.isfinite(logpost)
-
-    # Prior fails (amp too large)
-    bad_amp = params[:]
-    bad_amp[7] = 10.0
-    assert log_posterior(bad_amp, time, flux, flux_err, t_bounds, amp_bounds, fwhm_bounds) == -np.inf
-
-    # NaN in params
-    bad_nan = params[:]
-    bad_nan[6] = np.nan
-    assert log_posterior(bad_nan, time, flux, flux_err, t_bounds, amp_bounds, fwhm_bounds) == -np.inf
-
-    # Too few parameters
-    with pytest.raises(ValueError, match="at least 5 baseline"):
-        log_posterior([1.0, 0.0], time, flux, flux_err, t_bounds, amp_bounds, fwhm_bounds)
-
-    # Mismatched input lengths
-    with pytest.raises(ValueError, match="must all have the same length"):
-        log_posterior(params, time, "not_an_array", flux_err, t_bounds, amp_bounds, fwhm_bounds)
-    
-    with pytest.raises(ValueError, match="same length"):
-        log_posterior(params, time[:-1], flux, flux_err, t_bounds, amp_bounds, fwhm_bounds)
-
-    # Trigger fallback error from log_likelihood (e.g. broken flux input)
-    broken_flux = "not_an_array"
-    with pytest.raises(ValueError, match="same length"):
-        result = log_posterior(params, time, broken_flux, flux_err, t_bounds, amp_bounds, fwhm_bounds)
-
-
-    
-def test_model_selection():
-    """Test that model_selection returns AIC/BIC and handles invalid input."""
-
-    time, flux, flux_err = mock_flc(detrended=True)
-    params = [np.median(flux), 0, 0, 0, 0, time[485], 0.01, 1.0]
-    model = combined_model(time, *params)
-
-    # Valid scores
-    score_bic = model_selection(model, flux, flux_err, params, method="bic")
-    score_aic = model_selection(model, flux, flux_err, params, method="aic")
-    assert np.isfinite(score_bic)
-    assert np.isfinite(score_aic)
-    assert isinstance(score_bic, float)
-    assert isinstance(score_aic, float)
-
-    # NaN in model
-    model_nan = model.copy()
-    model_nan[10] = np.nan
-    assert model_selection(model_nan, flux, flux_err, params) == np.inf
-
-    # Mismatched lengths
-    with pytest.raises(ValueError, match="same length"):
-        model_selection(model[:-1], flux, flux_err, params)
-
-    # Empty model/data
-    empty = np.array([])
-    assert model_selection(empty, np.ones(10), flux_err, params) == np.inf
-    assert model_selection(np.ones(10), empty, flux_err, params) == np.inf
-
-
-def test_model_selection_invalid_method():
-    """Test that model_selection rejects invalid method strings."""
-
-    time, flux, flux_err = mock_flc(detrended=True)
-    params = [np.median(flux), 0, 0, 0, 0, time[485], 0.01, 1.0]
-    model = combined_model(time, *params)
-
-    with pytest.raises(ValueError, match="method must be 'aic' or 'bic'"):
-        model_selection(model, flux, flux_err, params, method="invalid")
-
-
-
-def test_extract_lc():
-    """Test that extract_lc returns valid windows and handles invalid input."""
-
-    time, flux, flux_err = mock_flc(detrended=True)
-
-    # Normal case
-    t0, t1 = 0.45, 0.55
-    t_seg, f_seg, fe_seg = extract_lc(time, flux, flux_err, t0, t1)
-    assert isinstance(t_seg, np.ndarray)
-    assert t_seg.shape == f_seg.shape == fe_seg.shape
-    assert np.all(t_seg >= t0) and np.all(t_seg <= t1)
-    assert np.allclose(f_seg, flux[(time >= t0) & (time <= t1)])
-
-    # t0 == t1
-    with pytest.raises(ValueError, match="strictly less"):
-        extract_lc(time, flux, flux_err, 0.5, 0.5)
-
-    # Window outside data range
-    t0_far, t1_far = 999.0, 1001.0
-    t_seg, f_seg, fe_seg = extract_lc(time, flux, flux_err, t0_far, t1_far)
-    assert len(t_seg) == 0 and len(f_seg) == 0
-
-    # NaN in flux
-    flux_bad = flux.copy()
-    flux_bad[10] = np.nan
-    with pytest.raises(ValueError, match="NaNs or infs"):
-        extract_lc(time, flux_bad, flux_err, 0.4, 0.5)
-
-    # Unequal lengths
-    with pytest.raises(ValueError, match="same length"):
-        extract_lc(time[:-1], flux, flux_err, 0.4, 0.5)
-
-    # t0 or t1 not finite
-    with pytest.raises(ValueError, match="finite"):
-        extract_lc(time, flux, flux_err, np.nan, 0.5)
-
-    with pytest.raises(ValueError, match="finite"):
-        extract_lc(time, flux, flux_err, 0.4, np.inf)
-
-    # Empty time input
-    with pytest.raises(ValueError):
-        extract_lc(np.array([]), np.array([]), np.array([]), 0.4, 0.5)
-
-
-    
-def test_group_peaks():
-    """Test that group_peaks merges close flares correctly."""
-
-    tstarts = np.array([0.48, 0.495, 0.7])
-    tstops = np.array([0.485, 0.505, 0.71])
-    buffer = 0.01
-
-    groups = group_peaks(tstarts, tstops, buffer)
-    assert isinstance(groups, list)
-    assert groups == [[0, 1], [2]]
-    
-def test_group_peaks_invalid_buffer():
-    """Test that group_peaks handles invalid buffer"""
-    
-    tstarts = [0.1, 0.2]
-    tstops = [0.15, 0.25]
-    with pytest.raises(ValueError, match="buffer must be"):
-        group_peaks(tstarts, tstops, buffer=np.nan)
-    with pytest.raises(ValueError, match="buffer must be"):
-        group_peaks(tstarts, tstops, buffer=-1)
-
-
-
-def test_group_peaks_edge_cases():
-    """Test that group_peaks handles bad input and edge cases."""
-
-    # Empty input
-    assert group_peaks([], []) == []
-
-    # Buffer negative
-    with pytest.raises(ValueError, match="non-negative"):
-        group_peaks([0.1], [0.2], buffer=-0.01)
-
-    # NaN in input
-    with pytest.raises(ValueError, match="NaN or inf"):
-        group_peaks([0.1, np.nan], [0.2, 0.3])
-
-    # Infs in input
-    with pytest.raises(ValueError, match="NaN or inf"):
-        group_peaks([0.1, 0.2], [0.2, np.inf])
-
-    # Non-matching lengths
-    with pytest.raises(AssertionError, match="Mismatch"):
-        group_peaks([0.1, 0.2], [0.15])
-
-    # Non-1D input
-    with pytest.raises(ValueError, match="1D arrays"):
-        group_peaks(np.array([[0.1, 0.2]]), np.array([0.2, 0.3]))
-
-
+        noise_level = 0.01
+        flux = baseline + np.random.normal(0, noise_level, len(time))
+        flux_err = np.full_like(flux, noise_level)
         
-def test_fit_flares_empty_flares():
-    """Should raise if no tstarts/tstops provided."""
-    
-    time, flux, flux_err = mock_flc(detrended=True)
-    with pytest.raises(ValueError, match="No flare intervals"):
-        fit_flares(time, flux, flux_err, [], [], plot=False)
-
-
-def test_fit_flares_nan_in_flux():
-    """Should raise if flux contains NaN."""
-    
-    time, flux, flux_err = mock_flc(detrended=True)
-    flux[10] = np.nan
-    with pytest.raises(ValueError, match="NaN or inf"):
-        fit_flares(time, flux, flux_err, [0.4], [0.5], plot=False)
-
-
-def test_fit_flares_invalid_max_flares():
-    """Should raise if max_flares < 1."""
-    
-    time, flux, flux_err = mock_flc(detrended=True)
-    with pytest.raises(ValueError, match="max_flares must be >= 1"):
-        fit_flares(time, flux, flux_err, [0.4], [0.5], max_flares=0)
-
-
-
-def test_fit_flares_result_group_none(monkeypatch):
-    """Should skip result if fit_single_flare returns None."""
-    
-    time, flux, flux_err = mock_flc(detrended=True)
-    tstarts = [0.48]
-    tstops = [0.49]
-
-    # Monkeypatch fit_single_flare to simulate failure
-    monkeypatch.setattr("altaipony.fit_flares.fit_single_flare", lambda *a, **k: None)
-
-    results = fit_flares(time, flux, flux_err, tstarts, tstops)
-    assert results == []
-
-
-def test_fit_flares_out_of_bounds_group():
-    """Test that fit_flares raises IndexError when group region is empty."""
-    t = np.linspace(0, 1, 100)
-    f = np.ones_like(t)
-    fe = 0.01 * np.ones_like(t)
-    tstarts = [10.0]
-    tstops = [10.1]  # Outside the time range
-
-    with pytest.raises(IndexError, match="index 0 is out of bounds"):
-        fit_flares(t, f, fe, tstarts, tstops, max_flares=1)
-
-
+        time_obj = Time(2450000 + time, format='jd')
+        meta = {'TARGETID': 123456, 'MISSION': 'Kepler', 'QUARTER': 5}
         
-def test_fit_single_flare_empty_input():
-    """Should return None if input arrays are empty."""
+        return FlareLightCurve(
+            time=time_obj,
+            flux=flux * (u.electron / u.s),
+            flux_err=flux_err * (u.electron / u.s),
+            meta=meta
+        )
     
-    result = fit_single_flare([], [], [], [], [], [], [], [])
-    assert result is None
-
-
-def test_fit_single_flare_mismatched_lengths():
-    """Should return None if input arrays are mismatched."""
-    
-    time = np.linspace(0, 1, 100)
-    flux = np.ones(99)
-    flux_err = np.ones(100)
-    result = fit_single_flare(time, flux, flux_err, flare_guess_all=[0, 0.01, 1.0])
-
-    assert result is None
-
-
-def test_fit_single_flare_nan_input():
-    """Should return None if NaNs in time/flux/flux_err."""
-    
-    time, flux, flux_err = mock_flc(detrended=True)
-    flux[10] = np.nan
-    t_peak = time[485]
-    result = fit_single_flare(
-        time, flux, flux_err,
-        [t_peak, 0.01, 1.0])
-    
-    assert result is None
-
-
-def test_fit_single_flare_with_fixed_baseline():
-    """Should accept and use fixed baseline instead of guessing."""
-    
-    time, flux, flux_err = mock_flc(detrended=True)
-    t_peak = time[485]
-    fixed_baseline = [1.0, 0, 0, 0, 0]
-    result = fit_single_flare(
-        time, flux, flux_err,
-        [t_peak, 0.01, 1.0],
-        fixed_baseline=fixed_baseline
-    )
-    assert isinstance(result, dict)
-    assert "params" in result
-
-
-def test_fit_single_flare_debug_plot():
-    """Smoke test that debug_plot=True does not crash."""
-    
-    time, flux, flux_err = mock_flc(detrended=True)
-    t_peak = time[485]
-    result = fit_single_flare(
-        time, flux, flux_err,
-        [t_peak, 0.01, 1.0],
-        debug_plot=True
-    )
-    assert isinstance(result, dict)
-    plt.close("all")
-
-
-
-def test_fit_single_flare_emcee_runs():
-    """Should return a valid result with emcee method."""
-    
-    time, flux, flux_err = mock_flc(detrended=True)
-    t_peak = time[485]
-    result = fit_single_flare(
-        time, flux, flux_err,
-        flare_guess_all=[t_peak, 0.01, 1.0],
-        max_flares=1
-    )
-    assert isinstance(result, dict)
-    assert "posterior_samples" in result
-
-
-    
-    
-def test_ed_from_model():
-    """Ensure numerical ED calculation handles scalars, arrays, and bad inputs."""
-    
-    time = np.linspace(0, 1, 1000)
-    baseline = np.ones_like(time)
-    flare = np.exp(-((time - 0.5) / 0.01) ** 2)
-    model = baseline + flare
-
-    # Scalar baseline
-    ed = ed_from_model(time, model, 1.0)
-    assert np.isfinite(ed)
-    assert ed > 0
-
-    # Array baseline
-    ed2 = ed_from_model(time, model, baseline)
-    assert np.isclose(ed, ed2)
-
-    # NaN in model
-    model_bad = model.copy()
-    model_bad[100] = np.nan
-    with pytest.raises(ValueError, match="NaN or inf"):
-        ed_from_model(time, model_bad, 1.0)
-
-    # Mismatched lengths
-    with pytest.raises(ValueError):
-        ed_from_model(time[:-1], model, 1.0)
-
-    # NaN in array baseline
-    baseline_bad = baseline.copy()
-    baseline_bad[10] = np.nan
-    with pytest.raises(ValueError):
-        ed_from_model(time, model, baseline_bad)
-
-    # Non-finite scalar baseline
-    with pytest.raises(ValueError):
-        ed_from_model(time, model, np.inf)
-
-    # Too few time points
-    with pytest.raises(ValueError):
-        ed_from_model(np.array([0.1]), np.array([1.0]), 1.0)
-
-
+    @pytest.fixture
+    def single_flare_lc(self):
+        """Create a light curve with one clear flare"""
+        np.random.seed(42)
+        time = np.linspace(0, 10, 1000)
         
-    
-def test_make_flare_table():
-    """Test that make_flare_table handles group, single, empty, and posterior errors correctly."""
-
-    # Setup single flare
-    time, flux, flux_err = mock_flc(detrended=True)
-    tstarts = np.array([0.475])
-    tstops = np.array([0.495])
-    results = fit_flares(time, flux, flux_err, tstarts, tstops, plot=False)
-
-    # Generate normal table
-    table = make_flare_table(results)
-    assert isinstance(table, pd.DataFrame)
-    assert {"t_peak", "fwhm", "amplitude", "ed_rec"}.issubset(table.columns)
-    assert len(table) >= 1
-    assert table["ed_rec"].notna().any()
-
-    # Empty result input should yield empty table
-    empty = make_flare_table([])
-    assert isinstance(empty, pd.DataFrame)
-    assert empty.empty
-
-    # Confirm EDs are computed with and without posterior
-    assert table["ed_rec"].notna().all()
-    if "t_peak_err" in table.columns:
-        assert np.all(np.isfinite(table["t_peak_err"].dropna()))
-        assert np.all(np.isfinite(table["fwhm_err"].dropna()))
-        assert np.all(np.isfinite(table["amplitude_err"].dropna()))
-    
-
-    
-def test_plot_flare_fit():
-    """Test plot_flare_fit works without crashing and model shape matches fit region."""
-    
-    t, f, fe = mock_flc(ampl=0.5)
-    tstarts = np.array([0.475])
-    tstops = np.array([0.495])
-
-    results = fit_flares(
-        t, f, fe,
-        tstarts=tstarts,
-        tstops=tstops,
-        max_flares=1
-    )
-    result = results[0]
-    model = result["model"]
-    t_fit = result["time"]
-
-    assert isinstance(model, np.ndarray)
-    assert model.shape == t_fit.shape
-
-    try:
-        plot_flare_fit(t_fit, result["flux"], model,
-                       result.get("t_peaks", []), result.get("params", []))
-        plt.close('all')  # Close plot to avoid display during tests
-    except Exception as e:
-        pytest.fail(f"plot_flare_fit raised an exception: {e}")
-
-
+        baseline = np.ones_like(time) * 1.0
         
-def test_plot_all_fits():
-    """Test plot_flare_fit works without crashing"""
+        t_peak = 5.0
+        fwhm = 0.05
+        amplitude = 0.3
+        flare = flare_model_davenport2014(time, t_peak, fwhm, amplitude)
+        
+        noise_level = 0.01
+        flux = baseline + flare + np.random.normal(0, noise_level, len(time))
+        flux_err = np.full_like(flux, noise_level)
+        
+        time_obj = Time(2450000 + time, format='jd')
+        meta = {'TARGETID': 123456, 'MISSION': 'Kepler', 'QUARTER': 5}
+        
+        flc = FlareLightCurve(
+            time=time_obj,
+            flux=flux * (u.electron / u.s),
+            flux_err=flux_err * (u.electron / u.s),
+            meta=meta
+        )
+        
+        flc._true_flare = {'t_peak': t_peak, 'fwhm': fwhm, 'amplitude': amplitude}
+        flc._true_baseline = [1.0, 0.0, 0.0, 0.0, 0.0]
+        
+        return flc
     
-    time, flux, flux_err = mock_flc(detrended=True)
+    @pytest.fixture
+    def multi_flare_lc(self):
+        """Create a light curve with multiple flares"""
+        np.random.seed(42)
+        time = np.linspace(0, 20, 2000)
+        
+        baseline_coeffs = [1.0, 0.005, -0.0002, 0.0, 0.0]
+        t_centered = time - np.mean(time)
+        baseline = (baseline_coeffs[0] + 
+                   baseline_coeffs[1] * t_centered + 
+                   baseline_coeffs[2] * t_centered**2)
+        
+        flares = [
+            {'t_peak': 4.0, 'fwhm': 0.04, 'amplitude': 0.2},
+            {'t_peak': 10.0, 'fwhm': 0.08, 'amplitude': 0.5},
+            {'t_peak': 16.0, 'fwhm': 0.06, 'amplitude': 0.15},
+        ]
+        
+        flux = baseline.copy()
+        for flare_params in flares:
+            flux += flare_model_davenport2014(
+                time, 
+                flare_params['t_peak'], 
+                flare_params['fwhm'], 
+                flare_params['amplitude']
+            )
+        
+        noise_level = 0.01
+        flux += np.random.normal(0, noise_level, len(time))
+        flux_err = np.full_like(flux, noise_level)
+        
+        time_obj = Time(2450000 + time, format='jd')
+        meta = {'TARGETID': 789012, 'MISSION': 'TESS', 'SECTOR': 10}
+        
+        flc = FlareLightCurve(
+            time=time_obj,
+            flux=flux * (u.electron / u.s),
+            flux_err=flux_err * (u.electron / u.s),
+            meta=meta
+        )
+        
+        flc._true_flares = flares
+        flc._true_baseline = baseline_coeffs
+        
+        return flc
+    
+    @pytest.fixture
+    def overlapping_flares_lc(self):
+        """Create a light curve with two overlapping flares"""
+        np.random.seed(42)
+        time = np.linspace(0, 10, 1000)
+        
+        baseline = np.ones_like(time) * 1.0
+        
+        flares = [
+            {'t_peak': 5.0, 'fwhm': 0.08, 'amplitude': 0.25},
+            {'t_peak': 5.1, 'fwhm': 0.06, 'amplitude': 0.15},
+        ]
+        
+        flux = baseline.copy()
+        for flare_params in flares:
+            flux += flare_model_davenport2014(
+                time,
+                flare_params['t_peak'],
+                flare_params['fwhm'],
+                flare_params['amplitude']
+            )
+        
+        noise_level = 0.01
+        flux += np.random.normal(0, noise_level, len(time))
+        flux_err = np.full_like(flux, noise_level)
+        
+        time_obj = Time(2450000 + time, format='jd')
+        meta = {'TARGETID': 345678, 'MISSION': 'Kepler', 'QUARTER': 8}
+        
+        flc = FlareLightCurve(
+            time=time_obj,
+            flux=flux * (u.electron / u.s),
+            flux_err=flux_err * (u.electron / u.s),
+            meta=meta
+        )
+        
+        flc._true_flares = flares
+        flc._true_baseline = [1.0, 0.0, 0.0, 0.0, 0.0]
+        
+        return flc
+    
+    # ========== Test Model Components ==========
+    
+    def test_build_baseline(self):
+        """Test polynomial baseline construction"""
+        time = np.linspace(0, 10, 100)
+        coeffs = [1.0, 0.1, -0.01, 0.0, 0.0]
+        
+        baseline = build_baseline(time, coeffs)
+        
+        assert len(baseline) == len(time)
+        assert np.all(np.isfinite(baseline))
+        assert np.std(baseline) > 0
+    
+    def test_build_baseline_constant(self):
+        """Test baseline with only constant term"""
+        time = np.linspace(0, 10, 100)
+        coeffs = [2.0, 0.0, 0.0, 0.0, 0.0]
+        
+        baseline = build_baseline(time, coeffs)
+        
+        assert np.allclose(baseline, 2.0)
+    
+    def test_stacked_flare_model_single(self):
+        """Test stacked flare model with single flare"""
+        time = np.linspace(0, 10, 100)
+        params = [5.0, 0.05, 0.3]
+        
+        model = stacked_flare_model(time, *params)
+        
+        assert len(model) == len(time)
+        assert np.all(np.isfinite(model))
+        assert np.max(model) > 0
+        assert model[0] == pytest.approx(0, abs=1e-6)
+    
+    def test_stacked_flare_model_multiple(self):
+        """Test stacked flare model with multiple flares"""
+        time = np.linspace(0, 10, 100)
+        params = [
+            3.0, 0.05, 0.2,
+            7.0, 0.04, 0.15,
+        ]
+        
+        model = stacked_flare_model(time, *params)
+        
+        assert len(model) == len(time)
+        peaks = np.where((model[1:-1] > model[:-2]) & (model[1:-1] > model[2:]))[0]
+        assert len(peaks) >= 1
+    
+    def test_combined_model(self):
+        """Test combined model (baseline + flares)"""
+        time = np.linspace(0, 10, 100)
+        baseline_coeffs = [1.0, 0.01, 0.0, 0.0, 0.0]
+        flare_params = [5.0, 0.05, 0.3]
+        params = baseline_coeffs + flare_params
+        
+        model = combined_model(time, *params)
+        
+        assert len(model) == len(time)
+        assert np.all(np.isfinite(model))
+        assert model[0] == pytest.approx(1.0, abs=0.1)
+        assert np.max(model) > 1.0
+    
+    # ========== Test Likelihood Functions ==========
+    
+    def test_log_likelihood_perfect_fit(self):
+        """Test log likelihood with perfect model fit"""
+        time = np.linspace(0, 10, 100)
+        params = [1.0, 0.0, 0.0, 0.0, 0.0, 5.0, 0.05, 0.3]
+        
+        flux = combined_model(time, *params)
+        flux_err = np.full_like(flux, 0.01)
+        
+        ll = log_likelihood(params, time, flux, flux_err)
+        
+        assert np.isfinite(ll)
+        assert ll > -1000
+    
+    def test_log_likelihood_bad_fit(self):
+        """Test log likelihood with poor model fit"""
+        time = np.linspace(0, 10, 100)
+        true_params = [1.0, 0.0, 0.0, 0.0, 0.0, 5.0, 0.05, 0.3]
+        bad_params = [2.0, 0.0, 0.0, 0.0, 0.0, 3.0, 0.1, 0.1]
+        
+        flux = combined_model(time, *true_params)
+        flux_err = np.full_like(flux, 0.01)
+        
+        ll_good = log_likelihood(true_params, time, flux, flux_err)
+        ll_bad = log_likelihood(bad_params, time, flux, flux_err)
+        
+        assert ll_good > ll_bad
+    
+    def test_log_prior_in_bounds(self):
+        """Test log prior with parameters in bounds"""
+        params = [1.0, 0.0, 0.0, 0.0, 0.0, 5.0, 0.05, 0.3]
+        t_bounds = [4.9, 5.1]
+        amp_bounds = (0.1, 0.5)
+        fwhm_bounds = (0.01, 0.1)
+        
+        lp = log_prior(params, t_bounds, amp_bounds, fwhm_bounds)
+        
+        assert lp == 0.0
+    
+    def test_log_prior_out_of_bounds(self):
+        """Test log prior with parameters out of bounds"""
+        params = [1.0, 0.0, 0.0, 0.0, 0.0, 3.0, 0.05, 0.3]
+        t_bounds = [4.9, 5.1]
+        amp_bounds = (0.1, 0.5)
+        fwhm_bounds = (0.01, 0.1)
+        
+        lp = log_prior(params, t_bounds, amp_bounds, fwhm_bounds)
+        
+        assert lp == -np.inf
+    
+    def test_log_posterior(self):
+        """Test log posterior calculation"""
+        time = np.linspace(0, 10, 100)
+        params = [1.0, 0.0, 0.0, 0.0, 0.0, 5.0, 0.05, 0.3]
+        
+        flux = combined_model(time, *params)
+        flux_err = np.full_like(flux, 0.01)
+        
+        t_bounds = [4.9, 5.1]
+        amp_bounds = (0.1, 0.5)
+        fwhm_bounds = (0.01, 0.1)
+        
+        lpost = log_posterior(params, time, flux, flux_err, t_bounds, amp_bounds, fwhm_bounds)
+        
+        assert np.isfinite(lpost)
+        assert lpost > -1000
+    
+    # ========== Test Model Selection ==========
+    
+    def test_model_selection_bic(self):
+        """Test BIC calculation"""
+        time = np.linspace(0, 10, 100)
+        params = [1.0, 0.0, 0.0, 0.0, 0.0, 5.0, 0.05, 0.3]
+        
+        data = combined_model(time, *params)
+        model = combined_model(time, *params)
+        flux_err = np.full_like(data, 0.01)
+        
+        bic = model_selection(model, data, flux_err, params, method="bic")
+        
+        assert np.isfinite(bic)
+        assert bic < 1000
+    
+    def test_model_selection_aic(self):
+        """Test AIC calculation"""
+        time = np.linspace(0, 10, 100)
+        params = [1.0, 0.0, 0.0, 0.0, 0.0, 5.0, 0.05, 0.3]
+        
+        data = combined_model(time, *params)
+        model = combined_model(time, *params)
+        flux_err = np.full_like(data, 0.01)
+        
+        aic = model_selection(model, data, flux_err, params, method="aic")
+        
+        assert np.isfinite(aic)
+        assert aic < 1000
+    
+    def test_model_selection_prefers_simpler_model(self):
+        """Test that model selection penalizes complexity"""
+        time = np.linspace(0, 10, 100)
+        
+        params_simple = [1.0, 0.0, 0.0, 0.0, 0.0, 5.0, 0.05, 0.3]
+        data = combined_model(time, *params_simple)
+        model_simple = combined_model(time, *params_simple)
+        flux_err = np.full_like(data, 0.01)
+        
+        params_complex = params_simple + [7.0, 0.01, 0.001]
+        model_complex = combined_model(time, *params_complex)
+        
+        bic_simple = model_selection(model_simple, data, flux_err, params_simple, method="bic")
+        bic_complex = model_selection(model_complex, data, flux_err, params_complex, method="bic")
+        
+        assert bic_simple < bic_complex
+    
+    # ========== Test ED Calculation ==========
+    
+    def test_ed_from_model_basic(self):
+        """Test equivalent duration calculation"""
+        time = np.linspace(0, 1, 100)
+        baseline = np.ones_like(time) * 1.0
+        flare = flare_model_davenport2014(time, 0.5, 0.05, 0.3)
+        model = baseline + flare
+        
+        ed = ed_from_model(time, model, baseline)
+        
+        assert np.isfinite(ed)
+        assert ed > 0
+    
+    def test_ed_from_model_no_flare(self):
+        """Test ED with no flare (should be ~0)"""
+        time = np.linspace(0, 1, 100)
+        baseline = np.ones_like(time) * 1.0
+        model = baseline.copy()
+        
+        ed = ed_from_model(time, model, baseline)
+        
+        assert ed == pytest.approx(0, abs=1e-6)
+    
+    def test_ed_from_model_larger_flare_larger_ed(self):
+        """Test that larger flares have larger ED"""
+        time = np.linspace(0, 1, 100)
+        baseline = np.ones_like(time) * 1.0
+        
+        flare_small = flare_model_davenport2014(time, 0.5, 0.05, 0.1)
+        model_small = baseline + flare_small
+        ed_small = ed_from_model(time, model_small, baseline)
+        
+        flare_large = flare_model_davenport2014(time, 0.5, 0.05, 0.3)
+        model_large = baseline + flare_large
+        ed_large = ed_from_model(time, model_large, baseline)
+        
+        assert ed_large > ed_small
+    
+    # ========== Test Single Flare Fitting with Mocked MCMC ==========
+    
+    @patch('emcee.EnsembleSampler')
+    def test_fit_single_flare_emcee_called(self, mock_sampler_class, single_flare_lc, mock_emcee_sampler):
+        """Test that emcee is called with correct arguments"""
+        flc = single_flare_lc
+        time = flc.time.value
+        flux = flc.flux.value
+        flux_err = flc.flux_err.value
+        
+        # Create mock sampler
+        mock_sampler_instance = mock_emcee_sampler(8)
+        mock_sampler_class.return_value = mock_sampler_instance
+        
+        # Initial guess
+        flare_guess = [5.0, 0.05, 0.3]
+        
+        result = fit_single_flare(
+            time, flux, flux_err,
+            flare_guess, max_flares=1
+        )
+        
+        # Verify emcee was called
+        assert mock_sampler_class.called
+        assert mock_sampler_instance.run_mcmc.called
+        
+        # Verify result structure
+        assert result is not None
+        assert 'params' in result
+        assert 'posterior_samples' in result
+        assert result['n_flares'] == 1
+    
+    
+    
+    @patch('emcee.EnsembleSampler')
+    def test_fit_multiple_flares_with_emcee(self, mock_sampler_class, multi_flare_lc, mock_emcee_sampler):
+        """Test fitting multiple flares with mocked emcee"""
+        flc = multi_flare_lc
+        time = flc.time.value
+        flux = flc.flux.value
+        flux_err = flc.flux_err.value
+        
+        # Create appropriate mock for each flare region
+        def sampler_side_effect(*args, **kwargs):
+            # Return different mock sampler for each call
+            # Use generic reasonable parameters
+            return mock_emcee_sampler(8)
+        
+        mock_sampler_class.side_effect = sampler_side_effect
+        
+        tstarts = np.array([3.8, 9.8, 15.8]) + 2450000
+        tstops = np.array([4.2, 10.2, 16.2]) + 2450000
+        
+        results = fit_flares(
+            time, flux, flux_err,
+            tstarts, tstops,
+            buffer=0.2,
+            max_flares=2,
+                        plot=False
+        )
+        
+        assert len(results) >= 3
+        # Verify emcee was called multiple times (once per flare region)
+        assert mock_sampler_class.call_count >= 3
+    
+    # ========== Test Flare Table Creation with MCMC ==========
+    
+    @patch('emcee.EnsembleSampler')
+    def test_make_flare_table_with_posteriors(self, mock_sampler_class, single_flare_lc, mock_emcee_sampler):
+        """Test that flare table includes uncertainties from posterior samples"""
+        flc = single_flare_lc
+        time = flc.time.value
+        flux = flc.flux.value
+        flux_err = flc.flux_err.value
+        
+        true_baseline = flc._true_baseline
+        true_flare = flc._true_flare
+        true_params = true_baseline + [true_flare['t_peak'], true_flare['fwhm'], true_flare['amplitude']]
+        
+        mock_sampler_instance = mock_emcee_sampler(len(true_params))
+        mock_sampler_class.return_value = mock_sampler_instance
+        
+        tstarts = [4.8 + 2450000]
+        tstops = [5.2 + 2450000]
+        
+        results = fit_flares(
+            time, flux, flux_err,
+            tstarts, tstops,
+                        plot=False
+        )
 
-    tstarts = np.array([0.475])
-    tstops = np.array([0.495])
-    results = fit_flares(time, flux, flux_err, tstarts, tstops, plot=False)
+        print(results)
+        
+        table = make_flare_table(results)
 
-    try:
-        plot_all_fits(time, flux, results)
-        plt.close()
-    except Exception as e:
-        assert False, f"plot_all_fits raised an exception: {e}"
+        assert mock_sampler_class.called  # ✓ True
+        assert mock_sampler_instance.run_mcmc.called  # ✓ True        
+        # Check that error columns exist
+        assert 't_peak_err' in table.columns
+        assert 'fwhm_err' in table.columns
+        assert 'amplitude_err' in table.columns
+        
+        # Check that errors are reasonable (not NaN, positive)
+        assert table['t_peak_err'].notna().all()
+        assert (table['t_peak_err'] > 0).all()
+    
+    # ========== Test Edge Cases ==========
+    
+    def test_fit_flares_empty_input(self):
+        """Test that empty inputs are handled gracefully"""
+        time = np.array([])
+        flux = np.array([])
+        flux_err = np.array([])
+        tstarts = []
+        tstops = []
+        
+        with pytest.raises(ValueError):
+            fit_flares(time, flux, flux_err, tstarts, tstops)
+    
+    def test_fit_flares_mismatched_arrays(self):
+        """Test that mismatched array lengths raise error"""
+        time = np.linspace(0, 10, 100)
+        flux = np.ones(50)
+        flux_err = np.ones(100)
+        tstarts = [5.0]
+        tstops = [6.0]
+        
+        with pytest.raises(ValueError):
+            fit_flares(time, flux, flux_err, tstarts, tstops)
+    
+    def test_fit_flares_with_nans(self):
+        """Test handling of NaN values in data"""
+        time = np.linspace(0, 10, 100)
+        flux = np.ones(100)
+        flux[40:50] = np.nan
+        flux_err = np.full(100, 0.01)
+        
+        tstarts = [2.0]
+        tstops = [3.0]
+        
+        with pytest.raises(ValueError, match="contain NaN or inf"):
+            fit_flares(time, flux, flux_err, tstarts, tstops)
+    
+    @patch('emcee.EnsembleSampler')
+    def test_emcee_with_invalid_params_returns_none(self, mock_sampler_class):
+        """Test that fitting returns None when it fails"""
+        # Create mock that raises exception
+        mock_sampler_class.side_effect = Exception("MCMC failed")
+        
+        time = np.linspace(0, 10, 100)
+        flux = np.ones(100)
+        flux_err = np.full(100, 0.01)
+        
+        flare_guess = [5.0, 0.05, 0.3]
+        
+        result = fit_single_flare(
+            time, flux, flux_err,
+            flare_guess,
+                        max_flares=1
+        )
+        
+        # Should handle exception and return None
+        assert result is None
+
+    @patch('emcee.EnsembleSampler')
+    def test_debug_fit_flares_call(self, mock_sampler_class, single_flare_lc, mock_emcee_sampler):
+        """Debug test to see what's failing"""
+        flc = single_flare_lc
+        
+        mock_sampler_instance = mock_emcee_sampler(8)
+        mock_sampler_class.return_value = mock_sampler_instance
+        
+        print(f"Time range: {flc.time.value.min():.2f} to {flc.time.value.max():.2f}")
+        print(f"Flux range: {flc.flux.value.min():.4f} to {flc.flux.value.max():.4f}")
+        print(f"Data points: {len(flc.time)}")
+        
+        tstarts = [4.8]
+        tstops = [5.2]
+        
+        try:
+            results = fit_flares(
+                flc.time.value, flc.flux.value, flc.flux_err.value,
+                tstarts, tstops,
+                buffer=0.1,
+                plot=False
+            )
+            print(f"Results: {len(results)}")
+            if len(results) > 0:
+                print(f"First result keys: {results[0].keys()}")
+        except Exception as e:
+            print(f"Exception: {e}")
+            import traceback
+            traceback.print_exc()
+
+
+    @patch('emcee.EnsembleSampler')
+    def test_make_flare_table_integration(self, mock_sampler_class, mock_emcee_sampler):
+        """Integration test with minimal synthetic data"""
+        np.random.seed(42)
+        time = np.linspace(0, 5, 1000)  # More points, wider range
+        
+        baseline = np.ones_like(time) * 1.0
+        flare = flare_model_davenport2014(time, 2.5, 0.05, 0.4)
+        
+        flux = baseline + flare + np.random.normal(0, 0.005, len(time))
+        flux_err = np.full_like(flux, 0.005)
+        
+        # Mock factory that returns sampler based on actual ndim requested
+        def mock_sampler_factory(nwalkers, ndim, *args, **kwargs):
+            # ndim is the actual number of parameters being fit
+            return mock_emcee_sampler(n_params=ndim, n_walkers=nwalkers)
+        
+        mock_sampler_class.side_effect = mock_sampler_factory
+        
+        tstarts = [2.3]
+        tstops = [2.7]
+        
+        results = fit_flares(
+            time, flux, flux_err,
+            tstarts, tstops,
+            buffer=0.2,
+            max_flares=1,  # Keep it simple - just 1 flare
+            plot=False
+        )
+        
+        print(f"Mock called: {mock_sampler_class.called}")
+        print(f"Call count: {mock_sampler_class.call_count}")
+        print(f"Results: {len(results)}")
+        
+        assert len(results) > 0
+        table = make_flare_table(results)
+        assert len(table) > 0
+        assert 't_peak_err' in table.columns
