@@ -153,8 +153,7 @@ variability. Let’s remove it with K2SC:
    55, 13337, 13340, 85232, 85235, 1345.839, 1345.843, 0.262, 0.043, 0.00087, 0.004, 17693
 
 
-Column Descriptions
--------------------
+**Column Descriptions**
 
 - **istart/istop**: Start/stop indices in the original flux array
 - **cstart/cstop**: Start/stop indices in the cadence array
@@ -251,8 +250,7 @@ al. (2020) <https://ui.adsabs.harvard.edu/abs/2020AJ....159...60G>`__:
    
    
    
-Column Descriptions
--------------------
+**Column Descriptions**
 
 - **t_peak**: Time of flare peak in BKJD or BTJD
 - **t_peak_err**: Error in flare peak time
