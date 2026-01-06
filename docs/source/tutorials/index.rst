@@ -6,7 +6,7 @@ Tutorials
 	:maxdepth: 1
 
 	01_Getting_Started
-        detrend
+        05_Flare_Fitting
 	fakeflares
 	ffds
 
