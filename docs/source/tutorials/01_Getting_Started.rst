@@ -138,7 +138,7 @@ variability. Let’s remove it with K2SC:
 .. csv-table:: Flare Table
    :header: "Index", "istart", "istop", "cstart", "cstop", "tstart", "tstop", "ed_rec", "ed_rec_err", "ampl_rec", "dur", "n_valid"
    :widths: 5, 7, 7, 7, 7, 10, 10, 10, 10, 10, 8, 7
-   :class: compact-table
+   :class: small-table
    
    72, 14974, 15060, 87456, 87732, 1348.927, 1349.311, 802.47, 0.707, 0.03181, 0.383, 17693
    68, 14631, 14784, 86616, 86794, 1347.761, 1348.008, 581.10, 0.357, 0.02975, 0.247, 17693
@@ -173,10 +173,10 @@ Column Descriptions
 
 
 
-.. csv-table:: Fitted Flare Results
+.. csv-table:: Selected flares
    :header: "Index", "istart", "istop", "cstart", "cstop", "tstart", "tstop", "ed_rec", "ed_rec_err", "ampl_rec", "dur", "n_valid"
    :widths: 5, 7, 7, 7, 7, 10, 10, 10, 10, 10, 8, 7
-   :class: compact-table
+   :class: small-table
    
    10, 1993, 2001, 72918, 72926, 1328.736, 1328.747, 2.13, 0.057, 0.00631, 0.011, 17693
    11, 2410, 2417, 73340, 73347, 1329.322, 1329.332, 1.35, 0.064, 0.00248, 0.010, 17693
@@ -239,7 +239,7 @@ al. (2020) <https://ui.adsabs.harvard.edu/abs/2020AJ....159...60G>`__:
 
 
 
-.. csv-table:: Flare Fits
+.. csv-table:: Selected Flare Fits
    :header: "Index", "t_peak", "t_peak_err", "fwhm", "fwhm_err", "amplitude", "amplitude_err", "ed_rec", "fit_type", "group_index"
    :widths: 5, 11, 10, 8, 8, 11, 11, 8, 10, 8
    :class: small-table

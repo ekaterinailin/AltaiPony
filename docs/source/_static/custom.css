@@ -1,9 +1,15 @@
-.small-table {
-    font-size: 0.5em;
+.rst-content table.small-table.docutils td p,
+.rst-content table.small-table.docutils th p {
+    font-size: 0.75em !important;
+}
+
+html.writer-html5 .rst-content table.small-table td,
+html.writer-html5 .rst-content table.small-table th {
+    padding: 1px !important;
 }
 
 .compact-table {
-    font-size: 0.8em;
+    font-size: 1.8em;
 }
 
 .compact-table th,
