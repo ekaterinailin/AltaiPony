@@ -242,11 +242,27 @@ al. (2020) <https://ui.adsabs.harvard.edu/abs/2020AJ....159...60G>`__:
 .. csv-table:: Flare Fits
    :header: "Index", "t_peak", "t_peak_err", "fwhm", "fwhm_err", "amplitude", "amplitude_err", "ed_rec", "fit_type", "group_index"
    :widths: 5, 11, 10, 8, 8, 11, 11, 8, 10, 8
-   :class: compact-table
+   :class: small-table
    
    0, 1328.736142, 0.000082, 0.004722, 0.000472, 1882.62, 103.32, 2.50, single, --
    1, 1329.323987, 0.000098, 0.001450, 0.000970, 3420.59, 3200.51, 1.05, group_member, 1
    2, 1329.379935, 0.000131, 0.006053, 0.001044, 2899.35, 870.77, 4.65, group_member, 1
+   
+   
+   Column Descriptions
+-------------------
+
+- **t_peak**: Time of flare peak in BKJD or BTJD
+- **t_peak_err**: Error in flare peak time
+- **fwhm**: Full Width at Half Maximum of the flare profile (days) -- Davenport+2014 model
+- **fwhm_err**: Error in FWHM measurement
+- **amplitude**: Peak amplitude of the flare in flux units
+- **amplitude_err**: Error in amplitude measurement
+- **ed_rec**: equivalent duration (ED) of the fitted model
+- **fit_type**: Type of fit applied (single flare or group member)
+- **group_index**: Group identifier for clustered flares (empty for single flares)
+
+
 
 
 

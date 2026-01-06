@@ -1,0 +1,12 @@
+.small-table {
+    font-size: 0.85em;
+}
+
+.compact-table {
+    font-size: 0.8em;
+}
+
+.compact-table th,
+.compact-table td {
+    padding: 4px 8px;
+}

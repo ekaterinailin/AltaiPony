@@ -186,3 +186,7 @@ epub_exclude_files = ['search.html']
 
 
 # -- Extension configuration -------------------------------------------------
+
+# Add custom CSS files
+html_static_path = ['_static']
+html_css_files = ['custom.css']
