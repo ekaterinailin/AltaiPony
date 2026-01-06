@@ -30,19 +30,17 @@ the various parameters.)
 
 
 
-.. raw:: html
+.. csv-table:: TESS Observations
+   :header: "#", "Mission", "Year", "Author", "Exptime (s)", "Target Name", "Distance (arcsec)"
+   :widths: 5, 15, 8, 10, 12, 15, 15
+   :class: small-table
+   
+   0, TESS Sector 01, 2018, SPOC, 120, 441420236, 0.0
+   1, TESS Sector 27, 2020, SPOC, 20, 441420236, 0.0
+   2, TESS Sector 27, 2020, SPOC, 120, 441420236, 0.0
+   3, TESS Sector 95, 2025, SPOC, 20, 441420236, 0.0
+   4, TESS Sector 95, 2025, SPOC, 120, 441420236, 0.0
 
-    SearchResult containing 5 data products.
-    
-    <table id="table133927996322880">
-    <thead><tr><th>#</th><th>mission</th><th>year</th><th>author</th><th>exptime</th><th>target_name</th><th>distance</th></tr></thead>
-    <thead><tr><th></th><th></th><th></th><th></th><th>s</th><th></th><th>arcsec</th></tr></thead>
-    <tr><td>0</td><td>TESS Sector 01</td><td>2018</td><td><a href='https://heasarc.gsfc.nasa.gov/docs/tess/pipeline.html'>SPOC</a></td><td>120</td><td>441420236</td><td>0.0</td></tr>
-    <tr><td>1</td><td>TESS Sector 27</td><td>2020</td><td><a href='https://heasarc.gsfc.nasa.gov/docs/tess/pipeline.html'>SPOC</a></td><td>20</td><td>441420236</td><td>0.0</td></tr>
-    <tr><td>2</td><td>TESS Sector 27</td><td>2020</td><td><a href='https://heasarc.gsfc.nasa.gov/docs/tess/pipeline.html'>SPOC</a></td><td>120</td><td>441420236</td><td>0.0</td></tr>
-    <tr><td>3</td><td>TESS Sector 95</td><td>2025</td><td><a href='https://heasarc.gsfc.nasa.gov/docs/tess/pipeline.html'>SPOC</a></td><td>20</td><td>441420236</td><td>0.0</td></tr>
-    <tr><td>4</td><td>TESS Sector 95</td><td>2025</td><td><a href='https://heasarc.gsfc.nasa.gov/docs/tess/pipeline.html'>SPOC</a></td><td>120</td><td>441420236</td><td>0.0</td></tr>
-    </table>
 
 
 
