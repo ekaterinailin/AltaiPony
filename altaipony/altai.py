@@ -353,7 +353,7 @@ def detrend_savgol(lc, window_length=None, pad=3, printwl=False, **kwargs):
     return lc
 
 
-def _find_iterative_median(detrended_flux, gaps, n, **kwargs):
+def _find_iterative_median(detrended_flux, gaps, n=10, **kwargs):
     """
     Internal function to compute iterative median from arrays.
     
