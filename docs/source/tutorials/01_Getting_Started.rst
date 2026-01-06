@@ -249,7 +249,9 @@ al. (2020) <https://ui.adsabs.harvard.edu/abs/2020AJ....159...60G>`__:
    2, 1329.379935, 0.000131, 0.006053, 0.001044, 2899.35, 870.77, 4.65, group_member, 1
    
    
-   Column Descriptions
+   
+   
+Column Descriptions
 -------------------
 
 - **t_peak**: Time of flare peak in BKJD or BTJD
