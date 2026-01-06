@@ -385,8 +385,7 @@ class FlareLightCurve(LightCurve):
         Parameters
         ----------
         n : int, optional
-            Maximum number of iterations (currently unused, reserved for future use)
-            Default is 30.
+            Maximum number of iterations. Default is 30.
         **kwargs : dict
             Keyword arguments to pass to sigma_clip
 
@@ -412,7 +411,7 @@ class FlareLightCurve(LightCurve):
             gaps = self.gaps
         
         # Call internal function
-        it_med = _find_iterative_median(detrended_flux, gaps, **kwargs)
+        it_med = _find_iterative_median(detrended_flux, gaps, n, **kwargs)
         
         # Set result on self
         self.it_med = it_med

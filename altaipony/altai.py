@@ -353,7 +353,7 @@ def detrend_savgol(lc, window_length=None, pad=3, printwl=False, **kwargs):
     return lc
 
 
-def _find_iterative_median(detrended_flux, gaps, **kwargs):
+def _find_iterative_median(detrended_flux, gaps, n, **kwargs):
     """
     Internal function to compute iterative median from arrays.
     
@@ -371,12 +371,15 @@ def _find_iterative_median(detrended_flux, gaps, **kwargs):
     it_med : np.ndarray
         Iterative median array matching the length of detrended_flux
     """
+    if len(detrended_flux) == 0:
+        raise ValueError("Input detrended_flux array is empty.")
+
     # Initialize it_med with global median
     it_med = np.full_like(detrended_flux, np.nanmedian(detrended_flux))
     
     # If no gaps provided, treat entire array as one segment
     if gaps is None or len(gaps) == 0:
-        good_mask = sigma_clip(detrended_flux, **kwargs)
+        good_mask = sigma_clip(detrended_flux, max_iter=n, **kwargs)
         good_flux = detrended_flux[good_mask]
         if len(good_flux) > 0:
             it_med[:] = np.nanmedian(good_flux)
@@ -386,7 +389,7 @@ def _find_iterative_median(detrended_flux, gaps, **kwargs):
             flux_segment = detrended_flux[le:ri]
             
             # Find median that is not skewed by outliers
-            good_mask = sigma_clip(flux_segment, **kwargs)
+            good_mask = sigma_clip(flux_segment, max_iter=n, **kwargs)
             good_flux = flux_segment[good_mask]
             
             if len(good_flux) > 0:
