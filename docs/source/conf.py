@@ -24,7 +24,7 @@ def setup(app):
 # -- Project information -----------------------------------------------------
 
 project = 'AltaiPony'
-copyright = '2018, Ekaterina Ilin'
+copyright = '2025, Ekaterina Ilin'
 author = 'Ekaterina Ilin'
 
 # The short X.Y version
