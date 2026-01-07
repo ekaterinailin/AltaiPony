@@ -462,7 +462,7 @@ class FlareLightCurve(LightCurve):
         gaps = list(zip(left, right))
         
         # split up the time series in additional place if needed
-        lc.gaps = split_gaps(gaps, splits)
+        lc.meta["gaps"] = split_gaps(gaps, splits)
 
         return lc
 
