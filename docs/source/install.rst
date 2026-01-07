@@ -1,6 +1,8 @@
 Quickstart
 =======================================
 
+ALTAIPONY IS CURRENTLY UNDERGOING MAJOR RENOVATIONS. PLEASE STAND BY. [Jan 7, 2026]
+
 Installation
 ^^^^^^^^^^^^
 
@@ -20,7 +22,7 @@ Or install directly from the repository:
     cd AltaiPony
     python setup.py install
 
-This package depends, on `lightkurve`, `k2sc`, `numpy`, `pandas` and some other packages, most of which will be installed automatically. Have a look at `requirements.txt` in the repository to see a more extensive list.
+This package depends, on `lightkurve`, `numpy`, `pandas` and some other packages, most of which will be installed automatically. Have a look at `requirements.txt` in the repository to see a more extensive list. It will run stably for Python 3.10-3.13.
    
 
 Getting Started
@@ -58,7 +60,7 @@ For a statistical analysis of your flares, **AltaiPony** also features a set of 
 .. _other: https://github.com/ekaterinailin/AltaiPony/blob/master/notebooks/04_TESS_Light_Curves_With_Flares.ipynb
 .. _in this tutorial: https://altaipony.readthedocs.io/en/latest/tutorials/altai.html
 .. _Finding Flares: https://altaipony.readthedocs.io/en/latest/tutorials/altai.html
-.. _Finding Data: https://altaipony.readthedocs.io/en/latest/tutorials/01_Getting_Started.html
+.. _Quickstart: https://altaipony.readthedocs.io/en/latest/tutorials/01_Getting_Started.html
 .. _Synthetic Flare Injection and Recovery: https://altaipony.readthedocs.io/en/latest/tutorials/fakeflares.html
 .. _visualization: https://github.com/ekaterinailin/AltaiPony/blob/master/notebooks/05_Visualize_Injection_Recovery.ipynb
 .. _beginner: https://github.com/ekaterinailin/AltaiPony/blob/master/notebooks/02_Beginner_Flare_Frequency_Distributions_and_Power_Laws.ipynb

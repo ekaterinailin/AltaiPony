@@ -100,7 +100,7 @@ and it still has all the attributes, plus some more, like an empty flare
 table, and an empty detrended flux column.
 
 This is the raw light curve. The is intrumental noise but also stellar
-variability. Let’s remove it with K2SC:
+variability. Let’s remove it with the ``custom_detrending`` function:
 
 .. code:: ipython3
 
@@ -117,6 +117,8 @@ variability. Let’s remove it with K2SC:
 
 .. image:: 01_Getting_Started_files/01_Getting_Started_14_1.png
 
+
+``custom_detrending`` runs a spline fit and two rounds of Savitzky-Golay filtering with decreasing windows, while iteratively masking outliers that could be flare candidates to find a model light curve, and subtract it from the observed one. 
 
 .. code:: ipython3
 
@@ -151,7 +153,7 @@ variability. Let’s remove it with K2SC:
    55, 13337, 13340, 85232, 85235, 1345.839, 1345.843, 0.262, 0.043, 0.00087, 0.004, 17693
 
 
-**Column Descriptions**
+The individual columns show:
 
 - **istart/istop**: Start/stop indices in the original flux array
 - **cstart/cstop**: Start/stop indices in the cadence array
@@ -163,9 +165,11 @@ variability. Let’s remove it with K2SC:
 - **n_valid**: Total number of valid data points in light curve
 
 
+Now, let's keep only some 3 medium-sized flares to showcase fitting
+
 .. code:: ipython3
 
-    flcd.flares = flcd.flares.iloc[10:13]  # Keep only 3 medium sized flares to showcase fitting
+    flcd.flares = flcd.flares.iloc[10:13]  
     flcd.flares
 
 
@@ -247,8 +251,7 @@ al. (2020) <https://ui.adsabs.harvard.edu/abs/2020AJ....159...60G>`__:
    
    
    
-   
-**Column Descriptions**
+Note that the columns in this ``flare_table`` are different from the ``flares`` table:
 
 - **t_peak**: Time of flare peak in BKJD or BTJD
 - **t_peak_err**: Error in flare peak time
@@ -261,6 +264,9 @@ al. (2020) <https://ui.adsabs.harvard.edu/abs/2020AJ....159...60G>`__:
 - **group_index**: Group identifier for clustered flares (empty for single flares)
 
 
+For a deeper dive into the flare finding pipeline, see the `Flare Fitting`_ tutorial
 
+
+.. _Flare Fitting: https://altaipony.readthedocs.io/en/latest/tutorials/05_Flare_Fitting.html
 
 
