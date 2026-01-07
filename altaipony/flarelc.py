@@ -7,6 +7,7 @@ import progressbar
 import datetime
 import warnings
 
+import matplotlib.pyplot as plt
 
 from astropy.io import fits
 from astropy.table import Table
@@ -657,6 +658,75 @@ class FlareLightCurve(LightCurve):
             
 
         return lc
+    
+
+    def highlight_all_flares_in_lightcurve(self, save=None):
+        """
+        Plots the light curve with all detected flares highlighted.
+        
+        Parameters
+        ----------
+        save : None or str
+            If a string is provided, the plot is saved to the given path.
+
+        Returns
+        -------
+        None"""
+        # Plot light curve with flare regions highlighted
+        plt.figure(figsize=(12, 5))
+        plt.plot(self.time.value, self.flux, alpha=0.7)
+
+        # Highlight flare windows with translucent red spans
+        for t1, t2 in self.flares[['tstart', 'tstop']].values:
+            plt.axvspan(t1, t2, color='red', alpha=0.2)
+
+        plt.xlabel("Time [BTJD]")
+        plt.ylabel("Flux [e⁻/s]")
+        plt.xlim(self.time.value.min(), self.time.value.max())
+        plt.title("Flares in light curve")
+        plt.tight_layout()
+        plt.savefig(save) if save else plt.show()
+
+    def zoom_in_on_flare(self, ind, buffer=0.075, save=None):
+        """
+        Plots a zoomed-in view of a specific flare in the light curve.
+
+        Parameters
+        ----------
+        ind : int
+            Index of the flare to zoom in on.
+        save : None or str
+            If a string is provided, the plot is saved to the given path.
+
+        Returns
+        -------
+        None
+        """
+    
+        t1,t2 = self.flares[['tstart', 'tstop']].iloc[ind]
+
+        # Define zoom window with buffer
+        t_min = t1 - buffer
+        t_max = t2 + buffer
+
+        # Select data in zoomed window
+        mask = (self.time.value >= t_min) & (self.time.value <= t_max)
+        time_zoom = self.time.value[mask]
+        flux_zoom = self.flux[mask]  
+
+        # Plot zoomed region
+        plt.figure(figsize=(10, 4))
+        plt.plot(time_zoom, flux_zoom, alpha=0.8)
+        plt.axvspan(t1, t2, color='red', alpha=0.3, 
+                          label='Flare region')
+        plt.title(f'Zoom on flare {ind}')
+        plt.xlim(time_zoom[0], time_zoom[-1])
+        plt.xlabel("Time [BTJD or BKJD]")
+        plt.ylabel("Flux [e-/s]")
+        plt.legend()
+        plt.tight_layout()
+        plt.savefig(save) if save else plt.show()
+
 
     def sample_flare_recovery(self, iterations=2000, inject_before_detrending=False,
                               mode=None, func=None, save_lc_to_file=False, folder="", 
