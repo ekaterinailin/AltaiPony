@@ -1264,46 +1264,4 @@ class FlareLightCurve(LightCurve):
 
 
 
-def generate_lightcurve(errorval,  a1, a2, period1, period2, quad, cube,
-                        mean=3400.):
-    
-    """Generate wild light curves with variability on several
-    timescales.
-    
-    Returns:
-    ---------
-    FlareLightCurve with time, flux, and flux_err attributes
-    """
-    time = np.arange(10, 10 + 10 * np.pi,.0008)
-
-    # define the flux
-    flux = (np.random.normal(0,errorval,time.shape[0]) +
-            mean + 
-            a1*mean*np.sin(period1*time +1.)  +
-            a2*mean*np.sin(period2*time) +
-            quad*(time-25)**2 -
-            cube*(time-25)**3)
-
-    # add a gap in the data
-    flux[5600:7720] = np.nan
-
-    # add big and long flare
-    l = 66
-    flux[5280:5280 + l] = flux[5280:5280 + l] + np.linspace(1000,250,l)
-
-    # add tiny flare
-    l = 3
-    flux[15280:15280 + l] = flux[15280:15280 + l] + np.linspace(100,60,l)
-
-    # add intermediate flare
-    l, s = 15, 25280
-    flux[s:s + l] = flux[s:s + l] + np.linspace(200,60,l)
-
-    # typically Kepler and TESS underestimate the real noise
-    err = np.full_like(time,errorval/3*2)
-
-    # define FLC
-    return FlareLightCurve(time=time, flux=flux, flux_err=err)
-
-
 
