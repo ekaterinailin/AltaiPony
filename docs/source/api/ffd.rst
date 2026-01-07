@@ -5,8 +5,8 @@ FFD
 
 .. automodule:: altaipony.ffd
    :members:
-   :undoc-members:
-   :show-inheritance:
-   :special-members: __init__
+   :member-order: groupwise
+
+
 
 

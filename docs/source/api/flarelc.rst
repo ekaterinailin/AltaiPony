@@ -5,8 +5,7 @@ FlareLightCurve
 
 .. automodule:: altaipony.flarelc
    :members:
-   :undoc-members:
-   :show-inheritance:
+   :member-order: groupwise
    :special-members: __init__
    
    

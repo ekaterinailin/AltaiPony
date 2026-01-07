@@ -1,7 +1,9 @@
 Quickstart
 =======================================
 
-ALTAIPONY IS CURRENTLY UNDERGOING MAJOR RENOVATIONS. PLEASE STAND BY. [Jan 7, 2026]
+ALTAIPONY IS CURRENTLY UNDERGOING MAJOR RENOVATIONS. 
+
+PLEASE STAND BY. [Jan 7, 2026]
 
 Installation
 ^^^^^^^^^^^^
