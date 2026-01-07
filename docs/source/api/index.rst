@@ -1,10 +1,11 @@
-API Documentation
-==================
+API Reference
+=============
 
 .. toctree::
-	:caption: Core Functions
-	:maxdepth: 1
+   :maxdepth: 2
+   
+   flarelc
+   ffd
 
-	flarelc
-	ffd
+
 
