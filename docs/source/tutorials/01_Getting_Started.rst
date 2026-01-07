@@ -122,8 +122,6 @@ variability. Let’s remove it with the ``custom_detrending`` function:
 
 .. code:: ipython3
 
-    import astropy.units as u
-    
     flcd = flcd.find_flares()
     flcd.flares.sort_values(by="ed_rec", ascending=False)
 
@@ -205,7 +203,6 @@ al. (2020) <https://ui.adsabs.harvard.edu/abs/2020AJ....159...60G>`__:
 
 .. parsed-literal::
 
-      0%|          | 0/1500 [00:00<?, ?it/s]100%|██████████| 1500/1500 [00:49<00:00, 30.40it/s]
     100%|██████████| 1500/1500 [00:42<00:00, 35.19it/s]
     100%|██████████| 1500/1500 [00:38<00:00, 39.27it/s]
 
