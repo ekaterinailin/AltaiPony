@@ -15,6 +15,7 @@ from astropy.time import Time
 import astropy.units as u
 from astropy.utils.exceptions import AstropyWarning
         
+from scipy.interpolate import interp1d
 
 from .flares import flare_factor
 from .fit_flares import fit_flares as fit_flares_func
@@ -26,8 +27,7 @@ from lightkurve.utils import KeplerQualityFlags
 
 
 from .altai import (find_flares,
-                    _find_iterative_median, 
-                    detrend_savgol)
+                    _find_iterative_median)
 from .fakeflares import (merge_fake_and_recovered_events,
                          generate_fake_flare_distribution,
                          mod_random,
@@ -36,6 +36,7 @@ from .fakeflares import (merge_fake_and_recovered_events,
 from .injrecanalysis import wrap_characterization_of_flares, _heatmap
 from .utils import split_gaps
 from .utils import get_response_curve
+from .savgoldetrending import detrend_savgol
 
 import time
 LOG = logging.getLogger(__name__)
@@ -402,7 +403,6 @@ class FlareLightCurve(LightCurve):
         >>> flc.find_gaps().find_iterative_median()
         """
         # Extract arrays from self
-        time = self.time.value
         detrended_flux = self.detrended_flux
         
         # Get gaps (find them if not already computed)
@@ -416,6 +416,7 @@ class FlareLightCurve(LightCurve):
         
         # Set result on self
         self.it_med = it_med
+
         
         return self
     
@@ -504,9 +505,15 @@ class FlareLightCurve(LightCurve):
         FlareLightCurve
         """
         if mode == "savgol":
-        
+
             new_lc = copy.deepcopy(self)
-            new_lc =  detrend_savgol(new_lc, **kwargs)
+                # fill missing cadences
+            new_lc = new_lc.remove_nans().find_iterative_median()
+            og_flux = new_lc.flux.copy()
+            og_flux_err = new_lc.flux_err.copy()
+            new_lc = new_lc.interpolate_missing_cadences()
+            new_lc =  detrend_savgol(new_lc, og_flux, og_flux_err, **kwargs)
+            
             if save == True:
                 new_lc.to_fits(path)
             return new_lc
@@ -654,6 +661,10 @@ class FlareLightCurve(LightCurve):
             #find the true median value iteratively
             lc = lc.find_iterative_median()
             #find flares
+            print(np.median(lc.detrended_flux_err))
+            print(np.std(lc.detrended_flux))
+            print(lc.it_med[0], np.median(lc.detrended_flux))
+
             lc = find_flares(lc, minsep=minsep, **kwargs)
             
 
@@ -1333,5 +1344,87 @@ class FlareLightCurve(LightCurve):
         return plot_corner(samples, param_names=param_names, **kwargs)
 
 
+    def interpolate_missing_cadences(lc, **kwargs):
+        """Interpolate missing cadences in 
+        light curve, skipping larger gaps in data.
+        
+        Parameters:
+        -----------
+        lc : FlareLightCurve
+            the light curve
+        kwargs : dict
+            keyword arguments to pass to find_gaps method
+            
+        Return:
+        -------
+        interpolated FlareLightCurve
+        """
+        # find gaps that are too big to be interpolated with a good conscience
+        gaps = lc.find_gaps(**kwargs).gaps
+        
+        # set up interpolated arrays
+        time, flux, flux_err, newcadence = [], [], [], []
+        original_flux, original_flux_err, quality = [], [], []
+        
+        # interpolate within each gap
+        for i, j in gaps:
+            # select gap
+            gaplc = lc[i:j]
+            # get old cadence
+            oldx = gaplc.cadenceno.value
+            # cadenceno are complete in uncorrected flux, 
+            # so we fill in the removed cadences
+            newx = np.arange(gaplc.cadenceno.value[0], gaplc.cadenceno.value[-1]+1)
+            newcadence.append(newx)
+            
+            # interpolate flux error
+            f = interp1d(oldx, gaplc.flux_err)
+            flux_err.append(f(newx))
+            
+            # interpolate time
+            f = interp1d(oldx, gaplc.time.value)
+            time.append(f(newx))
+            
+            # interpolate flux
+            f = interp1d(oldx, gaplc.flux.value)
+            flux.append(f(newx))
 
+            # interpolate original_flux if it exists
+            if 'original_flux' in gaplc.colnames:
+                f = interp1d(oldx, gaplc['original_flux'].value)
+                original_flux.append(f(newx))   
+            # interpolate original_flux_err if it exists
+            if 'original_flux_err' in gaplc.colnames:
+                f = interp1d(oldx, gaplc['original_flux_err'].value)
+                original_flux_err.append(f(newx))
+            # interpolate original_flux if it exists
+            if 'quality' in gaplc.colnames:
+                f = interp1d(oldx, gaplc['quality'].value)
+                quality.append(f(newx))   
+        
+        # Copy the original light curve to preserve all attributes
+        newlc = FlareLightCurve(time = np.concatenate(time),
+                                flux = np.concatenate(flux),
+                                flux_err = np.concatenate(flux_err),
+                                meta=lc.meta)
+        
+        # add original_flux if it exists
+        if len(original_flux) > 0:
+            newlc['original_flux'] = np.concatenate(original_flux)
+        if len(quality) > 0:
+            newlc['quality'] = np.concatenate(quality)  
+        if len(original_flux_err) > 0:
+            newlc['original_flux_err'] = np.concatenate(original_flux_err)
+        
+        # add new cadence array
+        newcadenceno = np.concatenate(newcadence)
+        newlc["cadenceno"] = newcadenceno
+        
+        # flag values that have been interpolated in the new light curve
+        newvals = np.sort(list(set(newcadenceno) - set(lc.cadenceno.value)))
+        newvalindx = np.searchsorted(newcadenceno, newvals)
+        newlc["interpolated"] = 0  # not interpolated values
+        newlc.interpolated[newvalindx] = 1  # interpolated values
+
+        return newlc
 

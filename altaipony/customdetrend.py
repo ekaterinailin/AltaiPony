@@ -9,23 +9,19 @@ Ekaterina Ilin, 2023, MIT License
 
 This module contains custom detrending functions.
 """
-import time
 
-import copy
 import numpy as np
 import pandas as pd
 
 from .altai import _find_iterative_median, equivalent_duration
 from .utils import sigma_clip
-from .flarelc import FlareLightCurve
-from lightkurve import LightCurve
+
 
 
 
 import astropy.units as u
 
-from scipy.interpolate import UnivariateSpline, interp1d
-from scipy import optimize
+from scipy.interpolate import UnivariateSpline
 
 
 
@@ -75,6 +71,7 @@ def custom_detrending(lc, spline_coarseness=8, spline_order=3,
     
     # Store original flux as a column so it survives filtering operations
     lc["original_flux"] = lc.flux.value.copy()
+    lc["orginal_flux_err"] = lc.flux_err.value.copy()
 
     # fit a spline to the general trends
     m2flux, _ = fit_spline(time, flux, gaps, spline_order=spline_order,
@@ -84,8 +81,7 @@ def custom_detrending(lc, spline_coarseness=8, spline_order=3,
     w = int((np.rint(savgol1 / 24. / dt) // 2) * 2 + 1)
 
     lc.flux = m2flux * u.electron / u.s
-    lc["spline_detrended_flux"] = m2flux  # add for debugging
-
+    # lc["spline_detrended_flux"] = m2flux  # add for debugging
     # use Savitzy-Golay to iron out the rest
     lc3 = lc.detrend("savgol", window_length=w, pad=pad)
 
@@ -96,117 +92,24 @@ def custom_detrending(lc, spline_coarseness=8, spline_order=3,
     lc4 = lc3.detrend("savgol", window_length=w, pad=pad, 
                       max_sigma=max_sigma, longdecay=longdecay)
     
+    
     # Restore original flux from the column (now properly filtered to match lc4's length)
+    lc4.detrended_flux = lc4.flux.value
+    lc4.detrended_flux_err = lc4.flux_err.value
     lc4.flux = lc4["original_flux"] * u.electron / u.s
     
     # Clean up the temporary column
     lc4.remove_column("original_flux")
     lc.flux = lc["original_flux"] * u.electron / u.s
-    lc.remove_column("original_flux")
+    lc.flux_err = lc["orginal_flux_err"] * u.electron / u.s
+    
     
     # find median value
     lc4.find_iterative_median()
- 
+
     return lc4
 
-def detrend_savgol(lc, max_sigma=2.5, longdecay=6, 
-                   w=121, break_tolerance=10, **kwargs):
-    """New detrending with savgol filter.
-    
-    Parameters:
-    -----------
-    
-    max_sigma: float>0
-        sigma clipping threshold
-    longdecay: int
-        adding masked datapoints to the tail if
-        multiple outliers occur in a row
-    w : odd int
-        window length for savgol filter
-    break_tolerance : int
-        If there are large gaps in time, flatten will split the flux into several sub-lightcurves and apply savgol_filter to each individually. A gap is defined as a period in time larger than break_tolerance times the median gap. To disable this feature, set break_tolerance to None.
-    kwargs : dict
-        keyword arguments to feed LightCurve.flatten()
-    """
-    # fill missing cadences
-    lc = interpolate_missing_cadences(lc)
-    
-    # normalize
-    lcn = lc.normalize()
-    
-    # sigma clip
-    m = sigma_clip(lcn.flux, max_sigma=2.5, longdecay=6)
 
-    # convert bool to int
-    mask = ~m * 1
-
-    # from Appaloosa:
-    # convert mask to start and stop
-    reverse_counts = np.zeros_like(lcn.flux, dtype='int')
-    for k in range(2, len(lcn.flux)):
-        reverse_counts[-k] = (mask[-k]
-                                * (reverse_counts[-(k-1)]
-                                + mask[-k]))
-
-    # find flare start where values in reverse_counts switch from 0 to >=N3 
-    # SET N3=2 because we care about all longer outliers!
-    istart_i = np.where((reverse_counts[1:] >= 2) &
-                        (reverse_counts[:-1] - reverse_counts[1:] < 0))[0] + 1
-
-    # use the value of reverse_counts to determine how many points away stop is
-    istop_i = istart_i + (reverse_counts[istart_i])
-
-    # get a list of masked candidates to extrapolate
-    candidates = list(zip(istart_i, istop_i))
-
-    # save the flare flux
-    fluxold = lcn.flux
-
-    # remove the flares candidates for now
-    lcn.flux[mask] = np.nan
-
-    # SAVGOL APPLIED HERE
-    # https://docs.lightkurve.org/reference/api/lightkurve.LightCurve.flatten.html?highlight=flatten#lightkurve.LightCurve.flatten
-    # flatten with light curve
-    # set break_tolerance to 10 by default, i.e. 20 min in a 2min cadence LC
-    lcrsf  = lcn.flatten(window_length=w, break_tolerance=break_tolerance) #replace with 6h or 3h window
-
-    # cycle over all candidates
-    for i, j in candidates:
-
-        # span the data
-        mask_ij = np.arange(i,j)
-
-        # linearinterpolate below the flare
-        interpolation_ij = np.interp(lcn.time.value[mask_ij],
-                                     [lcn.time.value[i],lcn.time.value[j]],
-                                     [lcn.flux[i],lcn.flux[j]])
-        # plt.plot(lcn.time.value[mask], fill)
-        # plt.plot(lcn.time.value[mask], x)
-        # plt.scatter( [lcn.time.value[mask[0]],lcn.time.value[mask[-1]]],
-        #                    [lcn.flux.value[mask[0]-1],lcn.flux.value[mask[-1]+1]])
-
-        # fill in the masked data again
-        lcrsf.flux[mask_ij] = fluxold[mask_ij] / interpolation_ij
-    
-    # deugging helper lines:
-    # %matplotlib inline
-    # plt.figure(figsize=(15,4))
-    # plt.plot(lcrsf.time.value, lcrsf.flux.value, color="k")
-    # # plt.plot(lcrsf2.time.value, lcrsf2.flux.value, color="grey")
-    # plt.plot(lcn.time.value, lcn.flux.value + 0.02, color="r")
-    # plt.scatter(lcn.time[mask].value, lcn.flux[mask].value)
-    # # plt.xlim(1945,1946)
-    # # plt.ylim(0.98,1.03)
-    
-    # finally remove interpolated values
-    # first, set them to NaNs
-    lcrsf.flux[np.where(lcrsf.interpolated.value==1)[0]] = np.nan 
-    
-    # then remove
-    lcrsf = lcrsf.remove_nans() 
-    
-    return lcrsf
 
 
 
@@ -389,68 +292,3 @@ def measure_flare(flc, sta, sto):
     return 
 
 
-def interpolate_missing_cadences(lc, **kwargs):
-    """Interpolate missing cadences in 
-    light curve, skipping larger gaps in data.
-    
-    Parameters:
-    -----------
-    lc : FlareLightCurve
-        the light curve
-    kwargs : dict
-        keyword arguments to pass to find_gaps method
-    
-    Return:
-    -------
-    interpolated FlareLightCurve
-    """
-
-    # find gaps that are too big to be interpolated with a good conscience
-    gaps = lc.find_gaps().gaps
-
-    # set up interpolated array
-    time, flux, flux_err, newcadence = [], [], [], []
-
-    # interpolate within each gap
-    for i, j in gaps:
-
-        # select gap
-        gaplc = lc[i:j]
-
-        # get old cadence
-        oldx = gaplc.cadenceno.value
-
-        # cadenceno are complete in uncorrected flux, 
-        # so we fill in the removed cadences
-        newx = np.arange(gaplc.cadenceno.value[0], gaplc.cadenceno.value[-1])
-        newcadence.append(newx)
-
-        # interpolate flux error
-        f = interp1d(oldx, gaplc.flux_err)
-        flux_err.append(f(newx))
-
-        # interpolate time
-        f = interp1d(oldx, gaplc.time.value)
-        time.append(f(newx))
-
-        # interpolate flux
-        f = interp1d(oldx, gaplc.flux.value)
-        flux.append(f(newx))
-
-    # stitch together new light curve
-    newlc = FlareLightCurve(time=np.concatenate(time),
-                            flux=np.concatenate(flux),
-                            flux_err=np.concatenate(flux_err),
-                            targetid=lc.targetid)
-
-    # add new cadence array
-    newcadenceno = np.concatenate(newcadence)
-    newlc["cadenceno"] = newcadenceno
-
-    # flag values that have been interpolated in the new light curve
-    newvals = np.sort(list(set(newcadenceno) - set(lc.cadenceno.value)))
-    newvalindx = np.searchsorted(newcadenceno, newvals)
-    newlc["interpolated"] = 0 # not interpolated values
-    newlc.interpolated[newvalindx] = 1 # interpolated values
-
-    return newlc

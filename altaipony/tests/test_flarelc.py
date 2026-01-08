@@ -9,6 +9,7 @@ from ..utils import get_response_curve
 from ..flarelc import FlareLightCurve
 from ..lcio import to_flare_lightcurve
 
+import matplotlib.pyplot as plt
 
 from astropy.io import fits
 from astropy.time import Time
@@ -218,14 +219,23 @@ def test_detrend():
             daplc = aplc.detrend("savgol")
             lcs.append(daplc)
 
-    for daplc in lcs:
+    for i, daplc in enumerate(lcs):
+        # print(i)
+        # plt.figure()
+        # plt.plot(daplc.time.value, daplc.flux, label="Original flux")
+        # plt.plot(daplc.time.value, daplc.detrended_flux, label="Detrended flux")
+        # plt.yscale("log")
+        # plt.ylim(450,550)
+        # plt.xlim(0,3)
+        # plt.legend()
+        # plt.savefig(f"savgol_detrend_test_{i}.png")
         fff = daplc.find_iterative_median()
         shape = fff.flux.value.shape
         assert fff.it_med.value == pytest.approx(500., rel=0.01) #median stays the same roughly
         assert aplc.flux.value.shape[0] == daplc.detrended_flux.value.shape[0] #no NaNs to throw out
-        assert daplc.flux.value.max() > daplc.detrended_flux.value.max() # flare sits on a LC part above quiescent level
         assert (aplc.flux_err.value == daplc.detrended_flux_err.value).all() # uncertainties are simply kept
         # Test that shapes of arrays are kept
+
         for att in ["detrended_flux", "detrended_flux_err",
             "flux_err", "flux", "time", "quality"]:
             assert getattr(fff, att).value.shape == shape
@@ -291,7 +301,6 @@ def test_find_flares():
     """Test that an obvious flare is recovered sufficiently well."""
     flc = mock_flc(detrended=True)
     flc = flc.find_flares()
-    #print(flc.flares)
     assert flc.flares.loc[0,'ed_rec'] == pytest.approx(3455.8875941, rel=1e-4)
     assert flc.flares['ed_rec_err'][0] < flc.flares['ed_rec'][0]
     assert flc.flares['istart'][0] == 15

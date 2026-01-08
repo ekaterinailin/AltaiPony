@@ -154,8 +154,6 @@ def find_flares(flc, minsep=3, sigma=None, **kwargs):
         flux = lc.detrended_flux[le:ri]
         
         median = lc.it_med[le:ri]
-        
-        time = lc.time[le:ri]
         # run final flare-find on DATA - MODEL
 
         if sigma is None:
@@ -166,6 +164,8 @@ def find_flares(flc, minsep=3, sigma=None, **kwargs):
 
         # now pick out final flare candidate indices
         candidates = np.where( isflare > 0)[0]
+        print("candidates in gap:", (le,ri))
+        print(candidates)
         if (len(candidates) < 1):#no candidates = no indices
             LOG.debug(f'INFO: No candidates were found in the ({le},{ri}) gap.')
             istart_gap = np.array([])
@@ -429,7 +429,7 @@ def equivalent_duration(lc, start, stop, err=False):
 
     start, stop = int(start),int(stop)+1
     lct = lc[start:stop]
-    residual = lct.detrended_flux / np.nanmedian(lct.it_med)-1.
+    residual = lct.detrended_flux / np.nanmedian(lct.it_med.value)-1.
     x = lct.time.value * 60.0 * 60.0 * 24.0
     ed = np.sum(np.diff(x) * residual[:-1])
 

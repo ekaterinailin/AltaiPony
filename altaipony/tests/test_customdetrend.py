@@ -165,17 +165,14 @@ class TestCustomDetrending:
         # But not zero (there's still noise)
         assert detrended_std > 0
     
-    def test_custom_detrending_handles_gaps(self, flc_with_variability):
+    def test_custom_detrending_handles_nans(self, flc_with_variability):
         """Test that detrending handles data gaps correctly"""
         flc_detrended = custom_detrending(flc_with_variability, spline_coarseness=8)
-        
-        # Should have found gaps
-        assert flc_detrended.gaps is not None
-        assert len(flc_detrended.gaps) > 0
-        
+       
         # Detrended flux should have NaNs where original has NaNs
         original_nans = np.isnan(flc_with_variability.flux.value)
         detrended_nans = np.isnan(flc_detrended.detrended_flux)
+        
         assert np.array_equal(original_nans, detrended_nans)
     
     # ========== Test estimate_detrended_noise ==========

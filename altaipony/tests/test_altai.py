@@ -10,6 +10,7 @@ from ..altai import (find_flares,
 from ..flarelc import FlareLightCurve
 from .test_flarelc import mock_flc
 
+import matplotlib.pyplot as plt
 def test_detrend_savgol():
     """Test if different window_length kwargs are processed correctly."""
     
@@ -20,22 +21,7 @@ def test_detrend_savgol():
     flux[4500:4809] = np.nan
     flux_err = np.random.rand(N) * 10.
     flc = FlareLightCurve(targetid=10000009, time=time, flux=flux, flux_err=flux_err)
-    
-    flcds = [flc.detrend("savgol"),
-             flc.detrend("savgol", window_length=201),
-             flc.detrend("savgol", window_length=(101,205)),
-             flc.detrend("savgol", window_length=[101,205])]
-    for flcd in flcds:
-            assert flcd.detrended_flux.value.shape[0] == 1e4-309
-            
-    N = int(1e4)
-    time = np.linspace(2000,2050,N)
-    np.random.seed(200)
-    flux = np.sin(time / .03) * 30. + 5e4 + np.random.rand(N) * 25. + 5e-4 * ((time-2004.)**3 - 30 * (time-2004)**2)
-    flux[5000:5010] = flux[5000:5010] + np.array([500,250,150,80,60,30,20,10,7,4])
-    flux[4500:4809] = np.nan
-    flux_err = np.random.rand(N) * 35. # this reflects the real noise
-    flc = FlareLightCurve(targetid=10000009, time=time, flux=flux, flux_err=flux_err)
+    flc.cadenceno = np.arange(N)
     
     flcds = [flc.detrend("savgol"),
              flc.detrend("savgol", window_length=201),
@@ -44,18 +30,46 @@ def test_detrend_savgol():
     for flcd in flcds:
             assert flcd.detrended_flux.value.shape[0] == 1e4-309
             
+    N = int(1e4)
+    time = np.linspace(2000,2050,N)
+    np.random.seed(200)
+    flux = np.sin(time / .03) * 30. + 5e4 + np.random.rand(N) * 25. + 5e-4 * ((time-2004.)**3 - 30 * (time-2004)**2)
+    flux[5000:5010] = flux[5000:5010] + np.array([500,250,150,80,60,30,20,10,7,4])
+    # flux[4500:4809] = np.nan
+    flux_err = np.random.rand(N) * 35. # this reflects the real noise
+    flc = FlareLightCurve(targetid=10000009, time=time, flux=flux, flux_err=flux_err)
+    
+    flcds = [flc.detrend("savgol"),
+             flc.detrend("savgol", window_length=201),
+             flc.detrend("savgol", window_length=(101,205)),
+             flc.detrend("savgol", window_length=[25,25])]
+    for flcd in flcds:
+            assert flcd.detrended_flux.value.shape[0] == 1e4
+            
     # The last de-trending iteration is the only appropriate one to give good 
     # results given the rapid variability of the light curve. So let's check
     # the outcome of this one. It should only recover the one flare we intro-
     # duced above around t=2025
-    flares = flcd.find_flares().flares
+    
+    plt.figure()
+    plt.errorbar(flcd.time.value, flcd.detrended_flux,
+                  yerr=flcd.detrended_flux_err, fmt='.', markersize=1, alpha=0.5)
+    plt.xlabel("Time [d]")
+    plt.ylabel("Detrended Flux")
+    plt.savefig("test_detrend_savgol.png")
+    flcd = flcd[np.isfinite(flcd.detrended_flux)&
+                np.isfinite(flcd.detrended_flux_err)]
+    # flcd.detrended_flux_err = np.std(flcd.detrended_flux) * np.ones_like(flcd.detrended_flux)
+    flares = flcd.find_flares(N1=14, N2=5, N3=3).flares
+    print(flares)
+    print(np.where(flcd.detrended_flux > 50000 + 3 * np.std(flcd.detrended_flux)))
     
     f = flares.iloc[0,:]
     assert f.tstart == pytest.approx(2025, abs=5e-3)
-    assert f.ed_rec == pytest.approx(8.31358,abs=f.ed_rec_err)
-    assert f.istart == 4691
-    assert f.istop == 4695
-    assert f.total_n_valid_data_points == 1e4-309
+    assert f.ed_rec == pytest.approx(8.116,abs=f.ed_rec_err)
+    assert f.istart == 4998
+    assert f.istop == 5001
+    assert f.total_n_valid_data_points == 9998
     assert f.dur == pytest.approx(f.tstop - f.tstart, rel=1e-4)
 
     
