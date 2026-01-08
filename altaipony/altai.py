@@ -7,6 +7,7 @@ import copy
 from scipy.signal import savgol_filter
 
 from .utils import sigma_clip
+import time
 
 
 LOG = logging.getLogger(__name__)
@@ -164,8 +165,6 @@ def find_flares(flc, minsep=3, sigma=None, **kwargs):
 
         # now pick out final flare candidate indices
         candidates = np.where( isflare > 0)[0]
-        print("candidates in gap:", (le,ri))
-        print(candidates)
         if (len(candidates) < 1):#no candidates = no indices
             LOG.debug(f'INFO: No candidates were found in the ({le},{ri}) gap.')
             istart_gap = np.array([])
@@ -389,7 +388,10 @@ def _find_iterative_median(detrended_flux, gaps, n=10, **kwargs):
             flux_segment = detrended_flux[le:ri]
             
             # Find median that is not skewed by outliers
+            t3 = time.time()
             good_mask = sigma_clip(flux_segment, max_iter=n, **kwargs)
+            t4 = time.time()
+            print(f"Sigma clipping segment ({le},{ri}) took {t4-t3:.2f} seconds.")
             good_flux = flux_segment[good_mask]
             
             if len(good_flux) > 0:
@@ -429,7 +431,7 @@ def equivalent_duration(lc, start, stop, err=False):
 
     start, stop = int(start),int(stop)+1
     lct = lc[start:stop]
-    residual = lct.detrended_flux / np.nanmedian(lct.it_med.value)-1.
+    residual = lct.detrended_flux / np.nanmedian(lct.it_med)-1.
     x = lct.time.value * 60.0 * 60.0 * 24.0
     ed = np.sum(np.diff(x) * residual[:-1])
 

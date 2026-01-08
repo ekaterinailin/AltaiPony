@@ -37,6 +37,7 @@ from .injrecanalysis import wrap_characterization_of_flares, _heatmap
 from .utils import split_gaps
 from .utils import get_response_curve
 from .savgoldetrending import detrend_savgol
+import time
 
 import time
 LOG = logging.getLogger(__name__)
@@ -379,7 +380,7 @@ class FlareLightCurve(LightCurve):
         
         return flc
     
-    def find_iterative_median(self, n=30, **kwargs):
+    def find_iterative_median(self, n=10, **kwargs):
         """
         Find the iterative median value for a continuous observation period using
         sigma clipping to identify outliers.
@@ -415,7 +416,7 @@ class FlareLightCurve(LightCurve):
         it_med = _find_iterative_median(detrended_flux, gaps, n, **kwargs)
         
         # Set result on self
-        self.it_med = it_med
+        self["it_med"] = it_med
 
         
         return self
@@ -456,7 +457,7 @@ class FlareLightCurve(LightCurve):
         left, right = gap_out[:-1], gap_out[1:]
 
         # drop too short observation periods
-        too_short = np.where(np.diff(gap_out) < 10)
+        too_short = np.where(np.diff(gap_out) < minspan)
         left, right = np.delete(left,too_short), np.delete(right,(too_short))
 
         # get the gaps
@@ -652,14 +653,18 @@ class FlareLightCurve(LightCurve):
             return self
         else:
             lc = copy.deepcopy(self)
+            t1 = time.time()
             #re-init flares
             columns = ['istart', 'istop', 'cstart', 'cstop', 'tstart',
                        'tstop', 'ed_rec', 'ed_rec_err', 'ampl_rec', 'dur']
             lc.flares = pd.DataFrame(columns=columns)
             #find continuous observing periods
             lc = lc.find_gaps()
+            t2 = time.time()
             #find the true median value iteratively
-            lc = lc.find_iterative_median()
+            lc = lc.find_iterative_median(n=4)
+            t3 = time.time()
+            print(f"Found iterative median in {t3-t2:.2f} seconds")
             #find flares
             lc = find_flares(lc, minsep=minsep, **kwargs)
             
