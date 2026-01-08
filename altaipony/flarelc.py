@@ -661,10 +661,6 @@ class FlareLightCurve(LightCurve):
             #find the true median value iteratively
             lc = lc.find_iterative_median()
             #find flares
-            print(np.median(lc.detrended_flux_err))
-            print(np.std(lc.detrended_flux))
-            print(lc.it_med[0], np.median(lc.detrended_flux))
-
             lc = find_flares(lc, minsep=minsep, **kwargs)
             
 
