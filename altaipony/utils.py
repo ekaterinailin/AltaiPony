@@ -170,56 +170,38 @@ def sigma_clip(a, max_iter=10, max_sigma=3.,
         return mlow & mhigh
 
 
+
 def expand_mask(a, longdecay=1):
-    """Expand the mask if multiple outliers occur in a row.
-    Add sqrt(#outliers in a row) masked points
-    before and after the outlier sequence.
+    """Vectorized version of expand_mask."""
+    a = a.copy()  # Avoid mutating input
     
-    Yes the code looks is ugly, but it's faster than 
+    # Pad with 1s to detect runs at boundaries
+    padded = np.concatenate([[1], a, [1]])
     
-    Parameters:
-    -----------
-    a : bool array
-        mask
-    longdecay : int
-        optional parameter to expand the mask more by 
-        this factor after the series of outliers 
-     
-    Return:
-    -------
-    array - expanded mask
-    """
-    i, j, k = 0, 0, 0
+    # Find transitions: 1->0 (run starts) and 0->1 (run ends)
+    diff = np.diff(padded)
+    run_starts = np.where(diff == -1)[0]
+    run_ends = np.where(diff == 1)[0]
     
-    while i<len(a):
-        v=a[i]
-        
-        if (v==0) & (j==0):
-            k += 1
-            j = 1
-            i += 1
-
-        elif (v==0) & (j==1):
-            k += 1
-            i += 1
-
-        elif (v==1) & (j==0):
-            i += 1
-        
-        elif (v==1) & (j==1):
-            if k >= 2:
-                
-                addto = int(np.rint(np.sqrt(k)))
-                
-                a[i - k - addto : i - k] = 0
-                a[i : i + longdecay * addto] = 0
-                i += longdecay * addto
-            else:
-                i += 1
-            j = 0
-            k = 0
-                 
+    # Calculate run lengths
+    run_lengths = run_ends - run_starts
+    
+    # Only process runs with length >= 2
+    mask = run_lengths >= 2
+    starts = run_starts[mask]
+    ends = run_ends[mask]
+    lengths = run_lengths[mask]
+    
+    # Calculate expansion amounts
+    addto = np.rint(np.sqrt(lengths)).astype(int)
+    
+    # Expand the mask
+    for s, e, add in zip(starts, ends, addto):
+        a[max(0, s - add) : s] = 0
+        a[e : min(len(a), e + longdecay * add)] = 0
+    
     return a
+
 
 
 def generate_random_power_law_distribution(a, b, g, size=1, seed=None):
