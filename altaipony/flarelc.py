@@ -37,9 +37,7 @@ from .injrecanalysis import wrap_characterization_of_flares, _heatmap
 from .utils import split_gaps
 from .utils import get_response_curve
 from .savgoldetrending import detrend_savgol
-import time
 
-import time
 LOG = logging.getLogger(__name__)
 
 
@@ -469,25 +467,18 @@ class FlareLightCurve(LightCurve):
         return lc
 
     def detrend(self, mode, save=False,
-                path='detrended_lc.fits', de_niter=30, max_sigma=3, 
+                path='detrended_lc.fits',
                 func=None,
                 **kwargs):
         """
-        De-trends a FlareLightCurve using ``K2SC``.
-        Optionally saves the LightCurve in a fits file that can
-        be read as K2SC file.
+        De-trends a FlareLightCurve.
 
         Parameters:
         ----------
         mode : str
             "savgol" or "custom"
-        de_niter : int
-            Differential Evolution global optimizer parameter. K2SC
-            default is 150, here set to 30 as a safety net to avoid
-            unintenional computational effort.
         max_sigma: int
             Default is 3, value is passed to iterative sigma clipping
-            in K2SC
         save : False or bool
             If True, the light curve is saved as a fits file to a
             given folder.
@@ -498,7 +489,7 @@ class FlareLightCurve(LightCurve):
         func : function
             custom detrending function
         kwargs : dict
-            Keyword arguments to pass to k2sc, detrend_savgol, or custom
+            Keyword arguments to pass to detrend_savgol, or custom
             method
 
         Returns
@@ -653,18 +644,14 @@ class FlareLightCurve(LightCurve):
             return self
         else:
             lc = copy.deepcopy(self)
-            t1 = time.time()
             #re-init flares
             columns = ['istart', 'istop', 'cstart', 'cstop', 'tstart',
                        'tstop', 'ed_rec', 'ed_rec_err', 'ampl_rec', 'dur']
             lc.flares = pd.DataFrame(columns=columns)
             #find continuous observing periods
             lc = lc.find_gaps()
-            t2 = time.time()
             #find the true median value iteratively
             lc = lc.find_iterative_median(n=4)
-            t3 = time.time()
-            print(f"Found iterative median in {t3-t2:.2f} seconds")
             #find flares
             lc = find_flares(lc, minsep=minsep, **kwargs)
             

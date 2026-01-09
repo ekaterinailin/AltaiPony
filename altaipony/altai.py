@@ -388,10 +388,7 @@ def _find_iterative_median(detrended_flux, gaps, n=10, **kwargs):
             flux_segment = detrended_flux[le:ri]
             
             # Find median that is not skewed by outliers
-            t3 = time.time()
             good_mask = sigma_clip(flux_segment, max_iter=n, **kwargs)
-            t4 = time.time()
-            print(f"Sigma clipping segment ({le},{ri}) took {t4-t3:.2f} seconds.")
             good_flux = flux_segment[good_mask]
             
             if len(good_flux) > 0:

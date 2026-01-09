@@ -70,26 +70,27 @@ def custom_detrending(lc, spline_coarseness=8, spline_order=3,
     time, flux = lc.time.value, lc.flux.value
     
     # Store original flux as a column so it survives filtering operations
-    lc["original_flux"] = lc.flux.value.copy()
-    lc["orginal_flux_err"] = lc.flux_err.value.copy()
+    lc["original_flux"] = lc.flux.copy()
+    lc["orginal_flux_err"] = lc.flux_err.copy()
 
     # fit a spline to the general trends
     m2flux, _ = fit_spline(time, flux, gaps, spline_order=spline_order,
                            spline_coarseness=spline_coarseness)
     
     # choose a 6 hour window
-    w = int((np.rint(savgol1 / 24. / dt) // 2) * 2 + 1)
+    w1 = int((np.rint(savgol1 / 24. / dt) // 2) * 2 + 1)
 
     lc.flux = m2flux * u.electron / u.s
     # lc["spline_detrended_flux"] = m2flux  # add for debugging
     # use Savitzy-Golay to iron out the rest
-    lc3 = lc.detrend("savgol", window_length=w, pad=pad)
+    lc3 = lc.detrend("savgol", window_length=w1, pad=pad,
+                      max_sigma=max_sigma, longdecay=longdecay)
 
     # choose a three hour window
-    w = int((np.rint(savgol2 / 24. / dt) // 2) * 2 + 1)
+    w2 = int((np.rint(savgol2 / 24. / dt) // 2) * 2 + 1)
 
     # use Savitzy-Golay to iron out the rest
-    lc4 = lc3.detrend("savgol", window_length=w, pad=pad, 
+    lc4 = lc3.detrend("savgol", window_length=w2, pad=pad, 
                       max_sigma=max_sigma, longdecay=longdecay)
     
     
