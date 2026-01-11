@@ -67,9 +67,9 @@ def test_detrend_savgol():
     f = flares.iloc[0,:]
     assert f.tstart == pytest.approx(2025, abs=5e-3)
     assert f.ed_rec == pytest.approx(8.116,abs=f.ed_rec_err)
-    assert f.istart == 4998
-    assert f.istop == 5001
-    assert f.total_n_valid_data_points == 9998
+    assert f.istart == 5000
+    assert f.istop == 5003
+    assert f.total_n_valid_data_points == 10000
     assert f.dur == pytest.approx(f.tstop - f.tstart, rel=1e-4)
 
     

@@ -17,7 +17,7 @@ from .altai import _find_iterative_median, equivalent_duration
 from .utils import sigma_clip
 
 
-
+import matplotlib.pyplot as plt
 
 import astropy.units as u
 
@@ -28,7 +28,7 @@ from scipy.interpolate import UnivariateSpline
 
 def custom_detrending(lc, spline_coarseness=8, spline_order=3,
                       savgol1=6., savgol2=3., pad=3, max_sigma=2.5, 
-                      longdecay=6, maxgap=10):
+                      longdecay=6, maxgap=10, debug_plot=False):
     """Custom de-trending for TESS and Kepler 
     short cadence light curves, including TESS Cycle 3 20s
     cadence.
@@ -58,6 +58,9 @@ def custom_detrending(lc, spline_coarseness=8, spline_order=3,
         Long decay time for outlier rejection. Defaults to 6.
     maxgap : float
         Maximum gap size in days for spline fitting. Defaults to 10 x cadence size.
+    debug_plot: bool
+        If True will plot a figure with the flux after each of the detrending steps, 
+        i.e., spline, and the two Sav-Gol iterations 
 
         
     Return:
@@ -67,6 +70,8 @@ def custom_detrending(lc, spline_coarseness=8, spline_order=3,
     dt = np.mean(np.diff(lc.time.value))
     gaps = lc.find_gaps(maxgap=maxgap * dt).gaps
 
+    lc = lc.interpolate_missing_cadences()
+
     time, flux = lc.time.value, lc.flux.value
     
     # Store original flux as a column so it survives filtering operations
@@ -75,25 +80,40 @@ def custom_detrending(lc, spline_coarseness=8, spline_order=3,
 
     # fit a spline to the general trends
     m2flux, _ = fit_spline(time, flux, gaps, spline_order=spline_order,
-                           spline_coarseness=spline_coarseness)
+                           spline_coarseness=spline_coarseness, longdecay=longdecay)
     
     # choose a 6 hour window
     w1 = int((np.rint(savgol1 / 24. / dt) // 2) * 2 + 1)
 
     lc.flux = m2flux * u.electron / u.s
-    # lc["spline_detrended_flux"] = m2flux  # add for debugging
-    # use Savitzy-Golay to iron out the rest
+    lc.flux_err = lc.flux_err * u.electron / u.s
+
+    if debug_plot == True:
+        plt.figure()
+        plt.plot(lc.time.value, lc.flux.value, 'k.', markersize=1,
+                 label="after spline fit")
+
+    # use Savitzy-Golay to iron out the rest    
     lc3 = lc.detrend("savgol", window_length=w1, pad=pad,
                       max_sigma=max_sigma, longdecay=longdecay)
+    
+    lc3.flux = lc3.detrended_flux * u.electron / u.s
+ 
+    if debug_plot == True:
+        plt.plot(lc3.time.value, lc3.flux.value, 'r.', 
+                 markersize=1, label="after first Sav-Gol step")
 
-    # choose a three hour window
+    # choose a uneven window size
     w2 = int((np.rint(savgol2 / 24. / dt) // 2) * 2 + 1)
 
     # use Savitzy-Golay to iron out the rest
     lc4 = lc3.detrend("savgol", window_length=w2, pad=pad, 
                       max_sigma=max_sigma, longdecay=longdecay)
     
-    
+    if debug_plot == True:
+        plt.plot(lc4.time.value, lc4.detrended_flux.value, 'b.', 
+                 markersize=1, label="after second Sav-Gol step")
+
     # Restore original flux from the column (now properly filtered to match lc4's length)
     lc4.detrended_flux = lc4.flux.value
     lc4.detrended_flux_err = lc4.flux_err.value
@@ -115,7 +135,7 @@ def custom_detrending(lc, spline_coarseness=8, spline_order=3,
 
 
 def estimate_detrended_noise(flc, mask_pos_outliers_sigma=2.5, 
-                             std_window=100):
+                             std_window=100, longdecay=6):
     """
     Estimate detrended flux uncertainties using rolling standard deviation.
     
@@ -127,6 +147,8 @@ def estimate_detrended_noise(flc, mask_pos_outliers_sigma=2.5,
         Sigma threshold for masking positive outliers (likely flares)
     std_window : int
         Window size for rolling standard deviation calculation
+    longdecay : int
+        Long decay time for outlier rejection
     
     Returns
     -------
@@ -151,7 +173,7 @@ def estimate_detrended_noise(flc, mask_pos_outliers_sigma=2.5,
         
         # First pass: mask outliers and compute initial error estimate
         mask = sigma_clip(flux_segment, max_sigma=mask_pos_outliers_sigma, 
-                         longdecay=2)
+                         longdecay=longdecay)
         
         # Set outliers to NaN for error calculation
         flux_segment_masked = flux_segment.copy()
@@ -192,23 +214,26 @@ def estimate_detrended_noise(flc, mask_pos_outliers_sigma=2.5,
 
 
 
-def fit_spline(time, flux, gaps, spline_coarseness=30, spline_order=3):
+def fit_spline(time, flux, gaps, spline_coarseness=30, spline_order=3,
+               **kwargs):
     """Do a spline fit on a coarse sampling of data points.
     
     Parameters:
     ------------
     flc : FlareLightCurve
-    
+        light curve that has at least time, flux and flux_err
     spline_coarseness : int
- 
+        time scale in hours for spline points.
     spline_order : int
         order of spline fitflux
+    kwargs : dict
+        additional arguments for _find_iterative_median
         
     Return:
     --------
     FlareLightCurve with new flux attribute
     """
-    flux_med = _find_iterative_median(flux, gaps)
+    flux_med = _find_iterative_median(flux, gaps, **kwargs)
     n = int(np.rint(spline_coarseness / 
                                    24 / 
             (np.nanmin(np.diff(time))))) #default 30h window

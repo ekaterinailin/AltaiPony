@@ -1366,28 +1366,28 @@ class FlareLightCurve(LightCurve):
             newcadence.append(newx)
             
             # interpolate flux error
-            f = interp1d(oldx, gaplc.flux_err)
+            f = interp1d(oldx, gaplc.flux_err, fill_value='extrapolate')
             flux_err.append(f(newx))
             
             # interpolate time
-            f = interp1d(oldx, gaplc.time.value)
+            f = interp1d(oldx, gaplc.time.value, fill_value='extrapolate')
             time.append(f(newx))
             
             # interpolate flux
-            f = interp1d(oldx, gaplc.flux.value)
+            f = interp1d(oldx, gaplc.flux.value, fill_value='extrapolate')
             flux.append(f(newx))
 
             # interpolate original_flux if it exists
             if 'original_flux' in gaplc.colnames:
-                f = interp1d(oldx, gaplc['original_flux'].value)
+                f = interp1d(oldx, gaplc['original_flux'].value, fill_value='extrapolate')
                 original_flux.append(f(newx))   
             # interpolate original_flux_err if it exists
             if 'original_flux_err' in gaplc.colnames:
-                f = interp1d(oldx, gaplc['original_flux_err'].value)
+                f = interp1d(oldx, gaplc['original_flux_err'].value, fill_value='extrapolate')
                 original_flux_err.append(f(newx))
             # interpolate original_flux if it exists
             if 'quality' in gaplc.colnames:
-                f = interp1d(oldx, gaplc['quality'].value)
+                f = interp1d(oldx, gaplc['quality'].value, fill_value='extrapolate')
                 quality.append(f(newx))   
         
         # Copy the original light curve to preserve all attributes
@@ -1396,6 +1396,7 @@ class FlareLightCurve(LightCurve):
                                 flux_err = np.concatenate(flux_err),
                                 meta=lc.meta)
         
+ 
         # add original_flux if it exists
         if len(original_flux) > 0:
             newlc['original_flux'] = np.concatenate(original_flux)

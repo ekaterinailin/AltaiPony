@@ -55,13 +55,17 @@ def detrend_savgol(lc, og_flux, og_flux_err, max_sigma=2.5, longdecay=6,
     # remove the flares candidates for now
     lcn.flux[mask] = np.nan
 
-    
+    # print("mask len", np.where(mask)[0])
 
     # SAVGOL APPLIED HERE
     # https://docs.lightkurve.org/reference/api/lightkurve.LightCurve.flatten.html?highlight=flatten#lightkurve.LightCurve.flatten
     # flatten with light curve
     # set break_tolerance to 10 by default, i.e. 20 min in a 2min cadence LC
-    lcrsf  = lcn.flatten(window_length=w, break_tolerance=break_tolerance) #replace with 6h or 3h window
+    lcrsf  = lcn.flatten(window_length=w, break_tolerance=break_tolerance)
+   
+    # fill lcrsf nans with median value
+    lcrsf.flux[np.isnan(lcrsf.flux)] = np.nanmedian(lcrsf.flux)
+
 
     # cycle over all candidates
     for i, j in candidates:
@@ -87,7 +91,5 @@ def detrend_savgol(lc, og_flux, og_flux_err, max_sigma=2.5, longdecay=6,
     lcrsf.flux = og_flux
     lcrsf.flux_err = og_flux_err
 
-
-    
     return lcrsf
 
