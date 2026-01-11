@@ -113,10 +113,9 @@ def custom_detrending(lc, spline_coarseness=8, spline_order=3,
     if debug_plot == True:
         plt.plot(lc4.time.value, lc4.detrended_flux.value, 'b.', 
                  markersize=1, label="after second Sav-Gol step")
+        plt.legend()
 
     # Restore original flux from the column (now properly filtered to match lc4's length)
-    lc4.detrended_flux = lc4.flux.value
-    lc4.detrended_flux_err = lc4.flux_err.value
     lc4.flux = lc4["original_flux"] * u.electron / u.s
     
     # Clean up the temporary column
