@@ -66,7 +66,7 @@ Depending on the methods you use, you may also want to cite
 .. _Appaloosa: https://github.com/jradavenport/appaloosa
 .. _lightkurve: https://github.com/KeplerGO/lightkurve
 .. _docs: http://docs.lightkurve.org/index.html
-.. _email: eilin@aip.de
+.. _email: ilin@astron.nl
 .. _GitHub: https://github.com/ekaterinailin/AltaiPony
 .. _here: https://altaipony.readthedocs.io/en/latest/api/altaipony.flarelc.FlareLightCurve.html
 .. _Quickstart: https://altaipony.readthedocs.io/en/latest/install.html

@@ -40,15 +40,14 @@ The core features of AltaiPony are
 We recommend taking a look at the `Quickstart`_ tutorial for the first three steps on this list. For the flare statistics, take a look at the tutorial on `Flare Frequency Distributions and Power Laws`_.
 
 
-Deep dives
-^^^^^^^^^^^
+Deep dives (under construction)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 
 Define your own detrending pipeline
 ...................................
 
-**TBD** Detrending notebook
-
+Follow the `Detrending`_ tutorial to understand how AltaiPony de-trends flare light curves, including how to add your own de-trending procedure to your analysis pipeline.
 
 
 Play with the flare finding parameters
@@ -65,5 +64,6 @@ Test the performance of your flare finding algorithm
 
 
 .. _Quickstart: https://altaipony.readthedocs.io/en/latest/tutorials/01_Getting_Started.html
+.. _Detrending: https://altaipony.readthedocs.io/en/latest/tutorials/02_Detrending.html
 .. _Synthetic Flare Injection and Recovery: https://altaipony.readthedocs.io/en/latest/tutorials/fakeflares.html
 .. _Flare Frequency Distributions and Power Laws: https://altaipony.readthedocs.io/en/latest/tutorials/ffds.html
