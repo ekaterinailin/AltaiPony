@@ -190,7 +190,7 @@ detrending add a spline fit with an variable time step between 5h and
 15h, as a first step in the analysis, and follows it up by two Sav-Gol
 detrending iterations to remove variability on 6h and 3h timescales.
 
-To see what means, let’s a different light curve:
+To see what that means, let’s try a different light curve:
 
 .. code:: ipython3
 
