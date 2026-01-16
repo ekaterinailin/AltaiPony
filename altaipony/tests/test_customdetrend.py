@@ -14,7 +14,6 @@ from ..customdetrend import (
     _build_knot_points,
     _evaluate_spline_fit,
 )
-from ..altai import _find_iterative_median
 
 
 class TestCustomDetrending:
@@ -446,11 +445,10 @@ class TestFitSpline:
         
         newflux, model, best_params = fit_spline(time, flux, gaps)
         
-        # Detrended flux should have much lower std than original
-        original_std = np.nanstd(flux)
-        detrended_std = np.nanstd(newflux)
-        
-        assert detrended_std < original_std * 0.5
+        # Detrended flux mean in the first and last 100 points should be similar
+        mean_start = np.nanmean(newflux[:100])
+        mean_end = np.nanmean(newflux[-100:])
+        assert abs(mean_start - mean_end) < 5  # Within 5 units
     
     def test_fit_spline_preserves_flares(self, time_flux_with_flares):
         """Test that spline fitting doesn't remove flares"""
@@ -462,8 +460,8 @@ class TestFitSpline:
         median_flux = np.nanmedian(newflux)
         
         # Check that flare regions are still elevated
-        assert np.nanmean(newflux[100:110]) > median_flux + 50
-        assert np.nanmean(newflux[500:520]) > median_flux + 100
+        assert np.nanmean(newflux[100:110]) > median_flux + 100
+        assert np.nanmean(newflux[500:520]) > median_flux + 400
     
     def test_fit_spline_handles_gaps(self, time_flux_with_gap):
         """Test that spline fitting handles data gaps correctly"""
@@ -566,8 +564,7 @@ class TestBuildKnotPoints:
         
         # Interior knots should be different (boundary points may be same)
         # Compare the second knot (first interior knot)
-        if len(t_knots_0) > 2 and len(t_knots_50) > 2:
-            assert t_knots_0[1] != t_knots_50[1]
+        assert t_knots_0[1] != t_knots_50[1]
     
     def test_build_knot_points_percentile_affects_flux(self):
         """Test that percentile parameter affects flux knot values"""

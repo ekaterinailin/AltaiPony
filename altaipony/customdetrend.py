@@ -62,7 +62,11 @@ def custom_detrending(lc,
     debug_plot: bool
         If True will plot a figure with the flux after each of the detrending steps, 
         i.e., spline, and the two Sav-Gol iterations 
-    break_tolerance
+    break_tolerance: int
+        If there are large gaps in time, flatten will split the flux into 
+        several sub-lightcurves and apply savgol_filter to each individually. 
+        A gap is defined as a period in time larger than break_tolerance times 
+        the median gap. To disable this feature, set break_tolerance to None.
 
         
     Return:
@@ -223,7 +227,7 @@ def fit_spline(time, flux, gaps,
                coarseness_range=(5, 15, 1),
                spline_orders=(2, 3),
                n_phase_shifts=3,
-               percentile_anchor=5,
+               percentile_anchor=25,
                edge_penalty_weight=1.,
                **kwargs):
     """Fit multiple splines and select the one that best approximates
