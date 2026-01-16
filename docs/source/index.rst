@@ -18,7 +18,6 @@ Flare science in Kepler, K2 and TESS light curves
 
 	install
         tutorials/index
-   	api/index
         faq
 	changelog
 	

@@ -15,7 +15,7 @@ You can figure out your backend by calling ``plt.get_backend()``, which will ret
 
 
 What is detected as a flare and not a flare? 
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 A flare in a Kepler or TESS light curve is a series of data points that fullfils the flare definition criteria. In AltaiPony, flares are positive excursions from the de-trended light curve above a certain noise threshold. You can play around with a number of parameters - details are explained in the section on `Defining Flare Candidates`_.
 
@@ -25,7 +25,7 @@ What are the default settings for flare detection?
 Default settings for flare detection are explained in the section on `Defining Flare Candidates`_.
 
 How does **AltaiPony** handle the ramp ups at the end of TESS orbits? 
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 **AltaiPony** currently does not explicitly handle these ramp ups, so they can cause false positive detections. Using PDCSAP_FLUX instead of SAP_FLUX flux avoid these problems for the most part. However, if your algorithm can deal with these, you can pass a custom de-trending function to 
 
@@ -38,7 +38,7 @@ How does **AltaiPony** handle the ramp ups at the end of TESS orbits?
 
 
 What is defined as a the start and stop time of a flare? 
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 The start and stop times of a flare candidate mark the first and last+1 timestamp that fullfil all flare definition criteria. Accordingly the start and stop cadences and indices can be used to mask flares. An example:
 

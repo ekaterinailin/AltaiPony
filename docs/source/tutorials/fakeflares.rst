@@ -1,5 +1,5 @@
 Synthetic Flare Injection and Recovery
-=====
+=======================================
 
 To characterize how well the de-trending and flare finding procedures actually find and characterized flares in a light curve you can inject synthetic flares into it and run the procedures to compare the recovered events to the injected ones. Shapes of flares are created using the piecewise model generated in `Davenport et al. (2014)`_
 

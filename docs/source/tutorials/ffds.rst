@@ -1,8 +1,6 @@
 Flare Frequency Distributions and Power Laws
 ==============================================
 
-*You can try out everything in this section in the tutorial notebook in the [Github] repository.*
-
 Once you have found all the flares, you can compute statistical measures using your flare table. 
 
 The `FFD` module allows you to compute Flare Frequency Distributions. You can use it to
@@ -108,7 +106,7 @@ Statistical tests
 ------------------
 
 Test if the power law assumption must be rejected
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 The stabilised Kolmogorov-Smirnov statistic, suggested by Maschberger and Kroupa (2009) [1]_, tests if we must reject the power law hypothesis for our FFD. It is not meaningful in absolute terms. But whenever we compare FFDs and/or their power law fits with each other it gives us a better sense of the statistical robustness of a sample at different significance levels. 
 
@@ -120,7 +118,7 @@ For this hypothesis test, we must define a significance level, which is 5% per d
 
 
 Test if the distribution is truncated at the high energy end
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 An interesting question in flare statistics is whether or not there is a high energy limit seen in the FFD of any given star. It is hard to tell by eye, because the high-energy tail is sparsly populated with events, and log-log plots are deceptive. We may, however, ask, how small the highest observed energy can be to be consistent with an infinite power law distribution. ``FFD.is_powerlaw_truncated()`` performs this exceedance test, a left-sided hypothesis test suggested by Maschberger and Kroupa (2009) [1]_
 
@@ -142,7 +140,6 @@ is demonstrated in this_ notebook on Github.
   
 .. rubric:: Footnotes
 
-.. [Github] https://github.com/ekaterinailin/AltaiPony/blob/master/notebooks/Beginner_Flare_Frequency_Distributions_and_Power_Laws.ipynb 
 
 .. [1] Thomas Maschberger, Pavel Kroupa, Estimators for the exponent and upper limit, and goodness-of-fit tests for (truncated) power-law distributions, Monthly Notices of the Royal Astronomical Society, Volume 395, Issue 2, May 2009, Pages 931–942, https://doi.org/10.1111/j.1365-2966.2009.14577.x
 
