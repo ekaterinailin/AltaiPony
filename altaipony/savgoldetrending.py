@@ -17,7 +17,10 @@ def detrend_savgol(lc, og_flux, og_flux_err, max_sigma=2.5, longdecay=6,
     w : odd int
         window length for savgol filter
     break_tolerance : int
-        If there are large gaps in time, flatten will split the flux into several sub-lightcurves and apply savgol_filter to each individually. A gap is defined as a period in time larger than break_tolerance times the median gap. To disable this feature, set break_tolerance to None.
+        If there are large gaps in time, flatten will split the flux into 
+        several sub-lightcurves and apply savgol_filter to each individually. 
+        A gap is defined as a period in time larger than break_tolerance times 
+        the median gap. To disable this feature, set break_tolerance to None.
     kwargs : dict
         keyword arguments to feed LightCurve.flatten()
     """
@@ -42,10 +45,10 @@ def detrend_savgol(lc, og_flux, og_flux_err, max_sigma=2.5, longdecay=6,
     # find flare start where values in reverse_counts switch from 0 to >=N3 
     # SET N3=1 because we care about all outliers!
     istart_i = np.where((reverse_counts[1:] >= 1) &
-                        (reverse_counts[:-1] - reverse_counts[1:] < 0))[0]  +1
+                        (reverse_counts[:-1] - reverse_counts[1:] < 0))[0] + 1
 
     # use the value of reverse_counts to determine how many points away stop is
-    istop_i = istart_i + (reverse_counts[istart_i]) -1
+    istop_i = istart_i + (reverse_counts[istart_i]) - 1
 
     # get a list of masked candidates to extrapolate
     candidates = list(zip(istart_i, istop_i))
@@ -55,41 +58,63 @@ def detrend_savgol(lc, og_flux, og_flux_err, max_sigma=2.5, longdecay=6,
     # remove the flares candidates for now
     lcn.flux[mask] = np.nan
 
-    # print("mask len", np.where(mask)[0])
-
     # SAVGOL APPLIED HERE
-    # https://docs.lightkurve.org/reference/api/lightkurve.LightCurve.flatten.html?highlight=flatten#lightkurve.LightCurve.flatten
+    # https://docs.lightkurve.org/reference/api/lightkurve.LightCurve.flatten.html
     # flatten with light curve
     # set break_tolerance to 10 by default, i.e. 20 min in a 2min cadence LC
-    lcrsf  = lcn.flatten(window_length=w, break_tolerance=break_tolerance)
+    lcrsf = lcn.flatten(window_length=w, break_tolerance=break_tolerance)
    
     # fill lcrsf nans with median value
     lcrsf.flux[np.isnan(lcrsf.flux)] = np.nanmedian(lcrsf.flux)
-
 
     # cycle over all candidates
     for i, j in candidates:
 
         # span the data
-        mask_ij = np.arange(i,j)
-        # linearinterpolate below the flare
-
+        mask_ij = np.arange(i, j)
+        
+        # Get interpolation anchor points - use nearest non-NaN values
+        # Handle edge cases where i or j might be at boundaries
+        left_idx = max(0, i - 1)
+        right_idx = min(len(lcn.flux) - 1, j)
+        
+        # Find valid anchor points for interpolation
+        left_val = fluxold[left_idx] if not np.isnan(fluxold[left_idx]) else np.nanmedian(fluxold)
+        right_val = fluxold[right_idx] if not np.isnan(fluxold[right_idx]) else np.nanmedian(fluxold)
+        
+        # linear interpolate below the flare
         interpolation_ij = np.interp(lcn.time.value[mask_ij],
-                                     [lcn.time.value[i],lcn.time.value[j]],
-                                     [lcn.flux[i],lcn.flux[j]])
+                                     [lcn.time.value[left_idx], lcn.time.value[right_idx]],
+                                     [left_val, right_val])
    
         # fill in the masked data again
+        # Avoid division by zero
+        interpolation_ij = np.where(interpolation_ij == 0, 1e-10, interpolation_ij)
         lcrsf.flux[mask_ij] = fluxold[mask_ij] / interpolation_ij
     
-    # then ignore the interpolated points again
-    lcrsf = lcrsf[lcrsf.interpolated.value==0]
+    # Track which indices to keep (non-interpolated cadences)
+    if hasattr(lcrsf, 'interpolated') and 'interpolated' in lcrsf.colnames:
+        keep_mask = lcrsf.interpolated.value == 0
+    else:
+        keep_mask = np.ones(len(lcrsf), dtype=bool)
+    
+    # Filter the light curve
+    lcrsf = lcrsf[keep_mask]
+    
+    # Filter og_flux and og_flux_err to match
+    og_flux_filtered = og_flux.value[keep_mask] if hasattr(og_flux, 'value') else og_flux[keep_mask]
+    og_flux_err_filtered = og_flux_err.value[keep_mask] if hasattr(og_flux_err, 'value') else og_flux_err[keep_mask]
 
     # store detrended flux and restore original flux
-
-    lcrsf.detrended_flux = lcrsf.flux.value * np.nanmedian(og_flux.value)
-    lcrsf.detrended_flux_err = og_flux_err.value
-    lcrsf.flux = og_flux
-    lcrsf.flux_err = og_flux_err
+    lcrsf.detrended_flux = lcrsf.flux.value * np.nanmedian(og_flux_filtered)
+    lcrsf.detrended_flux_err = og_flux_err_filtered
+    
+    # Restore original flux (filtered to match)
+    if hasattr(og_flux, 'unit'):
+        lcrsf.flux = og_flux_filtered * og_flux.unit
+        lcrsf.flux_err = og_flux_err_filtered * og_flux_err.unit
+    else:
+        lcrsf.flux = og_flux_filtered
+        lcrsf.flux_err = og_flux_err_filtered
 
     return lcrsf
-

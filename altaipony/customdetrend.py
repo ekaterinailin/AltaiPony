@@ -26,9 +26,10 @@ from scipy.interpolate import UnivariateSpline
 
 
 
-def custom_detrending(lc, spline_coarseness=8, spline_order=3,
+def custom_detrending(lc, 
                       savgol1=6., savgol2=3., pad=3, max_sigma=2.5, 
-                      longdecay=6, maxgap=10, debug_plot=False):
+                      longdecay=6, maxgap=10, debug_plot=False,
+                      break_tolerance=10):
     """Custom de-trending for TESS and Kepler 
     short cadence light curves, including TESS Cycle 3 20s
     cadence.
@@ -61,6 +62,7 @@ def custom_detrending(lc, spline_coarseness=8, spline_order=3,
     debug_plot: bool
         If True will plot a figure with the flux after each of the detrending steps, 
         i.e., spline, and the two Sav-Gol iterations 
+    break_tolerance
 
         
     Return:
@@ -79,8 +81,9 @@ def custom_detrending(lc, spline_coarseness=8, spline_order=3,
     lc["orginal_flux_err"] = lc.flux_err.copy()
 
     # fit a spline to the general trends
-    m2flux, _ = fit_spline(time, flux, gaps, spline_order=spline_order,
-                           spline_coarseness=spline_coarseness, longdecay=longdecay)
+    m2flux, _, best_params = fit_spline(time, flux, gaps, longdecay=longdecay)
+
+    print("Spline detrending params:", best_params)
     
     # choose a 6 hour window
     w1 = int((np.rint(savgol1 / 24. / dt) // 2) * 2 + 1)
@@ -89,13 +92,14 @@ def custom_detrending(lc, spline_coarseness=8, spline_order=3,
     lc.flux_err = lc.flux_err * u.electron / u.s
 
     if debug_plot == True:
-        plt.figure()
-        plt.plot(lc.time.value, lc.flux.value, 'k.', markersize=1,
+        plt.figure(figsize=(8,4))
+        plt.plot(lc.time.value, lc.flux.value + 5000, 'k.', markersize=1,
                  label="after spline fit")
 
     # use Savitzy-Golay to iron out the rest    
-    lc3 = lc.detrend("savgol", window_length=w1, pad=pad,
-                      max_sigma=max_sigma, longdecay=longdecay)
+    lc3 = lc.detrend("savgol", w=w1, pad=pad,
+                      max_sigma=max_sigma, longdecay=longdecay,
+                      break_tolerance=break_tolerance)
     
     lc3.flux = lc3.detrended_flux * u.electron / u.s
  
@@ -107,12 +111,15 @@ def custom_detrending(lc, spline_coarseness=8, spline_order=3,
     w2 = int((np.rint(savgol2 / 24. / dt) // 2) * 2 + 1)
 
     # use Savitzy-Golay to iron out the rest
-    lc4 = lc3.detrend("savgol", window_length=w2, pad=pad, 
-                      max_sigma=max_sigma, longdecay=longdecay)
+    lc4 = lc3.detrend("savgol", w=w2, pad=pad, 
+                      max_sigma=max_sigma, longdecay=longdecay,
+                      break_tolerance=break_tolerance)
     
     if debug_plot == True:
         plt.plot(lc4.time.value, lc4.detrended_flux.value, 'b.', 
                  markersize=1, label="after second Sav-Gol step")
+        plt.xlabel("Time [BTJD or BKJD]")
+        plt.ylabel("Flux [e-/s]")
         plt.legend()
 
     # Restore original flux from the column (now properly filtered to match lc4's length)
@@ -212,60 +219,301 @@ def estimate_detrended_noise(flc, mask_pos_outliers_sigma=2.5,
     return flc
 
 
-
-def fit_spline(time, flux, gaps, spline_coarseness=30, spline_order=3,
+def fit_spline(time, flux, gaps, 
+               coarseness_range=(5, 15, 1),
+               spline_orders=(2, 3),
+               n_phase_shifts=3,
+               percentile_anchor=5,
+               edge_penalty_weight=1.,
                **kwargs):
-    """Do a spline fit on a coarse sampling of data points.
+    """Fit multiple splines and select the one that best approximates
+    the underlying light curve shape while avoiding flare contamination.
     
     Parameters:
-    ------------
-    flc : FlareLightCurve
-        light curve that has at least time, flux and flux_err
-    spline_coarseness : int
-        time scale in hours for spline points.
-    spline_order : int
-        order of spline fitflux
-    kwargs : dict
-        additional arguments for _find_iterative_median
+    -----------
+    time : array
+        Time values
+    flux : array  
+        Flux values
+    gaps : list of tuples
+        List of (start, end) indices for continuous segments
+    coarseness_range : tuple
+        (min, max, step) for spline coarseness in hours
+    spline_orders : tuple
+        Spline orders to try
+    n_phase_shifts : int
+        Number of phase shifts to try for bin sampling
+    percentile_anchor : float
+        Percentile to use for robust bin estimation (lower = more flare-resistant)
+    edge_penalty_weight : float
+        Weight for penalizing edge deviations in scoring (higher = stronger penalty)
+    **kwargs : dict
+        Additional arguments for _find_iterative_median
         
-    Return:
+    Returns:
     --------
-    FlareLightCurve with new flux attribute
+    newflux : array
+        Detrended flux
+    model : array
+        Best spline model
+    best_params : dict
+        Parameters of the best fit
     """
     flux_med = _find_iterative_median(flux, gaps, **kwargs)
-    n = int(np.rint(spline_coarseness / 
-                                   24 / 
-            (np.nanmin(np.diff(time))))) #default 30h window
-    k = spline_order
+    
+    coarseness_values = np.arange(
+        coarseness_range[0], 
+        coarseness_range[1] + 1, 
+        coarseness_range[2]
+    )
+    
+    dt = np.nanmin(np.diff(time))
+    
+    candidates = []
+    
+    # Generate all candidate fits
+    for coarseness in coarseness_values:
+        for k in spline_orders:
+            for phase_idx in range(n_phase_shifts):
+                model, newflux = _fit_single_spline(
+                    time, flux, flux_med, gaps, 
+                    coarseness, k, dt, 
+                    phase_idx, n_phase_shifts,
+                    percentile_anchor
+                )
+                
+                score = _evaluate_spline_fit(flux, model, gaps, 
+                                             edge_penalty_weight=edge_penalty_weight)
+                
+                candidates.append({
+                    'model': model,
+                    'newflux': newflux,
+                    'score': score,
+                    'coarseness': coarseness,
+                    'order': k,
+                    'phase': phase_idx
+                })
 
+    
+    # Select best candidate
+    best = min(candidates, key=lambda x: x['score'])
+    
+    best_params = {
+        'coarseness': best['coarseness'],
+        'order': best['order'],
+        'phase': best['phase'],
+        'score': best['score']
+    }
+    
+    return best['newflux'], best['model'], best_params
+
+
+def _fit_single_spline(time, flux, flux_med, gaps, coarseness, k, dt, 
+                       phase_idx, n_phases, percentile):
+    """Fit a single spline configuration."""
+    n = int(np.rint(coarseness / 24 / dt))
+    
     model = np.full_like(flux, np.nan)
     newflux = np.full_like(flux, np.nan)
-    for le, ri in gaps:
-
-        t, f = np.zeros((ri - le)//n+2), np.zeros((ri - le)//n+2)
-        
-        if (ri - le)//n == 0:
-            newflux[le:ri] = flux[le:ri]
-        elif (ri - le)//n > 0:
-            news, news_mod = (ri - le)//n, (ri - le)%n 
-            t[1:-1] = np.mean(time[le:ri - news_mod].reshape(news, n), axis=1)
-            f[1:-1] =  np.median(flux[le:ri - news_mod].reshape(news, n), axis=1)
-            t[0], t[-1] = time[le], time[ri-1]
-            f[0], f[-1] = flux[le], flux[ri-1]
-            
-        # if the LC chunk is too short, fit a linear function to the full data
-        if t.shape[0] <= k:
-            p2 = np.polyfit(time[le:ri], flux[le:ri], 1)
-            newflux[le:ri] = flux[le:ri] - np.polyval(p2, time[le:ri]) + flux_med[le:ri]
-            model[le:ri] = np.polyval(p2, time[le:ri])
-            
-        # otherwise fit a spline
-        else:
-            p3 = UnivariateSpline(t, f, k=k, s=0)
-            newflux[le:ri] = flux[le:ri] - p3(time[le:ri]) + flux_med[le:ri]
-            model[le:ri] = p3(time[le:ri])
     
-    return newflux, model
+    for le, ri in gaps:
+        segment_len = ri - le
+        
+        # Calculate phase offset for this segment
+        phase_offset = min((phase_idx * n) // max(n_phases, 1), segment_len - 1)
+        
+        if segment_len <= n:
+            # Segment too short for binning
+            newflux[le:ri] = flux[le:ri]
+            model[le:ri] = np.nanmedian(flux[le:ri])
+            continue
+            
+        # Build knot points with phase offset
+        t_knots, f_knots = _build_knot_points(
+            time[le:ri], flux[le:ri], n, phase_offset, percentile
+        )
+        
+        if len(t_knots) <= k:
+            # Too few knots, use linear fit
+            valid = ~np.isnan(flux[le:ri])
+            if np.sum(valid) > 1:
+                p2 = np.polyfit(time[le:ri][valid], flux[le:ri][valid], 1)
+                model[le:ri] = np.polyval(p2, time[le:ri])
+                newflux[le:ri] = flux[le:ri] - model[le:ri] + flux_med[le:ri]
+            else:
+                newflux[le:ri] = flux[le:ri]
+                model[le:ri] = flux_med[le:ri]
+        else:
+            # Fit spline
+            try:
+                spline = UnivariateSpline(t_knots, f_knots, k=k, s=0)
+                model[le:ri] = spline(time[le:ri])
+                newflux[le:ri] = flux[le:ri] - model[le:ri] + flux_med[le:ri]
+            except Exception:
+                # Fallback to linear
+                p2 = np.polyfit(time[le:ri], flux[le:ri], 1)
+                model[le:ri] = np.polyval(p2, time[le:ri])
+                newflux[le:ri] = flux[le:ri] - model[le:ri] + flux_med[le:ri]
+    
+    return model, newflux
+
+
+def _build_knot_points(time, flux, n, phase_offset, percentile):
+    """Build knot points for spline fitting using robust statistics.
+    
+    Parameters:
+    -----------
+    time : array
+        Time values for this segment
+    flux : array
+        Flux values for this segment
+    n : int
+        Bin size in cadences
+    phase_offset : int
+        Starting offset for binning
+    percentile : float
+        Percentile for robust flux estimation (lower = more flare-resistant)
+    """
+    segment_len = len(time)
+    
+    # Apply phase offset
+    start = phase_offset
+    usable_len = segment_len - start
+    n_bins = usable_len // n
+    
+    if n_bins == 0:
+        return np.array([time[0], time[-1]]), np.array([flux[0], flux[-1]])
+    
+    remainder = usable_len % n
+    end_idx = segment_len - remainder if remainder > 0 else segment_len
+    
+    # Reshape into bins
+    t_binned = time[start:end_idx].reshape(n_bins, n)
+    f_binned = flux[start:end_idx].reshape(n_bins, n)
+    
+    # Use mean for time, robust percentile for flux (avoids flare bias)
+    t_knots = np.nanmean(t_binned, axis=1)
+    f_knots = np.nanpercentile(f_binned, percentile, axis=1)
+    
+    # Add boundary points
+    t_knots = np.concatenate([[time[0]], t_knots, [time[-1]]])
+    f_knots = np.concatenate([[flux[0]], f_knots, [flux[-1]]])
+    
+    # Remove any NaN knots
+    valid = ~(np.isnan(t_knots) | np.isnan(f_knots))
+    
+    return t_knots[valid], f_knots[valid]
+
+
+def _evaluate_spline_fit(flux, model, gaps, edge_fraction=0.1, edge_penalty_weight=.5):
+    """Evaluate spline fit quality, penalizing flare contamination and edge effects.
+    
+    A good baseline should have:
+    1. Low scatter in residuals (captured by MAD)
+    2. Symmetric negative residuals (noise-like)
+    3. Positive outliers should be clearly separated (flares not fit)
+    4. Model values at segment edges should not deviate strongly from segment mean
+    
+    Parameters:
+    -----------
+    flux : array
+        Original flux values
+    model : array
+        Spline model values
+    gaps : list of tuples
+        Segment boundaries
+    edge_fraction : float
+        Fraction of segment to consider as "edge" (default 10%)
+    edge_penalty_weight : float
+        Weight for edge deviation penalty (default 0.5)
+    """
+    residuals = []
+    edge_deviations = []
+    
+    for le, ri in gaps:
+        seg_len = ri - le
+        valid = ~(np.isnan(model[le:ri]) | np.isnan(flux[le:ri]))
+        
+        if np.sum(valid) > 0:
+            residuals.extend(flux[le:ri][valid] - model[le:ri][valid])
+        
+        # Calculate edge deviation penalty for this segment
+        if seg_len > 20:  # Only for segments long enough to have meaningful edges
+            edge_size = max(int(seg_len * edge_fraction), 5)
+            
+            # Get segment median (robust estimate of typical level)
+            seg_flux = flux[le:ri]
+            seg_model = model[le:ri]
+            seg_median = np.nanmedian(seg_flux)
+            
+            # Check model deviation from median at left edge
+            left_model = np.nanmean(seg_model[:edge_size])
+            left_dev = abs(left_model - seg_median)
+            
+            # Check model deviation from median at right edge
+            right_model = np.nanmean(seg_model[-edge_size:])
+            right_dev = abs(right_model - seg_median)
+            
+            edge_deviations.extend([left_dev, right_dev])
+    
+    residuals = np.array(residuals)
+    
+    if len(residuals) < 10:
+        return np.inf
+    
+    median_res = np.median(residuals)
+    mad = np.median(np.abs(residuals - median_res))
+    
+    if mad < 1e-10:
+        return np.inf
+    
+    # Analyze residual distribution asymmetry
+    # Lower residuals should behave like Gaussian noise
+    # Upper residuals will include flares
+    lower_res = residuals[residuals <= median_res]
+    upper_res = residuals[residuals > median_res]
+    
+    if len(lower_res) < 5 or len(upper_res) < 5:
+        return mad
+    
+    # For a good fit, the lower tail should be symmetric around median
+    # Measure: how Gaussian-like is the lower distribution?
+    lower_std = np.std(lower_res)
+    lower_mad = np.median(np.abs(lower_res - np.median(lower_res)))
+    
+    # Ratio close to 1.4826 indicates Gaussian-like distribution
+    # (for Gaussian: std/MAD ≈ 1.4826)
+    gaussian_ratio = 1.4826
+    lower_gaussianity = abs(lower_std / (lower_mad + 1e-10) - gaussian_ratio)
+    
+    # Penalize if model is tracking flares (upper spread much larger than lower)
+    upper_spread = np.percentile(upper_res, 90) - median_res
+    lower_spread = median_res - np.percentile(lower_res, 10)
+    
+    # Asymmetry ratio - for clean baseline, expect upper >> lower due to flares
+    # If upper ≈ lower, model may be tracking flares
+    if lower_spread > 1e-10:
+        asymmetry = upper_spread / lower_spread
+        # We want asymmetry > 1 (positive outliers = flares not being fit)
+        # Penalize if asymmetry is too close to 1
+        asymmetry_penalty = max(0, 2.0 - asymmetry) * 0.3
+    else:
+        asymmetry_penalty = 0
+    
+    # Edge deviation penalty: penalize if model deviates from segment mean at edges
+    # Normalize by MAD so it's scale-independent
+    if len(edge_deviations) > 0:
+        mean_edge_dev = np.mean(edge_deviations)
+        # Express edge deviation in units of MAD
+        edge_penalty = edge_penalty_weight * (mean_edge_dev / mad)
+    else:
+        edge_penalty = 0
+    
+    # Combined score: lower is better
+    score = mad * (1 + asymmetry_penalty + 0.1 * lower_gaussianity + edge_penalty)
+    
+    return score
+
 
 
 def measure_flare(flc, sta, sto):
@@ -314,6 +562,4 @@ def measure_flare(flc, sta, sto):
     
     flc.flares = pd.concat([flc.flares, newline.to_frame().T], ignore_index=True)
 
-    return 
-
-
+    return
