@@ -51,7 +51,7 @@ def split_gaps(gaps, splits):
 
 
     # group splitting locations
-    for loc, g in df.groupby(splitloc):
+    for loc, g in df.groupby('splitlocs'):
 
         # remove gaps that will be replaced by new ones
         gaps2.remove(gaps[loc])

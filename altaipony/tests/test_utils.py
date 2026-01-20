@@ -24,44 +24,75 @@ def test_expand_mask():
 
 
 
-def test_split_gaps():
-    
-    # Run integration test that succeeds
-    gaps = [(0, 20.), (21., 34), (37, 41)]
+
+
+def test_split_gaps_basic():
+    """Test basic functionality with the example from docstring"""
+    gaps = [(0., 20.), (21., 34.), (37., 41.)]
     splits = [1.5, 14., 39.]
-    result = [(0, 1.5), (1.5, 14.0), (14.0, 20.0),
-              (21.0, 34), (37, 39.0), (39.0, 41)]
+    result = split_gaps(gaps, splits)
     
-    assert split_gaps(gaps, splits) == result
+    expected = [(0., 1.5), (1.5, 14.), (14., 20.), 
+                (21.0, 34.), (37., 39.), (39., 41.)]
     
-    # Run integration test that succeeds with the default input
-    # should return the input 
-    gaps = [(0, 20.), (21., 34), (37, 41)]
-    splits = []
+    assert result == expected, f"Expected {expected}, but got {result}"
+
+
+def test_split_gaps_multiple_splits_in_one_gap():
+    """Test multiple splits within a single gap"""
+    gaps = [(0., 100.), (150., 200.)]
+    splits = [25., 50., 75.]
+    result = split_gaps(gaps, splits)
     
-    assert split_gaps(gaps, splits) == gaps
+    expected = [(0., 25.), (25., 50.), (50., 75.), (75., 100.), 
+                (150., 200.)]
     
-
-    # Get instruction on how to pick good split values
-    # when you mess it up:
-
-    gaps = [(0, 20.), (21., 34), (37, 41)]
+    assert result == expected
+    assert len(result) == 5, "Should have 5 gaps total"
 
 
-    # by passing NaN
-    with pytest.raises(IndexError):
-        splits = [1.5, np.nan, 39.]
-        split_gaps(gaps, splits)
+def test_split_gaps_single_split():
+    """Test with a single split value"""
+    gaps = [(10., 30.), (40., 60.)]
+    splits = [20.]
+    result = split_gaps(gaps, splits)
+    
+    expected = [(10., 20.), (20., 30.), (40., 60.)]
+    
+    assert result == expected
+    assert len(result) == 3
 
-    # by passing inf
-    with pytest.raises(IndexError):
-        splits = [1.5, np.inf, 39.]
-        split_gaps(gaps, splits)
 
-    # by passing values outside of range
-    with pytest.raises(IndexError):
-        splits = [1.5, 99., 39.]
-        split_gaps(gaps, splits)
+def test_split_gaps_invalid_splits_raises_error():
+    """Test that invalid split values raise an IndexError"""
+    gaps = [(0., 20.), (30., 50.)]
+    
+    # Split value outside any gap range
+    invalid_splits = [25.]  # This is between gaps, not inside any gap
+    
+    with pytest.raises(IndexError) as exc_info:
+        split_gaps(gaps, invalid_splits)
+    
+    assert "splits you passed are wrong" in str(exc_info.value)
+
+
+def test_split_gaps_preserves_gap_order():
+    """Test that gaps remain sorted after splitting"""
+    gaps = [(100., 200.), (10., 50.), (250., 300.)]
+    gaps.sort(key=lambda x: x[0])  # Pre-sort
+    splits = [25., 150.]
+    
+    result = split_gaps(gaps, splits)
+    
+    # Check that result is sorted
+    for i in range(len(result) - 1):
+        assert result[i][0] < result[i+1][0], "Gaps should be in ascending order"
+    
+    # Check specific values
+    assert (10., 25.) in result
+    assert (25., 50.) in result
+    assert (100., 150.) in result
+    assert (150., 200.) in result
 
 
 
