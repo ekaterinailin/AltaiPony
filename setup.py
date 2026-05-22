@@ -17,8 +17,10 @@ setuptools.setup(
                         'progressbar2>=3.51.4','seaborn',  'astropy>=5', 'k2sc>=1.0.2', 'emcee','corner', 'scipy>1.5'],
 
     include_package_data=True,
-    package_data={
-      'altaipony': ['static/*csv', 'examples/kplr010002792-2010174085026_llc.fits']},
+       package_data={
+        'altaipony.static': ['*.csv'],
+        'altaipony.examples': ['*.fits'],
+    },
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",

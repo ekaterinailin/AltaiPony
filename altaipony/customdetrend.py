@@ -22,6 +22,9 @@ import matplotlib.pyplot as plt
 import astropy.units as u
 
 from scipy.interpolate import UnivariateSpline
+from scipy.optimize import minimize_scalar
+
+from astropy.timeseries import LombScargle
 
 
 
@@ -29,7 +32,15 @@ from scipy.interpolate import UnivariateSpline
 def custom_detrending(lc, 
                       savgol1=6., savgol2=3., pad=3, max_sigma=2.5, 
                       longdecay=6, maxgap=10, debug_plot=False,
-                      break_tolerance=10):
+                      break_tolerance=10,
+                      periodicity_fap_threshold=1e-3,
+                      periodicity_amplitude_threshold=0.01,
+                      period_min_days=0.1,
+                      n_sine_harmonics=5,
+                      refine_period_per_segment=True,
+                      multisine_gap_fraction=0.3,
+                      n_per=10,
+                      max_prewhiten_iter=3):
     """Custom de-trending for TESS and Kepler 
     short cadence light curves, including TESS Cycle 3 20s
     cadence.
@@ -67,33 +78,140 @@ def custom_detrending(lc,
         several sub-lightcurves and apply savgol_filter to each individually. 
         A gap is defined as a period in time larger than break_tolerance times 
         the median gap. To disable this feature, set break_tolerance to None.
+    periodicity_fap_threshold : float
+        False-alarm probability threshold for the Lomb-Scargle test.
+        If the peak FAP is below this value the light curve is considered
+        strongly periodic.  Defaults to 1e-3.
+    periodicity_amplitude_threshold : float
+        Minimum semi-amplitude (as a fraction of the median flux) for the
+        periodic signal to trigger the multi-sine path.  Defaults to 0.01
+        (1 % of the median flux).
+    period_min_days : float
+        Shortest period searched by the Lomb-Scargle periodogram, in days.
+        Defaults to 0.1 days.
+    n_sine_harmonics : int
+        Number of harmonics included in the multi-sine baseline model.
+        Harmonics 1 … n_sine_harmonics of the dominant period are fitted
+        simultaneously via least-squares, which captures non-sinusoidal
+        (but strictly periodic) shapes.  Defaults to 5.
+    refine_period_per_segment : bool
+        If True, each gap segment independently refines the global peak
+        period with a narrow Lomb-Scargle search, accommodating slightly
+        drifting rotation periods.  Defaults to True.
+    multisine_gap_fraction : float
+        When a strong periodicity is detected, gaps that are shorter than
+        this fraction of the dominant period are bridged rather than used
+        as segment breaks.  E.g. the default of 0.3 means gaps ≤ 30 % of
+        the rotation period are treated as continuous data for the multi-sine
+        fit.  The original (tight) segmentation is still used for all
+        downstream Savitzky-Golay steps.  Defaults to 0.3.
+    n_per : int
+        Maximum segment length for the multi-sine fit, expressed in units
+        of the dominant period.  Any segment longer than ``n_per`` cycles
+        is split in two at its midpoint before fitting, so that the linear
+        trend term has a shorter lever arm and the per-segment amplitude
+        is more locally representative.  Defaults to 10.
+    max_prewhiten_iter : int
+        Maximum number of additional prewhitening iterations after the
+        initial multisine fit.  Each iteration runs a fresh Lomb-Scargle
+        periodogram on the current residuals; if a significant peak at a
+        new period is found, another multisine is fitted and subtracted.
+        Set to 0 to disable prewhitening.  Defaults to 3.
 
-        
     Return:
     -------
     FlareLightCurve with detrended_flux attribute
     """
     dt = np.mean(np.diff(lc.time.value))
     gaps = lc.find_gaps(maxgap=maxgap * dt).gaps
-
-    lc = lc.interpolate_missing_cadences()
-
-    time, flux = lc.time.value, lc.flux.value
-    
     # Store original flux as a column so it survives filtering operations
     lc["original_flux"] = lc.flux.copy()
-    lc["orginal_flux_err"] = lc.flux_err.copy()
+    lc["original_flux_err"] = lc.flux_err.copy()
 
-    # fit a spline to the general trends
-    m2flux, _, best_params = fit_spline(time, flux, gaps, longdecay=longdecay)
 
-    print("Spline detrending params:", best_params)
+    plt.figure(figsize=(20, 5))
+    plt.plot(lc.time.value, lc.flux, 'r.', markersize=10)
+    lc = lc.interpolate_missing_cadences()
+    plt.plot(lc.time.value, lc.flux, 'k.', markersize=1)
+    time, flux = lc.time.value, lc.flux.value
+    
+    
+
+    # --- Periodicity check ------------------------------------------------
+    # Run a Lomb-Scargle periodogram on the raw flux.  If a strong periodic
+    # signal is found (low FAP *and* large amplitude) use a multi-harmonic
+    # sine model as the baseline instead of the spline, because a spline
+    # will chase the periodic oscillations and corrupt flare detection.
+    period_max_days = (time[-1] - time[0]) / 2.0
+
+    is_periodic, dominant_period, rel_amplitude, fap = detect_strong_periodicity(
+        time, flux,
+        fap_threshold=periodicity_fap_threshold,
+        amplitude_threshold=periodicity_amplitude_threshold,
+        period_min=period_min_days,
+        period_max=period_max_days,
+    )
+
+    if is_periodic:
+        print(
+            f"Strong periodicity detected: P = {dominant_period:.4f} d, "
+            f"rel. amplitude = {rel_amplitude:.4f}, FAP = {fap:.2e}. "
+            "Using multi-sine baseline fit."
+        )
+        flux_med = _find_iterative_median(flux, gaps, longdecay=longdecay)
+
+        # Re-segment with a more lenient maxgap so that short gaps
+        # (≤ multisine_gap_fraction × period) are bridged.  This avoids
+        # breaking a continuous rotation cycle into tiny segments that each
+        # get a poor amplitude estimate.  The original tight `gaps` are kept
+        # for all downstream Savitzky-Golay steps.
+        multisine_maxgap = multisine_gap_fraction * dominant_period
+        multisine_gaps = lc.find_gaps(maxgap=multisine_maxgap).gaps
+
+        # Split any segment longer than n_per cycles so the per-segment
+        # linear trend and amplitude have a shorter, more locally valid
+        # lever arm.
+        multisine_gaps = _split_long_segments(
+            multisine_gaps, time, dominant_period, n_per
+        )
+        for l, r in multisine_gaps:
+            plt.axvline(time[l], color='cyan', linestyle='--', alpha=0.5)
+            plt.axvline(time[r-1], color='cyan', linestyle='--', alpha=0.5)
+
+        print(
+            f"Multi-sine gap threshold: {multisine_maxgap:.4f} d, "
+            f"max segment: {n_per} cycles — "
+            f"{len(multisine_gaps)} segments "
+            f"(tight segmentation had {len(gaps)})."
+        )
+
+        m2flux, _, best_params = fit_multisine(
+            time, flux, flux_med, multisine_gaps,
+            period=dominant_period,
+            n_harmonics=n_sine_harmonics,
+            refine_period=refine_period_per_segment,
+        )
+        plt.plot(time, m2flux, 'b.', markersize=1, label="after multisine fit")
+        best_params["method"] = "multisine"
+        best_params["dominant_period"] = dominant_period
+        best_params["multisine_n_segments"] = len(multisine_gaps)
+
+    else:
+        # fit a spline to the general trends
+        m2flux, _, best_params = fit_spline(time, flux, gaps, longdecay=longdecay)
+        best_params["method"] = "spline"
+
+    print("Baseline detrending params:", best_params)
     
     # choose a 6 hour window
     w1 = int((np.rint(savgol1 / 24. / dt) // 2) * 2 + 1)
 
     lc.flux = m2flux * u.electron / u.s
     lc.flux_err = lc.flux_err * u.electron / u.s
+
+    # Snapshot of flux after baseline (spline or multisine) removal,
+    # aligned to the full interpolated grid before any Savitzky-Golay pass.
+    flux_after_baseline = m2flux.copy()
 
     if debug_plot == True:
         plt.figure(figsize=(8,4))
@@ -105,7 +223,7 @@ def custom_detrending(lc,
                       max_sigma=max_sigma, longdecay=longdecay,
                       break_tolerance=break_tolerance)
     
-    lc3.flux = lc3.detrended_flux * u.electron / u.s
+    lc3.flux = lc3.detrended_flux 
  
     if debug_plot == True:
         plt.plot(lc3.time.value, lc3.flux.value, 'r.', 
@@ -132,15 +250,62 @@ def custom_detrending(lc,
     # Clean up the temporary column
     lc4.remove_column("original_flux")
     lc.flux = lc["original_flux"] * u.electron / u.s
-    lc.flux_err = lc["orginal_flux_err"] * u.electron / u.s
-    
+    lc.flux_err = lc["original_flux_err"] * u.electron / u.s
     
     # find median value
     lc4.find_iterative_median()
 
+
+    # ------------------------------------------------------------------
+    # Check whether each SG step actually modified the flux.  A step is
+    # considered to have had no effect when the RMS of its change is below
+    # the point-to-point noise floor of the input stage.
+    # ------------------------------------------------------------------
+    t4 = lc4.time.value
+    t_interp = lc.time.value
+
+    # Align flux_after_baseline to lc4's grid
+    if len(flux_after_baseline) == len(t4):
+        f_bl = flux_after_baseline
+    else:
+        idx = np.searchsorted(t_interp, t4)
+        idx = np.clip(idx, 0, len(flux_after_baseline) - 1)
+        f_bl = flux_after_baseline[idx]
+
+    # Align savgol1 output to lc4's grid
+    t3 = lc3.time.value
+    if len(lc3.detrended_flux) == len(t4):
+        f_sg1 = np.array(lc3.detrended_flux)
+    else:
+        idx3 = np.searchsorted(t3, t4)
+        idx3 = np.clip(idx3, 0, len(lc3.detrended_flux) - 1)
+        f_sg1 = np.array(lc3.detrended_flux)[idx3]
+
+    f_sg2 = np.array(lc4.detrended_flux)
+
+    def _touched(before, after):
+        """True when the RMS change exceeds the point-to-point noise floor."""
+        delta = after - before
+        valid = ~np.isnan(delta)
+        if valid.sum() < 10:
+            return False
+        rms_change = np.sqrt(np.mean(delta[valid] ** 2))
+        f_v = before[~np.isnan(before)]
+        noise = np.nanmedian(np.abs(np.diff(f_v))) * 1.4826 / np.sqrt(2)
+        return bool(rms_change > noise)
+
+    savgol1_touched = _touched(f_bl,  f_sg1)
+    savgol2_touched = _touched(f_sg1, f_sg2)
+
+    if not savgol1_touched:
+        print("WARNING: savgol1 did not modify the light curve.")
+    if not savgol2_touched:
+        print("WARNING: savgol2 did not modify the light curve.")
+
+    best_params["savgol1_touched"] = savgol1_touched
+    best_params["savgol2_touched"] = savgol2_touched
+
     return lc4
-
-
 
 
 
@@ -221,6 +386,336 @@ def estimate_detrended_noise(flc, mask_pos_outliers_sigma=2.5,
     flc.detrended_flux_err = detrended_flux_err
     
     return flc
+
+
+def detect_strong_periodicity(time, flux,
+                              fap_threshold=1e-3,
+                              amplitude_threshold=0.01,
+                              period_min=0.1,
+                              period_max=None,
+                              flux_median=None):
+    """Test whether the light curve contains a strong, high-amplitude periodic
+    signal using the Lomb-Scargle periodogram.
+
+    Both conditions must be satisfied simultaneously for the function to return
+    ``True``:
+
+    * The false-alarm probability of the highest peak is below
+      ``fap_threshold``.
+    * The semi-amplitude of a single-frequency sine fitted at the peak
+      frequency exceeds ``amplitude_threshold`` × (median flux).
+
+    Parameters
+    ----------
+    time : array_like
+        Time values in days.
+    flux : array_like
+        Raw flux values.
+    fap_threshold : float
+        FAP threshold below which the signal is considered significant.
+        Defaults to 1e-3.
+    amplitude_threshold : float
+        Minimum fractional semi-amplitude (relative to median flux) for the
+        signal to be considered high-amplitude.  Defaults to 0.01.
+    period_min : float
+        Minimum period to search, in days.  Defaults to 0.1.
+    period_max : float or None
+        Maximum period to search, in days.  Defaults to half the time-span.
+
+    flux_median : float or None
+        Reference median used to express the semi-amplitude as a fraction.
+        If None, the median of ``flux`` itself is used.  Pass the original
+        raw-flux median when calling on residuals (which are centred near
+        zero) to avoid division by a near-zero value.
+
+    Returns
+    -------
+    is_periodic : bool
+        True when both the FAP and amplitude criteria are met.
+    peak_period : float
+        Period of the highest LS peak in days.
+    rel_amplitude : float
+        Fractional semi-amplitude of the best-fit sine at the peak period
+        relative to the reference median flux.
+    fap : float
+        False-alarm probability of the peak power under the
+        Baluev (2008) analytic approximation.
+    """
+    valid = ~(np.isnan(time) | np.isnan(flux))
+    t = time[valid]
+    f = flux[valid]
+
+    if len(t) < 20:
+        return False, np.nan, np.nan, np.nan
+
+    f_median = np.nanmedian(f)
+
+    # Use caller-supplied reference median for amplitude normalisation if given.
+    # This is essential when `flux` is a residual centred near zero, where the
+    # local median would be ~0 and cause division-by-zero.
+    ref_median = flux_median if flux_median is not None else f_median
+
+    if ref_median == 0:
+        return False, np.nan, np.nan, np.nan
+
+    # Centre flux so LS is not confused by a DC offset
+    f_centred = f - f_median
+
+    if period_max is None:
+        period_max = (t[-1] - t[0]) / 2.0
+
+    # Guard against degenerate ranges
+    if period_max <= period_min:
+        period_max = period_min * 10.0
+
+    freq_min = 1.0 / period_max
+    freq_max = 1.0 / period_min
+
+    ls = LombScargle(t, f_centred)
+    frequency, power = ls.autopower(
+        minimum_frequency=freq_min,
+        maximum_frequency=freq_max,
+        samples_per_peak=10,
+    )
+
+    if len(power) == 0:
+        return False, np.nan, np.nan, np.nan
+
+    peak_idx = np.argmax(power)
+    peak_freq = frequency[peak_idx]
+    peak_period = 1.0 / peak_freq
+    peak_power = power[peak_idx]
+
+    # False-alarm probability (Baluev 2008 analytic approximation)
+    fap = ls.false_alarm_probability(peak_power, method="baluev")
+
+    # Semi-amplitude from LS model coefficients at the peak frequency:
+    # model = offset + a*cos(2π f t) + b*sin(2π f t)
+    # semi-amplitude = sqrt(a² + b²)
+    theta = ls.model_parameters(peak_freq)   # [offset, a_cos, b_sin]
+    rel_amplitude = np.sqrt(theta[1] ** 2 + theta[2] ** 2) / abs(ref_median)
+
+    is_periodic = bool((fap < fap_threshold) and (rel_amplitude > amplitude_threshold))
+
+    return is_periodic, peak_period, rel_amplitude, fap
+
+
+def _split_long_segments(gaps, time, period, n_per):
+    """Bisect any gap segment longer than ``n_per`` cycles of ``period``.
+
+    The split is applied repeatedly until every segment satisfies the length
+    criterion, so segments that are e.g. 3× too long get split into quarters,
+    not just halves.  The split point is always the index closest to the
+    temporal midpoint of the segment so that the two halves are roughly equal
+    in duration.
+
+    Parameters
+    ----------
+    gaps : list of (int, int)
+        Segment boundaries as produced by ``FlareLightCurve.find_gaps``.
+    time : array_like
+        Full time array (days).
+    period : float
+        Dominant period in days.
+    n_per : int
+        Maximum allowed segment length in units of ``period``.
+
+    Returns
+    -------
+    list of (int, int)
+        New gap list with long segments bisected.
+    """
+    max_span = n_per * period
+    result = []
+    queue = list(gaps)
+
+    while queue:
+        le, ri = queue.pop(0)
+        span = time[ri - 1] - time[le]
+
+        if span <= max_span:
+            result.append((le, ri))
+        else:
+            # Find the index closest to the temporal midpoint
+            t_mid = 0.5 * (time[le] + time[ri - 1])
+            mid = le + np.argmin(np.abs(time[le:ri] - t_mid))
+
+            # Guard: both halves must be non-empty
+            if mid <= le:
+                mid = le + 1
+            if mid >= ri:
+                mid = ri - 1
+
+            # Push both halves back for further checking
+            queue.insert(0, (mid, ri))
+            queue.insert(0, (le, mid))
+
+    return result
+
+
+def fit_multisine(time, flux, flux_med, gaps,
+                  period,
+                  n_harmonics=5,
+                  refine_period=True,
+                  period_refine_window=0.05):
+    """Fit a multi-harmonic sine baseline to the light curve.
+
+    The model for each gap-segment is::
+
+        f_model(t) = c₀ + c₁(t − t_mid)
+                   + Σₖ₌₁ᴺ [ aₖ cos(2π k t / Pₛₑg) + bₖ sin(2π k t / Pₛₑg) ]
+
+    where the coefficients are solved via ordinary least-squares.  The linear
+    term ``c₁(t − t_mid)`` absorbs any slow baseline drift within the segment
+    so that the harmonic amplitudes are not biased by it.  Time is centred on
+    the segment midpoint ``t_mid`` to keep the offset ``c₀`` and the slope
+    ``c₁`` numerically orthogonal.  Fitting
+    per segment allows the *amplitude to evolve* naturally across the
+    observation baseline.  Optionally, ``Pₛₑg`` is refined independently for
+    each segment with a narrow Lomb-Scargle search around the global ``period``
+    to accommodate *slightly varying periods* (e.g. differential rotation).
+
+    The detrended flux follows the same convention used by ``fit_spline``:
+    residuals are re-centred at the iterative-median baseline so that
+    subsequent Savitzky-Golay passes work on a nearly zero-mean signal.
+
+    Parameters
+    ----------
+    time : array_like
+        Full time array in days.
+    flux : array_like
+        Raw flux values.
+    flux_med : array_like
+        Iterative-median baseline (output of ``_find_iterative_median``).
+    gaps : list of (int, int)
+        Segment boundaries ``(left_index, right_index)`` as produced by
+        ``FlareLightCurve.find_gaps``.
+    period : float
+        Starting period in days (typically the Lomb-Scargle peak).
+    n_harmonics : int
+        Number of harmonics to include (1 = pure sine; higher values capture
+        non-sinusoidal waveforms).  Defaults to 5.
+    refine_period : bool
+        If True, refine the period independently for each segment using a
+        narrow Lomb-Scargle search.  Defaults to True.
+    period_refine_window : float
+        Half-width of the period search range expressed as a *fraction* of
+        ``period``.  E.g. 0.05 searches ±5 % around ``period``.
+        Defaults to 0.05.
+
+    Returns
+    -------
+    newflux : ndarray
+        Detrended flux re-centred at ``flux_med``.
+    model : ndarray
+        Best-fit multi-sine model evaluated on the full ``time`` array.
+    best_params : dict
+        Summary of fit parameters: dominant period and per-segment periods.
+    """
+    model   = np.full_like(flux, np.nan, dtype=float)
+    newflux = np.full_like(flux, np.nan, dtype=float)
+
+    n_cols = 2 * n_harmonics + 2  # [offset, t_linear, cos_1, sin_1, …, cos_N, sin_N]
+    seg_periods = {}
+
+    for le, ri in gaps:
+        t_seg = time[le:ri]
+        f_seg = flux[le:ri]
+        fmed_seg = np.nanmedian(flux_med[le:ri])
+
+        valid = ~(np.isnan(t_seg) | np.isnan(f_seg))
+        n_valid = np.sum(valid)
+
+        # Need at least as many valid points as free parameters
+        if n_valid < n_cols + 1:
+            newflux[le:ri] = f_seg
+            model[le:ri]   = fmed_seg
+            seg_periods[le] = period
+            continue
+
+        t_v = t_seg[valid]
+        f_v = f_seg[valid]
+        seg_len_days = t_v[-1] - t_v[0]
+
+        # Centre time on the segment midpoint so the linear term is
+        # orthogonal to the constant offset and numerically well-conditioned.
+        t_mid = 0.5 * (t_v[0] + t_v[-1])
+        t_v_c   = t_v   - t_mid
+        t_seg_c = t_seg - t_mid
+
+        # --- optional per-segment period refinement -----------------------
+        seg_period = period
+
+        if refine_period and seg_len_days > 2.0 * period:
+            # Only worth refining when the segment covers multiple cycles
+            freq_ctr   = 1.0 / period
+            freq_delta = freq_ctr * period_refine_window
+            freq_lo    = max(freq_ctr - freq_delta, 1.0 / (seg_len_days + 1e-6))
+            freq_hi    = freq_ctr + freq_delta
+
+            if freq_lo < freq_hi:
+                refine_freqs = np.linspace(freq_lo, freq_hi, 400)
+                f_centred    = f_v - np.nanmedian(f_v)
+                ls_seg       = LombScargle(t_v, f_centred)
+                seg_power    = ls_seg.power(refine_freqs)
+                seg_period   = 1.0 / refine_freqs[np.argmax(seg_power)]
+
+        seg_periods[le] = seg_period
+
+        # --- build harmonic design matrix ---------------------------------
+        # Columns: [1, t_c, cos(2π t/P), sin(2π t/P), …, cos(2πN t/P), sin(2πN t/P)]
+        # The linear term (t_c) captures any slow baseline drift within the
+        # segment, so the harmonic coefficients are not biased by it.
+        A_valid = np.ones((n_valid, n_cols))
+        A_full  = np.ones((ri - le, n_cols))
+
+        # Column 1: linear trend (time centred on segment midpoint)
+        A_valid[:, 1] = t_v_c
+        A_full[:, 1]  = t_seg_c
+
+        for k in range(1, n_harmonics + 1):
+            phase_v = 2.0 * np.pi * k * t_v   / seg_period
+            phase_f = 2.0 * np.pi * k * t_seg / seg_period
+            A_valid[:, 2*k]     = np.cos(phase_v)
+            A_valid[:, 2*k + 1] = np.sin(phase_v)
+            A_full[:, 2*k]      = np.cos(phase_f)
+            A_full[:, 2*k + 1]  = np.sin(phase_f)
+
+        # --- ordinary least-squares solution ------------------------------
+        try:
+            coeffs, _, _, _ = np.linalg.lstsq(A_valid, f_v, rcond=None)
+            model_seg = A_full @ coeffs
+        except Exception:
+            # Fallback: constant equal to segment median
+            model_seg = np.full(ri - le, np.nanmedian(f_seg))
+
+        # plt.plot(t_seg, f_seg, 'k.', markersize=1)
+        plt.plot(t_seg, model_seg, 'b-', linewidth=2)
+
+        # Centre the residual before storing.  An imperfect fit leaves a
+        # DC offset in (f_seg - model_seg): the residual median drifts away
+        # from zero, which then biases the sigma-clip threshold in the
+        # downstream Savitzky-Golay step (everything ends up above or below
+        # the median, causing the clip to treat the oscillation asymmetrically
+        # and flag ~40 % of the LC as a single flare candidate).
+        # Subtracting the residual median forces the output to be centred at
+        # fmed_seg regardless of fit quality, without altering the oscillation
+        # shape or the period/harmonic content.
+        residual  = f_seg - model_seg
+        # valid_res = residual[~np.isnan(f_seg)]
+        # dc_offset = np.nanmedian(valid_res) if len(valid_res) > 0 else 0.0
+
+        model[le:ri]   = model_seg# + dc_offset   # keep model consistent
+        newflux[le:ri] = residual  + fmed_seg #- dc_offset
+        plt.plot(t_seg, residual+fmed_seg, 'b-', linewidth=2)
+
+    best_params = {
+        "n_harmonics"   : n_harmonics,
+        "global_period" : period,
+        "seg_periods"   : seg_periods,
+    }
+
+    return newflux, model, best_params
 
 
 def fit_spline(time, flux, gaps, 

@@ -378,7 +378,7 @@ class FlareLightCurve(LightCurve):
         
         return flc
     
-    def find_iterative_median(self, n=10, **kwargs):
+    def find_iterative_median(self, n=10, detrended=True, **kwargs):
         """
         Find the iterative median value for a continuous observation period using
         sigma clipping to identify outliers.
@@ -402,7 +402,10 @@ class FlareLightCurve(LightCurve):
         >>> flc.find_gaps().find_iterative_median()
         """
         # Extract arrays from self
-        detrended_flux = self.detrended_flux
+        if detrended == True:
+            detrended_flux = self.detrended_flux
+        else:
+            detrended_flux = self.flux
         
         # Get gaps (find them if not already computed)
         gaps = self.gaps
@@ -497,7 +500,6 @@ class FlareLightCurve(LightCurve):
         FlareLightCurve
         """
         if mode == "savgol":
-
             new_lc = copy.deepcopy(self)
                 # fill missing cadences
             new_lc = new_lc.remove_nans().find_iterative_median()

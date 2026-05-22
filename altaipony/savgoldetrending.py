@@ -1,8 +1,29 @@
 import numpy as np
 from .utils import sigma_clip
+import lightkurve as lk
+import astropy.units as u
 
+import matplotlib.pyplot as plt
 
 def detrend_savgol(lc, og_flux, og_flux_err, max_sigma=2.5, longdecay=6, 
+                   w=121, break_tolerance=10, **kwargs):
+    gaps = lc.find_gaps().gaps
+    
+    new_lcs = []
+    for [le,ri] in gaps:
+        new_lcs.append(detrend_savgol_gap(lc[le:ri], og_flux[le:ri], og_flux_err[le:ri], max_sigma=2.5, longdecay=6, 
+                       w=121, break_tolerance=10, **kwargs))
+                       
+    collection = lk.LightCurveCollection(new_lcs)
+    for new_lc in new_lcs:
+        print(new_lc.flux_err[:5])
+
+    lcr = collection.stitch()
+    lcr.flux_err = lcr.flux_err * u.electron/u.s
+    return lcr
+
+
+def detrend_savgol_gap(lc, og_flux, og_flux_err, max_sigma=2.5, longdecay=6, 
                    w=121, break_tolerance=10, **kwargs):
     """New detrending with savgol filter.
     
@@ -28,13 +49,16 @@ def detrend_savgol(lc, og_flux, og_flux_err, max_sigma=2.5, longdecay=6,
     
     # normalize
     lcn = lc.normalize()
-    
+    # plt.figure(figsize=(20, 5))
+    # plt.plot(lcn.time.value, lcn.flux, 'r.', markersize=1)
     # sigma clip
     m = sigma_clip(lcn.flux, max_sigma=max_sigma, longdecay=longdecay)
 
     # convert bool to int
     mask = ~m * 1
-
+    #plot mask
+    # mask_array = np.where(mask == 1, 1, 0.95)
+    # plt.plot(lcn.time.value, mask_array, 'k.', markersize=1)
     # from Appaloosa:
     # convert mask to start and stop
     reverse_counts = np.zeros_like(lcn.flux, dtype='int')
@@ -112,15 +136,12 @@ def detrend_savgol(lc, og_flux, og_flux_err, max_sigma=2.5, longdecay=6,
         og_flux_err_filtered = og_flux_err.value if hasattr(og_flux_err, 'value') else og_flux_err
 
     # store detrended flux and restore original flux
-    lcrsf.detrended_flux = lcrsf.flux.value * np.nanmedian(og_flux_filtered)
-    lcrsf.detrended_flux_err = og_flux_err_filtered
+    lcrsf.detrended_flux = lcrsf.flux.value * np.nanmedian(og_flux_filtered) * u.electron/u.s
+    lcrsf.detrended_flux_err = og_flux_err_filtered * u.electron/u.s
     
     # Restore original flux
-    if hasattr(og_flux, 'unit'):
-        lcrsf.flux = og_flux_filtered * og_flux.unit
-        lcrsf.flux_err = og_flux_err_filtered * og_flux_err.unit
-    else:
-        lcrsf.flux = og_flux_filtered
-        lcrsf.flux_err = og_flux_err_filtered
+    lcrsf.flux = og_flux_filtered * u.electron/u.s
+    lcrsf.flux_err = og_flux_err_filtered * u.electron/u.s
+ 
 
     return lcrsf

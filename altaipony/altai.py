@@ -390,7 +390,7 @@ def _find_iterative_median(detrended_flux, gaps, n=10, **kwargs):
             # Find median that is not skewed by outliers
             good_mask = sigma_clip(flux_segment, max_iter=n, **kwargs)
             good_flux = flux_segment[good_mask]
-            
+            print("Good flux: ",np.nanmedian(good_flux))
             if len(good_flux) > 0:
                 it_med[le:ri] = np.nanmedian(good_flux)
     
