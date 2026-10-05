@@ -137,7 +137,13 @@ class _DebugPlotter:
             self._ax(name).axvline(x, **kwargs)
 
     def finalize(self, name, xlabel=None, ylabel=None, legend=True, save=None):
-        """Label, optionally save, and leave the figure open for display."""
+        """Label and optionally save the figure.
+
+        In interactive sessions (Jupyter, GUI backends) the figure is left
+        open for display.  In batch runs (non-interactive backend such as
+        Agg) it is closed after saving, since it can never be displayed and
+        open figures would otherwise accumulate over many light curves.
+        """
         if not self.enabled or name not in self._figures:
             return
         fig, ax = self._figures[name]
@@ -150,6 +156,16 @@ class _DebugPlotter:
         if save is not None and self.savedir is not None:
             os.makedirs(self.savedir, exist_ok=True)
             fig.savefig(os.path.join(self.savedir, save), dpi=300)
+        if _is_batch_backend():
+            plt.close(fig)
+            del self._figures[name]
+
+
+def _is_batch_backend():
+    """Return True if matplotlib uses a non-interactive (file-only) backend."""
+    return plt.get_backend().lower() in {
+        "agg", "cairo", "pdf", "pgf", "ps", "svg", "template",
+    }
 
 
 #: Shared inert plotter used as the default when a caller passes ``debug=None``.
@@ -879,7 +895,6 @@ def fit_lightcurve_detrender(time, flux, flux_err, gaps, config=None):
         ),
         "ld_window_sizes": result.summary.get("window_sizes"),
         "ld_poly_deg": result.summary.get("poly_deg"),
-        "ld_sp_sinusoid_applied": result.summary.get("sp_sinusoid_applied"),
         "ld_rotation_sinusoid_applied": result.summary.get("rotation_sinusoid_applied"),
     }
     logger.info(

@@ -5,7 +5,7 @@ remove sinusoidal residuals, and build flare masks and noise estimates.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 import logging
 import warnings
 
@@ -28,10 +28,7 @@ class DetrendConfig:
     Attributes
     ----------
     window_sizes : tuple of float
-        Window sizes, in days, used for segmented polynomial fits. If a known
-        stellar rotation period is attached, the pipeline automatically uses
-        ``(0.2, 0.4, 0.6, 0.8)`` for periods below 1 day and
-        ``(0.4, 0.6, 0.8, 1.0)`` for periods above 2 days.
+        Window sizes, in days, used for segmented polynomial fits.
     poly_deg : int
         Polynomial degree used for each segment fit.
     n_edge : int
@@ -61,47 +58,13 @@ class DetrendConfig:
     centering_clip_abs : float or None
         Optional absolute clipping limit applied when estimating the centering offset.
         The default is None, so no pre-centering clipping is performed.
-    apply_sinusoid_correction : bool
-        If True, apply global Lomb-Scargle sinusoid correction when available.
-    n_sinusoid_components : int
-        Maximum number of global sinusoid components to remove.
-    min_sinusoid_period_hr : float
-        Minimum searched sinusoid period, in hours.
-    max_sinusoid_period_hr : float
-        Maximum searched sinusoid period, in hours.
-    amp_limit_fraction : float
-        Maximum sinusoid amplitude as a multiple of the local sigma estimate.
-    apply_local_final_sinusoid_correction : bool
-        If True, apply the final local sinusoid correction when available.
-    local_sinusoid_window_d : float
-        Local sinusoid fitting window, in days.
-    local_sinusoid_step_fraction : float
-        Step size as a fraction of ``local_sinusoid_window_d``.
-    local_sinusoid_min_points : int
-        Minimum number of cadences required in a local sinusoid window.
-    local_sinusoid_min_cycles : float
-        Minimum number of sinusoid cycles required in a local window.
-    local_sinusoid_amp_sigma : float
-        Minimum local sinusoid amplitude in units of robust sigma.
-    local_sinusoid_min_improvement : float
-        Minimum fractional robust-sigma improvement required for acceptance.
-    local_sinusoid_clip_sigma : float
-        Symmetric clipping threshold used during robust local sinusoid fitting.
-    n_remove : int
-        Number of cadences removed on each side of a detected large gap.
-    gap_sigma : float
-        Robust sigma multiplier used in the large-gap threshold.
-    gap_min_factor : float
-        Minimum large-gap threshold as a multiple of the median cadence.
     granulation_timescale_days : float or None
         Known or estimated granulation timescale, in days. When set, the
         pipeline enforces a minimum detrending window of
         ``granulation_min_window_factor * granulation_timescale_days`` so that
         the polynomial baseline cannot absorb granulation power. It also
         penalises segments whose window length falls close to the granulation
-        timescale in ``score_segment``, and applies a peak-sharpness guard in
-        ``multi_sinusoid_correction`` to prevent the periodogram from chasing
-        the broad granulation power hump. Set to ``None`` (default) to disable
+        timescale in ``score_segment``. Set to ``None`` (default) to disable
         all granulation-specific logic.
     granulation_min_window_factor : float
         Minimum window size expressed as a multiple of
@@ -113,12 +76,6 @@ class DetrendConfig:
         granulation_timescale_days``. The penalty scales linearly from this
         value (at zero window length) to zero (at the minimum safe window
         length). Default is 0.5.
-    granulation_sinusoid_sharpness_min : float
-        Minimum ratio of a periodogram peak to the median power in a local
-        neighbourhood before the peak is accepted as a coherent sinusoid.
-        Values below this threshold are interpreted as part of a broad
-        granulation hump and rejected. Default is 1.5. Set to 0.0 to disable
-        the sharpness guard.
     auto_estimate_granulation : bool
         If True and ``granulation_timescale_days`` is None, attempt to
         estimate the granulation timescale automatically from the ACF of the
@@ -148,16 +105,9 @@ class DetrendConfig:
     center_final_residual: bool = True
     centering_ma_window: int = 10
     centering_clip_abs: float | None = None
-    apply_sinusoid_correction: bool = True
-    n_sinusoid_components: int = 3
-    min_sinusoid_period_hr: float = 0.07
-    max_sinusoid_period_hr: float = 0.10
-    amp_limit_fraction: float = 2.0
-    sinusoid_min_improvement: float = 0.005
 
-    # Optional long-period correction applied to the second-pass residuals.
-    # This reuses the same global sinusoid remover, but on rotation-like
-    # residual modulation instead of the short cadence-scale period range.
+    # Optional long-period correction applied to the second-pass residuals,
+    # removing rotation-like residual modulation.
     apply_rotation_sinusoid_correction: bool = True
     rotation_sinusoid_min_period_hr: float = 6.0
     rotation_sinusoid_max_period_hr: float = 36.0
@@ -180,25 +130,12 @@ class DetrendConfig:
     fast_rotation_amp_limit_fraction: float = 3.0
     run_generic_rotation_after_fast_harmonic: bool = False
 
-    apply_local_final_sinusoid_correction: bool = True
-    local_sinusoid_window_d: float = 2.0
-    local_sinusoid_step_fraction: float = 0.5
-    local_sinusoid_min_points: int = 60
-    local_sinusoid_min_cycles: float = 1.0
-    local_sinusoid_amp_sigma: float = 0.5
-    local_sinusoid_min_improvement: float = 0.005
-    local_sinusoid_clip_sigma: float = 5.0
-    n_remove: int = 125
-    gap_sigma: float = 8.0
-    gap_min_factor: float = 20.0
-
     # ------------------------------------------------------------------ #
     # Granulation handling                                                 #
     # ------------------------------------------------------------------ #
     granulation_timescale_days: float | None = None
     granulation_min_window_factor: float = 3.0
     granulation_score_penalty: float = 0.5
-    granulation_sinusoid_sharpness_min: float = 1.5
     auto_estimate_granulation: bool = False
     granulation_acf_max_lag_days: float = 3.0
     granulation_noise_window_pts: int = 30
@@ -215,15 +152,12 @@ class DetrendResult:
         First-pass per-segment fit-quality table.
     seg_stats_p2 : pandas.DataFrame
         Second-pass per-segment fit-quality table.
-    local_sinusoid_stats : pandas.DataFrame
-        Per-window statistics from the final local sinusoid correction.
     summary : dict
         Scalar run summary and diagnostic values.
     """
     final_df: pd.DataFrame
     seg_stats_p1: pd.DataFrame
     seg_stats_p2: pd.DataFrame
-    local_sinusoid_stats: pd.DataFrame
     summary: dict
 
 def sigma_clipped_std(arr: np.ndarray, n_sigma: float = 3.0, max_iter: int = 20) -> float:
@@ -256,6 +190,42 @@ def sigma_clipped_std(arr: np.ndarray, n_sigma: float = 3.0, max_iter: int = 20)
             break
         r = r[keep]
     return float(np.std(r))
+
+def robust_mad_sigma(arr) -> float:
+    """Return the MAD-based sigma estimate ``1.4826 * median(|x - median(x)|)``.
+
+    Non-finite values are ignored.
+    """
+    x = np.asarray(arr, dtype=float)
+    return 1.4826 * float(np.nanmedian(np.abs(x - np.nanmedian(x))))
+
+def _weighted_lstsq(X: np.ndarray, y: np.ndarray, flux_err=None) -> np.ndarray:
+    """Solve a linear least-squares problem, weighted by ``1 / flux_err**2``.
+
+    Falls back to an unweighted fit when ``flux_err`` is None or contains
+    non-finite or non-positive values.
+    """
+    if flux_err is not None:
+        fe = np.asarray(flux_err, dtype=float)
+        if np.all(np.isfinite(fe)) and np.all(fe > 0):
+            w = 1.0 / fe**2
+            return np.linalg.lstsq((X.T * w) @ X, (X.T * w) @ y, rcond=None)[0]
+    return np.linalg.lstsq(X, y, rcond=None)[0]
+
+def _empty_sinusoid_stats(**extra) -> dict:
+    """Return the stats dict of a periodic correction that was not applied."""
+    stats = {
+        "applied": False,
+        "n_components": 0,
+        "periods_hr": [],
+        "improvement": 0.0,
+        "std_before": np.nan,
+        "std_after": np.nan,
+        "boundary_hit": False,
+        "reject_reason": "",
+    }
+    stats.update(extra)
+    return stats
 
 def compute_rolling_local_sigma(
     residuals: np.ndarray,
@@ -297,133 +267,6 @@ def compute_rolling_local_sigma(
     fallback = float(np.nanmedian(finite)) if len(finite) else sigma_clipped_std(residuals)
     return np.where(np.isfinite(sigma_local), sigma_local, fallback)
 
-def prepare_arrays(ts_df: pd.DataFrame) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Extract sorted numeric arrays from a light-curve table.
-
-    Invalid time and flux rows are dropped. Invalid ``flux_err`` values are replaced
-    with the median positive finite flux-error value.
-
-    Parameters
-    ----------
-    ts_df : pandas.DataFrame
-        Table containing ``time``, ``flux``, and ``flux_err`` columns.
-
-    Returns
-    -------
-    time : numpy.ndarray
-        Sorted finite time values.
-    flux : numpy.ndarray
-        Flux values corresponding to ``time``.
-    flux_err : numpy.ndarray
-        Positive finite flux-error values corresponding to ``time``.
-
-    Raises
-    ------
-    ValueError
-        If required columns are missing, no valid time/flux rows remain, or no
-        positive finite ``flux_err`` values are available.
-    """
-    req = {"time", "flux", "flux_err"}
-    missing = req.difference(ts_df.columns)
-    if missing:
-        raise ValueError(f"Missing columns: {sorted(missing)}")
-    df = ts_df.loc[:, ["time", "flux", "flux_err"]].copy()
-    before = len(df)
-    df = df[np.isfinite(df["time"]) & np.isfinite(df["flux"])].sort_values("time")
-    dropped = before - len(df)
-    if dropped:
-        warnings.warn(
-            f"Dropped {dropped} row(s) with invalid time or flux values.",
-            RuntimeWarning,
-        )
-    if df.empty:
-        raise ValueError("No valid rows remain after removing invalid time or flux values.")
-    time = df["time"].to_numpy(dtype=float)
-    flux = df["flux"].to_numpy(dtype=float)
-    flux_err = df["flux_err"].to_numpy(dtype=float)
-    bad = ~(np.isfinite(flux_err) & (flux_err > 0))
-    if bad.any():
-        good = flux_err[~bad]
-        if len(good) == 0:
-            raise ValueError("flux_err contains no positive finite values.")
-        replacement = float(np.nanmedian(good))
-        flux_err[bad] = replacement
-        warnings.warn(
-            f"Replaced {int(bad.sum())} invalid flux_err value(s) with the median value {replacement:.6g}.",
-            RuntimeWarning,
-        )
-    return time, flux, flux_err
-
-def remove_gap_edges(
-    time: np.ndarray,
-    flux: np.ndarray,
-    flux_err: np.ndarray,
-    n_remove: int = 125,
-    gap_sigma: float = 8.0,
-    gap_min_factor: float = 20.0,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, dict]:
-    """Remove cadences around large gaps in a time series.
-
-    Parameters
-    ----------
-    time : numpy.ndarray
-        Time values.
-    flux : numpy.ndarray
-        Flux values.
-    flux_err : numpy.ndarray
-        Flux-error values.
-    n_remove : int, optional
-        Number of cadences to remove on both sides of each detected gap edge.
-    gap_sigma : float, optional
-        Robust sigma multiplier used in the gap threshold.
-    gap_min_factor : float, optional
-        Minimum threshold as a multiple of the median cadence.
-
-    Returns
-    -------
-    time : numpy.ndarray
-        Gap-cleaned, time-sorted time values.
-    flux : numpy.ndarray
-        Gap-cleaned flux values.
-    flux_err : numpy.ndarray
-        Gap-cleaned flux-error values.
-    info : dict
-        Gap-cleaning diagnostics, including cadence, threshold, gap indices, keep
-        mask, and number of removed cadences.
-
-    Raises
-    ------
-    ValueError
-        If the input arrays have different lengths, fewer than two cadences are
-        available, or all cadences would be removed.
-    """
-    if not (len(time) == len(flux) == len(flux_err)):
-        raise ValueError("time, flux, and flux_err must have the same length before gap cleaning.")
-    if len(time) < 2:
-        raise ValueError("At least two cadences are needed for gap cleaning.")
-    order = np.argsort(time)
-    time, flux, flux_err = time[order], flux[order], flux_err[order]
-    dt = np.diff(time)
-    cadence_days = float(np.nanmedian(dt))
-    mad_dt = float(np.nanmedian(np.abs(dt - cadence_days)))
-    robust_sigma = 1.4826 * mad_dt
-    gap_threshold = max(gap_min_factor * cadence_days, cadence_days + gap_sigma * robust_sigma)
-    gap_indices = np.where(dt > gap_threshold)[0]
-    keep = np.ones(len(time), dtype=bool)
-    for gi in gap_indices:
-        center = gi + 1
-        keep[max(0, center - n_remove): min(len(time), center + n_remove + 1)] = False
-    info = {
-        "cadence_days": cadence_days,
-        "gap_threshold": gap_threshold,
-        "gap_indices": gap_indices,
-        "keep_mask": keep,
-        "n_removed": int((~keep).sum()),
-    }
-    if not keep.any():
-        raise ValueError("Gap cleaning would remove every cadence.")
-    return time[keep], flux[keep], flux_err[keep], info
-
 def multi_sinusoid_correction(
     times,
     residuals,
@@ -431,37 +274,20 @@ def multi_sinusoid_correction(
     flare_mask=None,
     sigma_local=None,
     n_components=3,
-    min_period_hr=0.07,
-    max_period_hr=0.10,
-    amp_limit_frac=2.0,
-    min_improvement=0.005,
+    min_period_hr=6.0,
+    max_period_hr=36.0,
+    amp_limit_frac=3.0,
+    min_improvement=0.02,
     label="Sinusoidal correction",
     return_stats=False,
-    peak_sharpness_min=0.0,
 ):
     """Remove dominant sinusoidal components from residuals.
 
     Components are accepted greedily and only kept when they produce a minimum
     additional scatter improvement. This prevents the function from always
     removing exactly ``n_components`` weak or alias-like sinusoids.
-
-    When ``peak_sharpness_min`` is greater than zero, each candidate peak is
-    additionally tested against a local-neighbourhood median: the ratio of the
-    peak power to the median power of the surrounding ±5 % of the frequency
-    axis must exceed ``peak_sharpness_min``.  Broad power humps caused by
-    granulation typically fail this test, preventing the correction from
-    absorbing granulation power as spurious coherent sinusoids.
     """
-    default_stats = {
-        "applied": False,
-        "n_components": 0,
-        "periods_hr": [],
-        "improvement": 0.0,
-        "std_before": np.nan,
-        "std_after": np.nan,
-        "boundary_hit": False,
-        "reject_reason": "",
-    }
+    default_stats = _empty_sinusoid_stats()
 
     def _finish(corrected, stats):
         return (corrected, stats) if return_stats else corrected
@@ -492,7 +318,7 @@ def multi_sinusoid_correction(
         sigma_arr = np.asarray(sigma_local, dtype=float)
         sigma_med = float(np.nanmedian(sigma_arr[np.isfinite(sigma_arr)]))
     else:
-        sigma_med = 1.4826 * float(np.nanmedian(np.abs(r_q - np.nanmedian(r_q))))
+        sigma_med = robust_mad_sigma(r_q)
     if not np.isfinite(sigma_med) or sigma_med <= 0:
         sigma_med = float(np.nanstd(r_q))
     amp_cap = amp_limit_frac * sigma_med if np.isfinite(sigma_med) else np.inf
@@ -534,13 +360,9 @@ def multi_sinusoid_correction(
 
     def _fit_correct(selected_freqs):
         X_q = _design(t_q, selected_freqs)
+        fe_q = np.asarray(flux_err, dtype=float)[q_mask] if flux_err is not None else None
         try:
-            fe_q = np.asarray(flux_err, dtype=float)[q_mask] if flux_err is not None else None
-            if fe_q is not None and np.all(fe_q > 0) and np.all(np.isfinite(fe_q)):
-                w = 1.0 / fe_q**2
-                coeffs = np.linalg.lstsq((X_q.T * w) @ X_q, (X_q.T * w) @ r_q, rcond=None)[0]
-            else:
-                coeffs = np.linalg.lstsq(X_q, r_q, rcond=None)[0]
+            coeffs = _weighted_lstsq(X_q, r_q, fe_q)
         except np.linalg.LinAlgError:
             return None, None
 
@@ -571,20 +393,6 @@ def multi_sinusoid_correction(
             continue
         if len(selected) >= n_components:
             break
-
-        # Granulation sharpness guard: reject peaks that sit on a broad power
-        # hump (ratio of peak power to local-neighbourhood median is too low).
-        if peak_sharpness_min > 0 and len(freqs) >= 5:
-            half_width = max(3, len(freqs) // 20)  # ±5 % of frequency axis
-            lo_i = max(0, idx - half_width)
-            hi_i = min(len(power), idx + half_width + 1)
-            neighbourhood = np.concatenate([power[lo_i:idx], power[idx + 1:hi_i]])
-            if len(neighbourhood) > 0:
-                local_med = float(np.nanmedian(neighbourhood))
-                if local_med > 0:
-                    sharpness = float(power[idx]) / local_med
-                    if sharpness < peak_sharpness_min:
-                        continue  # broad hump – skip this candidate
 
         trial_selected = selected + [f]
         trial_corrected, _ = _fit_correct(trial_selected)
@@ -662,61 +470,6 @@ def _as_float_or_none(value):
     except (TypeError, ValueError):
         return None
     return out if np.isfinite(out) else None
-
-
-def attach_rotation_metadata_to_config(
-    config: DetrendConfig | None = None,
-    stellar_rotation_df: pd.DataFrame | None = None,
-    known_rotation_period_days: float | None = None,
-) -> DetrendConfig:
-    """Return a config copy with a known stellar rotation period attached.
-
-    Priority is explicit ``known_rotation_period_days``, then an in-memory
-    ``stellar_rotation_df`` with a ``stellar_rotation_period`` column.
-    """
-    cfg = replace(config) if config is not None else DetrendConfig()
-
-    period = _as_float_or_none(known_rotation_period_days)
-    if period is None and stellar_rotation_df is not None:
-        try:
-            if not stellar_rotation_df.empty and "stellar_rotation_period" in stellar_rotation_df.columns:
-                period = _as_float_or_none(stellar_rotation_df.iloc[0]["stellar_rotation_period"])
-        except Exception:
-            period = None
-
-    if period is not None:
-        cfg.known_rotation_period_days = period
-        cfg.window_sizes = rotation_dependent_window_sizes(period, cfg.window_sizes)
-    return cfg
-
-
-def rotation_dependent_window_sizes(
-    stellar_rotation_period_days: float | None,
-    default_window_sizes: tuple[float, ...] = (0.4, 0.6, 0.8),
-) -> tuple[float, ...]:
-    """Choose detrending window sizes from the stellar rotation period.
-
-    Parameters
-    ----------
-    stellar_rotation_period_days : float or None
-        Known stellar rotation period in days.
-    default_window_sizes : tuple of float, optional
-        Window sizes to keep when no period is available, or when the period is
-        between 1 and 2 days inclusive.
-
-    Returns
-    -------
-    tuple of float
-        Rotation-dependent window sizes in days.
-    """
-    period = _as_float_or_none(stellar_rotation_period_days)
-    if period is None:
-        return tuple(default_window_sizes)
-    if period < 1.0:
-        return (0.2, 0.4, 0.6, 0.8)
-    if period > 2.0:
-        return (0.4, 0.6, 0.8, 1.0)
-    return tuple(default_window_sizes)
 
 
 # ======================================================================= #
@@ -850,9 +603,7 @@ def split_continuous_blocks(times: np.ndarray, min_points: int = 1, gap_factor: 
     if len(finite_dt) == 0:
         return [order[finite[order]]] if finite.sum() >= min_points else []
     cadence = float(np.nanmedian(finite_dt))
-    mad = float(np.nanmedian(np.abs(finite_dt - cadence)))
-    robust_sigma = 1.4826 * mad
-    gap_threshold = max(gap_factor * cadence, cadence + 8.0 * robust_sigma)
+    gap_threshold = max(gap_factor * cadence, cadence + 8.0 * robust_mad_sigma(finite_dt))
     split_after = np.where(dt > gap_threshold)[0]
     starts = np.r_[0, split_after + 1]
     stops = np.r_[split_after + 1, len(order)]
@@ -890,22 +641,14 @@ def known_rotation_harmonic_correction(
     excluding flare-masked points and using robust symmetric clipping. No
     constant term is subtracted; residual centering remains a separate stage.
     """
-    default_stats = {
-        "applied": False,
-        "method": "known_fast_rotation_harmonics",
-        "n_components": 0,
-        "periods_hr": [],
-        "improvement": 0.0,
-        "std_before": np.nan,
-        "std_after": np.nan,
-        "boundary_hit": False,
-        "reject_reason": "",
-        "known_rotation_period_days": np.nan,
-        "known_rotation_period_hr": np.nan,
-        "harmonics": tuple(),
-        "n_blocks_total": 0,
-        "n_blocks_accepted": 0,
-    }
+    default_stats = _empty_sinusoid_stats(
+        method="known_fast_rotation_harmonics",
+        known_rotation_period_days=np.nan,
+        known_rotation_period_hr=np.nan,
+        harmonics=tuple(),
+        n_blocks_total=0,
+        n_blocks_accepted=0,
+    )
 
     def _finish(corrected, model, stats):
         return (corrected, model, stats) if return_stats else corrected
@@ -939,7 +682,7 @@ def known_rotation_harmonic_correction(
         sigma_med = float(np.nanmedian(sigma_arr[np.isfinite(sigma_arr)]))
     else:
         q_tmp = ~flare_mask & np.isfinite(residuals)
-        sigma_med = 1.4826 * float(np.nanmedian(np.abs(residuals[q_tmp] - np.nanmedian(residuals[q_tmp])))) if q_tmp.sum() else np.nan
+        sigma_med = robust_mad_sigma(residuals[q_tmp]) if q_tmp.sum() else np.nan
     if not np.isfinite(sigma_med) or sigma_med <= 0:
         sigma_med = sigma_clipped_std(residuals[~flare_mask & np.isfinite(residuals)])
     amp_cap = amp_limit_frac * sigma_med if np.isfinite(sigma_med) and sigma_med > 0 else np.inf
@@ -987,23 +730,16 @@ def known_rotation_harmonic_correction(
                 break
             X = _design(t_fit[keep])
             y = r_fit[keep]
+            fe = np.asarray(flux_err, dtype=float)[fit_mask][keep] if flux_err is not None else None
             try:
-                if flux_err is not None:
-                    fe = np.asarray(flux_err, dtype=float)[fit_mask][keep]
-                    if np.all(np.isfinite(fe)) and np.all(fe > 0):
-                        w = 1.0 / np.maximum(fe, 1e-12) ** 2
-                        coeffs = np.linalg.lstsq((X.T * w) @ X, (X.T * w) @ y, rcond=None)[0]
-                    else:
-                        coeffs = np.linalg.lstsq(X, y, rcond=None)[0]
-                else:
-                    coeffs = np.linalg.lstsq(X, y, rcond=None)[0]
+                coeffs = _weighted_lstsq(X, y, fe)
             except np.linalg.LinAlgError:
                 coeffs = None
                 break
 
             pred_all = _design(t_fit) @ coeffs
             resid_fit = r_fit - pred_all
-            sig = 1.4826 * np.nanmedian(np.abs(resid_fit[keep] - np.nanmedian(resid_fit[keep])))
+            sig = robust_mad_sigma(resid_fit[keep])
             if not np.isfinite(sig) or sig <= 0:
                 sig = float(np.nanstd(resid_fit[keep]))
             if not np.isfinite(sig) or sig <= 0:
@@ -1541,305 +1277,6 @@ def assemble_combined_trend(
 
 
 
-def _robust_best_local_sinusoid(
-    times: np.ndarray,
-    residuals: np.ndarray,
-    flux_err: np.ndarray | None = None,
-    min_period_hr: float = 0.07,
-    max_period_hr: float = 0.10,
-    min_cycles: float = 1.5,
-    amp_sigma: float = 1.5,
-    min_improvement: float = 0.03,
-    clip_sigma: float = 4.0,
-) -> tuple[np.ndarray | None, dict]:
-    """Fit one robust local sinusoid to a residual window.
-
-    The initial search uses all finite points, including provisionally flare-masked
-    points, so broad sinusoid crests can be recovered. Iterative symmetric clipping
-    is then applied around the fitted sinusoid to reject sharp excursions before the
-    final fit is accepted.
-
-    Parameters
-    ----------
-    times : numpy.ndarray
-        Local time values, in days.
-    residuals : numpy.ndarray
-        Local residual flux values.
-    flux_err : numpy.ndarray or None, optional
-        Local flux-error values used as least-squares weights when valid.
-    min_period_hr : float, optional
-        Minimum searched period, in hours.
-    max_period_hr : float, optional
-        Maximum searched period, in hours.
-    min_cycles : float, optional
-        Minimum number of cycles required in the local window.
-    amp_sigma : float, optional
-        Minimum accepted amplitude in units of robust pre-fit sigma.
-    min_improvement : float, optional
-        Minimum fractional robust-sigma improvement required for acceptance.
-    clip_sigma : float, optional
-        Symmetric clipping threshold used during robust fitting.
-
-    Returns
-    -------
-    model : numpy.ndarray or None
-        Accepted local sinusoid model, or None if no fit is accepted.
-    info : dict
-        Fit diagnostics and acceptance flag.
-    """
-    n = len(times)
-    info = {
-        "accepted": False,
-        "period_hr": np.nan,
-        "amplitude": np.nan,
-        "sigma_before": np.nan,
-        "sigma_after": np.nan,
-        "improvement": np.nan,
-        "n_fit": 0,
-    }
-    if not _ASTROPY_LS or n < 8:
-        return None, info
-
-    finite = np.isfinite(times) & np.isfinite(residuals)
-    if finite.sum() < 8:
-        return None, info
-
-    t = times[finite]
-    y = residuals[finite]
-    duration = float(t.max() - t.min())
-    if not np.isfinite(duration) or duration <= 0:
-        return None, info
-
-    min_freq = max(24.0 / max_period_hr, min_cycles / duration)
-    max_freq = 24.0 / min_period_hr
-    if min_freq >= max_freq:
-        return None, info
-
-    try:
-        ls = LombScargle(t, y)
-        freqs, power = ls.autopower(
-            minimum_frequency=min_freq,
-            maximum_frequency=max_freq,
-            samples_per_peak=10,
-        )
-    except Exception:
-        return None, info
-    if len(freqs) == 0 or not np.isfinite(power).any():
-        return None, info
-
-    f = float(freqs[np.nanargmax(power)])
-    X = np.column_stack([
-        np.ones(len(t)),
-        np.sin(2 * np.pi * f * t),
-        np.cos(2 * np.pi * f * t),
-    ])
-
-    keep = np.ones(len(t), dtype=bool)
-    coeffs = None
-    for _ in range(8):
-        if keep.sum() < 8:
-            return None, info
-        Xk, yk = X[keep], y[keep]
-        try:
-            if flux_err is not None:
-                fe = np.asarray(flux_err, dtype=float)[finite][keep]
-                if np.all(np.isfinite(fe)) and np.all(fe > 0):
-                    w = 1.0 / fe**2
-                    coeffs = np.linalg.lstsq((Xk.T * w) @ Xk, (Xk.T * w) @ yk, rcond=None)[0]
-                else:
-                    coeffs = np.linalg.lstsq(Xk, yk, rcond=None)[0]
-            else:
-                coeffs = np.linalg.lstsq(Xk, yk, rcond=None)[0]
-        except np.linalg.LinAlgError:
-            return None, info
-
-        model = X @ coeffs
-        err = y - model
-        sigma = 1.4826 * np.nanmedian(np.abs(err - np.nanmedian(err)))
-        if not np.isfinite(sigma) or sigma <= 0:
-            sigma = sigma_clipped_std(err)
-        if not np.isfinite(sigma) or sigma <= 0:
-            break
-        new_keep = np.abs(err - np.nanmedian(err)) <= clip_sigma * sigma
-        if new_keep.sum() == keep.sum() and np.all(new_keep == keep):
-            break
-        keep = new_keep
-
-    if coeffs is None or keep.sum() < 8:
-        return None, info
-
-    full_model = X @ coeffs
-    amp = float(np.hypot(coeffs[1], coeffs[2]))
-    sigma_before = sigma_clipped_std(y[keep])
-    sigma_after = sigma_clipped_std((y - full_model)[keep])
-    if not np.isfinite(sigma_before) or sigma_before <= 0 or not np.isfinite(sigma_after):
-        return None, info
-    improvement = float((sigma_before - sigma_after) / sigma_before)
-    period_hr = float(24.0 / f)
-
-    info.update({
-        "period_hr": period_hr,
-        "amplitude": amp,
-        "sigma_before": sigma_before,
-        "sigma_after": sigma_after,
-        "improvement": improvement,
-        "n_fit": int(keep.sum()),
-    })
-
-    accepted = (
-        amp >= amp_sigma * sigma_before
-        and improvement >= min_improvement
-        and keep.sum() >= 8
-    )
-    info["accepted"] = bool(accepted)
-    if not accepted:
-        return None, info
-
-    model = np.full(n, np.nan)
-    model[finite] = full_model
-    return model, info
-
-
-def local_sinusoid_correction(
-    times: np.ndarray,
-    residuals: np.ndarray,
-    flux_err: np.ndarray | None = None,
-    provisional_flare_mask: np.ndarray | None = None,
-    window_days: float = 2.0,
-    step_fraction: float = 0.5,
-    min_points: int = 60,
-    min_period_hr: float = 0.07,
-    max_period_hr: float = 0.10,
-    min_cycles: float = 1.5,
-    amp_sigma: float = 1.5,
-    min_improvement: float = 0.03,
-    clip_sigma: float = 4.0,
-) -> tuple[np.ndarray, np.ndarray, pd.DataFrame]:
-    """Remove smooth periodic residual structure in local windows.
-
-    The provisional flare mask is not used as a hard exclusion in the sinusoid
-    search. This allows smooth sinusoid peaks that were initially misclassified as
-    possible flares to be recovered. The robust fit rejects sharp deviations
-    symmetrically around the sinusoid, and the caller should recompute the flare
-    mask after correction.
-
-    Parameters
-    ----------
-    times : numpy.ndarray
-        Time values, in days.
-    residuals : numpy.ndarray
-        Residual flux values.
-    flux_err : numpy.ndarray or None, optional
-        Flux-error values used as least-squares weights when valid.
-    provisional_flare_mask : numpy.ndarray or None, optional
-        Boolean provisional flare mask used for diagnostics only.
-    window_days : float, optional
-        Local fitting window size, in days.
-    step_fraction : float, optional
-        Window step as a fraction of ``window_days``.
-    min_points : int, optional
-        Minimum finite cadences required in a local window.
-    min_period_hr : float, optional
-        Minimum searched period, in hours.
-    max_period_hr : float, optional
-        Maximum searched period, in hours.
-    min_cycles : float, optional
-        Minimum number of cycles required in a local window.
-    amp_sigma : float, optional
-        Minimum accepted amplitude in units of robust pre-fit sigma.
-    min_improvement : float, optional
-        Minimum fractional robust-sigma improvement required for acceptance.
-    clip_sigma : float, optional
-        Symmetric clipping threshold used during robust fitting.
-
-    Returns
-    -------
-    corrected : numpy.ndarray
-        Residuals after subtracting the blended local sinusoid model.
-    model_unsorted : numpy.ndarray
-        Local sinusoid model in the original input order.
-    stats : pandas.DataFrame
-        Per-window local sinusoid diagnostics.
-
-    Raises
-    ------
-    ValueError
-        If ``window_days`` is not positive, ``step_fraction`` is not in ``(0, 1]``,
-        or input arrays do not have matching lengths.
-    """
-    times = np.asarray(times, dtype=float)
-    residuals = np.asarray(residuals, dtype=float)
-    if provisional_flare_mask is None:
-        provisional_flare_mask = np.zeros(len(times), dtype=bool)
-    else:
-        provisional_flare_mask = np.asarray(provisional_flare_mask, dtype=bool)
-
-    if window_days <= 0 or not (0 < step_fraction <= 1):
-        raise ValueError("window_days must be positive and step_fraction must lie in (0, 1].")
-    if len(times) != len(residuals) or len(times) != len(provisional_flare_mask):
-        raise ValueError("times, residuals, and provisional_flare_mask must have the same length.")
-
-    order = np.argsort(times)
-    t = times[order]
-    r = residuals[order]
-    fe = None if flux_err is None else np.asarray(flux_err, dtype=float)[order]
-
-    model_sum = np.zeros(len(t), dtype=float)
-    weight_sum = np.zeros(len(t), dtype=float)
-    rows = []
-    start = float(t.min())
-    stop = float(t.max())
-    step = window_days * step_fraction
-
-    left = start
-    wid = 0
-    while left <= stop:
-        right = left + window_days
-        idx = np.where((t >= left) & (t <= right) & np.isfinite(r))[0]
-        row = {
-            "window_id": wid,
-            "window_start": left,
-            "window_end": right,
-            "n_points": int(len(idx)),
-            "n_provisional_masked": int(provisional_flare_mask[order][idx].sum()) if len(idx) else 0,
-            "accepted": False,
-            "period_hr": np.nan,
-            "amplitude": np.nan,
-            "sigma_before": np.nan,
-            "sigma_after": np.nan,
-            "improvement": np.nan,
-            "n_fit": 0,
-        }
-        if len(idx) >= min_points:
-            local_model, info = _robust_best_local_sinusoid(
-                t[idx], r[idx], None if fe is None else fe[idx],
-                min_period_hr=min_period_hr,
-                max_period_hr=max_period_hr,
-                min_cycles=min_cycles,
-                amp_sigma=amp_sigma,
-                min_improvement=min_improvement,
-                clip_sigma=clip_sigma,
-            )
-            row.update(info)
-            if local_model is not None:
-                x = (t[idx] - left) / window_days
-                taper = np.sin(np.pi * np.clip(x, 0.0, 1.0)) ** 2
-                taper = np.maximum(taper, 1e-6)
-                model_sum[idx] += np.nan_to_num(local_model, nan=0.0) * taper
-                weight_sum[idx] += taper
-        rows.append(row)
-        left += step
-        wid += 1
-
-    local_model = np.zeros_like(model_sum, dtype=float)
-    np.divide(model_sum, weight_sum, out=local_model, where=weight_sum > 0)
-    corrected = residuals.copy()
-    corrected[order] = r - local_model
-    model_unsorted = np.zeros(len(times), dtype=float)
-    model_unsorted[order] = local_model
-    return corrected, model_unsorted, pd.DataFrame(rows)
-
-
 def moving_average(arr: np.ndarray, window: int) -> np.ndarray:
     """Return a centred moving average.
 
@@ -1977,8 +1414,7 @@ def build_safe_final_flare_mask(
         q = finite
 
     center = float(np.nanmedian(residuals[q]))
-    mad = float(np.nanmedian(np.abs(residuals[q] - center)))
-    robust_sigma = 1.4826 * mad
+    robust_sigma = robust_mad_sigma(residuals[q])
 
     if not np.isfinite(robust_sigma) or robust_sigma <= 0:
         robust_sigma = sigma_clipped_std(residuals[q])
@@ -2051,8 +1487,7 @@ def run_detrending(
     Returns
     -------
     DetrendResult
-        Final detrended table, segment statistics, local sinusoid statistics,
-        and summary diagnostics.
+        Final detrended table, segment statistics, and summary diagnostics.
 
     Raises
     ------
@@ -2086,9 +1521,9 @@ def run_detrending(
             "min_fit_pts is small for the polynomial degree; some fits may be unstable.",
             RuntimeWarning,
         )
-    if not _ASTROPY_LS and cfg.apply_sinusoid_correction:
+    if not _ASTROPY_LS and cfg.apply_rotation_sinusoid_correction:
         warnings.warn(
-            "Astropy LombScargle is unavailable, so sinusoidal correction will be skipped.",
+            "Astropy LombScargle is unavailable, so the rotation sinusoid correction will be skipped.",
             RuntimeWarning,
         )
 
@@ -2182,35 +1617,12 @@ def run_detrending(
         else cfg.rolling_window_pts
     )
 
-    if cfg.apply_sinusoid_correction and _ASTROPY_LS:
-        sigma_prelim = compute_rolling_local_sigma(
-            fp_residuals, window_pts=noise_window_pts, flare_mask=flare_mask_prelim
-        )
-        fp_residuals_corr, fp_sinusoid_stats = multi_sinusoid_correction(
-            time, fp_residuals, flux_err=flux_err, flare_mask=flare_mask_prelim,
-            sigma_local=sigma_prelim, n_components=cfg.n_sinusoid_components,
-            min_period_hr=cfg.min_sinusoid_period_hr,
-            max_period_hr=cfg.max_sinusoid_period_hr,
-            amp_limit_frac=cfg.amp_limit_fraction,
-            min_improvement=cfg.sinusoid_min_improvement,
-            label="Short-period sinusoid correction (FP)",
-            return_stats=True,
-            peak_sharpness_min=cfg.granulation_sinusoid_sharpness_min if gran_tau is not None else 0.0,
-        )
-        fp_sinusoid_applied = bool(fp_sinusoid_stats.get("applied", False))
-    else:
-        fp_residuals_corr = fp_residuals.copy()
-        fp_sinusoid_stats = {"applied": False, "n_components": 0, "periods_hr": [], "improvement": 0.0, "boundary_hit": False, "reject_reason": "disabled"}
-        fp_sinusoid_applied = False
-    fp_sinusoid_model = fp_residuals - fp_residuals_corr
-    flux_p2_input = flux - fp_sinusoid_model
-
-    fp_global_std = sigma_clipped_std(fp_residuals_corr[~flare_mask_prelim & np.isfinite(fp_residuals_corr)])
+    fp_global_std = sigma_clipped_std(fp_residuals[~flare_mask_prelim & np.isfinite(fp_residuals)])
     flare_mask_p2 = flare_mask_prelim | (
-        np.isfinite(fp_residuals_corr) & (fp_residuals_corr > cfg.second_pass_sigma * fp_global_std)
+        np.isfinite(fp_residuals) & (fp_residuals > cfg.second_pass_sigma * fp_global_std)
     )
     all_results_p2 = run_all_windows(
-        time, flux_p2_input, flux_err, flare_mask_p2, effective_window_sizes,
+        time, flux, flux_err, flare_mask_p2, effective_window_sizes,
         poly_deg=cfg.poly_deg, n_edge=cfg.n_edge, edge_weight=cfg.edge_weight,
         min_fit_pts=cfg.min_fit_pts,
     )
@@ -2222,43 +1634,20 @@ def run_detrending(
         granulation_min_window_factor=cfg.granulation_min_window_factor,
         granulation_score_penalty=cfg.granulation_score_penalty,
     )
-    sp_residuals = flux_p2_input - sp_trend
-    if cfg.apply_sinusoid_correction and _ASTROPY_LS:
-        sigma_p2_prelim = compute_rolling_local_sigma(
-            sp_residuals, window_pts=noise_window_pts, flare_mask=flare_mask_p2
-        )
-        sp_residuals_corr, sp_sinusoid_stats = multi_sinusoid_correction(
-            time, sp_residuals, flux_err=flux_err, flare_mask=flare_mask_p2,
-            sigma_local=sigma_p2_prelim, n_components=cfg.n_sinusoid_components,
-            min_period_hr=cfg.min_sinusoid_period_hr,
-            max_period_hr=cfg.max_sinusoid_period_hr,
-            amp_limit_frac=cfg.amp_limit_fraction,
-            min_improvement=cfg.sinusoid_min_improvement,
-            label="Short-period sinusoid correction (SP)",
-            return_stats=True,
-            peak_sharpness_min=cfg.granulation_sinusoid_sharpness_min if gran_tau is not None else 0.0,
-        )
-        sp_sinusoid_applied = bool(sp_sinusoid_stats.get("applied", False))
-    else:
-        sp_residuals_corr = sp_residuals.copy()
-        sp_sinusoid_stats = {"applied": False, "n_components": 0, "periods_hr": [], "improvement": 0.0, "boundary_hit": False, "reject_reason": "disabled"}
-        sp_sinusoid_applied = False
-    sp_sinusoid_model = sp_residuals - sp_residuals_corr
+    sp_residuals = flux - sp_trend
 
     if cfg.apply_rotation_sinusoid_correction and _ASTROPY_LS:
         sigma_rotation = compute_rolling_local_sigma(
-            sp_residuals_corr, window_pts=noise_window_pts, flare_mask=flare_mask_p2
+            sp_residuals, window_pts=noise_window_pts, flare_mask=flare_mask_p2
         )
 
-        rotation_residuals_corr = sp_residuals_corr.copy()
+        rotation_residuals_corr = sp_residuals.copy()
         rotation_sinusoid_model = np.zeros(len(time), dtype=float)
         # Initialise with "not_run" so that if neither branch fires the
         # summary reports an accurate reason rather than the stale "disabled".
-        rotation_sinusoid_stats = {
-            "applied": False, "method": "generic_periodogram", "n_components": 0,
-            "periods_hr": [], "improvement": 0.0, "boundary_hit": False,
-            "reject_reason": "not_run",
-        }
+        rotation_sinusoid_stats = _empty_sinusoid_stats(
+            method="generic_periodogram", reject_reason="not_run",
+        )
 
         tried_fast_harmonic = (
             cfg.apply_fast_rotation_harmonic_correction
@@ -2273,7 +1662,7 @@ def run_detrending(
                 rotation_sinusoid_model,
                 rotation_sinusoid_stats,
             ) = known_rotation_harmonic_correction(
-                time, sp_residuals_corr, cfg.known_rotation_period_days,
+                time, sp_residuals, cfg.known_rotation_period_days,
                 flux_err=flux_err, flare_mask=flare_mask_p2, sigma_local=sigma_rotation,
                 harmonics=cfg.fast_rotation_harmonics,
                 fast_rotation_max_period_days=cfg.fast_rotation_max_period_days,
@@ -2336,33 +1725,12 @@ def run_detrending(
 
         rotation_sinusoid_applied = bool(rotation_sinusoid_stats.get("applied", False))
     else:
-        rotation_residuals_corr = sp_residuals_corr.copy()
+        rotation_residuals_corr = sp_residuals.copy()
         rotation_sinusoid_model = np.zeros(len(time), dtype=float)
-        rotation_sinusoid_stats = {"applied": False, "method": "disabled", "n_components": 0, "periods_hr": [], "improvement": 0.0, "boundary_hit": False, "reject_reason": "disabled"}
+        rotation_sinusoid_stats = _empty_sinusoid_stats(method="disabled", reject_reason="disabled")
         rotation_sinusoid_applied = False
 
-    if cfg.apply_local_final_sinusoid_correction and _ASTROPY_LS:
-        final_residual, local_sinusoid_model, local_sinusoid_stats = local_sinusoid_correction(
-            time,
-            rotation_residuals_corr,
-            flux_err=flux_err,
-            provisional_flare_mask=flare_mask_p2,
-            window_days=cfg.local_sinusoid_window_d,
-            step_fraction=cfg.local_sinusoid_step_fraction,
-            min_points=cfg.local_sinusoid_min_points,
-            min_period_hr=cfg.min_sinusoid_period_hr,
-            max_period_hr=cfg.max_sinusoid_period_hr,
-            min_cycles=cfg.local_sinusoid_min_cycles,
-            amp_sigma=cfg.local_sinusoid_amp_sigma,
-            min_improvement=cfg.local_sinusoid_min_improvement,
-            clip_sigma=cfg.local_sinusoid_clip_sigma,
-        )
-        local_sinusoid_applied = bool(local_sinusoid_stats["accepted"].any()) if not local_sinusoid_stats.empty else False
-    else:
-        final_residual = rotation_residuals_corr.copy()
-        local_sinusoid_model = np.zeros(len(time), dtype=float)
-        local_sinusoid_stats = pd.DataFrame()
-        local_sinusoid_applied = False
+    final_residual = rotation_residuals_corr.copy()
 
     if cfg.center_final_residual:
         final_residual, centering_diagnostics = center_residual_by_moving_average(
@@ -2409,16 +1777,10 @@ def run_detrending(
         "flux_err": flux_err[sort_idx],
         "first_pass_trend": fp_trend[sort_idx],
         "first_pass_residual": fp_residuals[sort_idx],
-        "first_pass_residual_corr": fp_residuals_corr[sort_idx],
-        "first_pass_sinusoid_model": fp_sinusoid_model[sort_idx],
-        "second_pass_input_flux": flux_p2_input[sort_idx],
         "second_pass_trend": sp_trend[sort_idx],
         "second_pass_residual": sp_residuals[sort_idx],
-        "second_pass_residual_corr": sp_residuals_corr[sort_idx],
-        "second_pass_sinusoid_model": sp_sinusoid_model[sort_idx],
         "rotation_sinusoid_model": rotation_sinusoid_model[sort_idx],
         "rotation_residual_corr": rotation_residuals_corr[sort_idx],
-        "local_sinusoid_model": local_sinusoid_model[sort_idx],
         "final_residual": final_residual[sort_idx],
         "local_sigma": sp_sigma_local[sort_idx],
         "granulation_noise_sigma_local": sp_sigma_local_short[sort_idx],
@@ -2441,16 +1803,6 @@ def run_detrending(
         "cadence_min": cadence_days * 24 * 60,
         "window_sizes": tuple(cfg.window_sizes),
         "poly_deg": cfg.poly_deg,
-        "fp_sinusoid_applied": fp_sinusoid_applied,
-        "sp_sinusoid_applied": sp_sinusoid_applied,
-        "fp_sinusoid_n_components": int(fp_sinusoid_stats.get("n_components", 0)),
-        "sp_sinusoid_n_components": int(sp_sinusoid_stats.get("n_components", 0)),
-        "fp_sinusoid_improvement": float(fp_sinusoid_stats.get("improvement", 0.0)),
-        "sp_sinusoid_improvement": float(sp_sinusoid_stats.get("improvement", 0.0)),
-        "fp_sinusoid_periods_hr": tuple(fp_sinusoid_stats.get("periods_hr", [])),
-        "sp_sinusoid_periods_hr": tuple(sp_sinusoid_stats.get("periods_hr", [])),
-        "fp_sinusoid_boundary_hit": bool(fp_sinusoid_stats.get("boundary_hit", False)),
-        "sp_sinusoid_boundary_hit": bool(sp_sinusoid_stats.get("boundary_hit", False)),
         "rotation_sinusoid_applied": rotation_sinusoid_applied,
         "rotation_sinusoid_n_components": int(rotation_sinusoid_stats.get("n_components", 0)),
         "rotation_sinusoid_improvement": float(rotation_sinusoid_stats.get("improvement", 0.0)),
@@ -2463,7 +1815,6 @@ def run_detrending(
         "fast_rotation_harmonics": tuple(rotation_sinusoid_stats.get("harmonics", cfg.fast_rotation_harmonics)),
         "fast_rotation_blocks_accepted": int(rotation_sinusoid_stats.get("n_blocks_accepted", 0)),
         "fast_rotation_blocks_total": int(rotation_sinusoid_stats.get("n_blocks_total", 0)),
-        "local_sinusoid_applied": local_sinusoid_applied,
         "n_external_flare_masked": int(external_flare_mask_arr.sum()),
         "granulation_timescale_days": gran_tau,
         "granulation_timescale_source": gran_tau_source,
@@ -2474,7 +1825,6 @@ def run_detrending(
         "n_prelim_masked": int(flare_mask_prelim.sum()),
         "n_provisional_masked": int(flare_mask_p2.sum()),
         "n_final_masked": int(final_flare_mask.sum()),
-        "n_local_sinusoid_windows": int(local_sinusoid_stats["accepted"].sum()) if not local_sinusoid_stats.empty else 0,
         "median_local_sigma": float(np.nanmedian(sp_sigma_local)),
         "sigma_clipped_global_std": float(sp_sc_std),
         "median_total_sigma": float(np.nanmedian(sp_sigma_total)),
@@ -2485,95 +1835,5 @@ def run_detrending(
         final_df=final_df,
         seg_stats_p1=seg_stats_p1,
         seg_stats_p2=seg_stats_p2,
-        local_sinusoid_stats=local_sinusoid_stats,
         summary=summary,
     )
-
-def _prepare_external_flare_mask_for_timeseries(
-    ts_df: pd.DataFrame,
-    external_flare_mask: np.ndarray | pd.Series | None,
-) -> np.ndarray | None:
-    """Align an external flare mask with ``prepare_arrays(ts_df)`` output.
-
-    The user-facing mask is supplied against the input DataFrame rows. This helper
-    applies the same finite-time/finite-flux filtering and time sorting used by
-    ``prepare_arrays`` so the mask stays aligned with the detrending arrays.
-    """
-    if external_flare_mask is None:
-        return None
-    mask = np.asarray(external_flare_mask, dtype=bool)
-    if len(mask) != len(ts_df):
-        raise ValueError("external_flare_mask must have the same length as ts_df.")
-    req = {"time", "flux"}
-    missing = req.difference(ts_df.columns)
-    if missing:
-        raise ValueError(f"Missing columns needed to align external_flare_mask: {sorted(missing)}")
-    work = ts_df.loc[:, ["time", "flux"]].copy()
-    work["_external_flare_mask"] = mask
-    work = work[np.isfinite(work["time"]) & np.isfinite(work["flux"])].sort_values("time")
-    return work["_external_flare_mask"].to_numpy(dtype=bool)
-
-def detrend_dataframe(
-    ts_df: pd.DataFrame,
-    config: DetrendConfig | None = None,
-    clean_gaps: bool = True,
-    stellar_rotation_df: pd.DataFrame | None = None,
-    known_rotation_period_days: float | None = None,
-    external_flare_mask: np.ndarray | pd.Series | None = None,
-) -> tuple[DetrendResult, dict | None]:
-    """Prepare a light-curve table and run detrending.
-
-    Parameters
-    ----------
-    ts_df : pandas.DataFrame
-        Table containing ``time``, ``flux``, and ``flux_err`` columns.
-    config : DetrendConfig or None, optional
-        Pipeline configuration. If None, the default ``DetrendConfig`` is used.
-    clean_gaps : bool, optional
-        If True, remove cadences around detected large gaps before detrending.
-    stellar_rotation_df : pandas.DataFrame or None, optional
-        Table with a ``stellar_rotation_period`` column, in days, used if
-        ``known_rotation_period_days`` is not given.
-    known_rotation_period_days : float or None, optional
-        Known stellar rotation period, in days.
-    external_flare_mask : array-like or None, optional
-        Boolean mask aligned with ``ts_df`` rows. True points are excluded from
-        detrending fits/noise estimates in addition to the internally computed
-        flare masks. Omit this argument to keep the original behavior.
-
-    Returns
-    -------
-    result : DetrendResult
-        Full detrending result.
-    gap_info : dict or None
-        Gap-cleaning diagnostics if cleaning was attempted successfully; otherwise
-        None.
-
-    Raises
-    ------
-    ValueError
-        Propagated from input preparation or detrending when required inputs are
-        invalid.
-    """
-    cfg = attach_rotation_metadata_to_config(
-        config,
-        stellar_rotation_df=stellar_rotation_df,
-        known_rotation_period_days=known_rotation_period_days,
-    )
-    time, flux, flux_err = prepare_arrays(ts_df)
-    external_flare_mask_arr = _prepare_external_flare_mask_for_timeseries(ts_df, external_flare_mask)
-    gap_info = None
-    if clean_gaps:
-        try:
-            time, flux, flux_err, gap_info = remove_gap_edges(
-                time, flux, flux_err, n_remove=cfg.n_remove,
-                gap_sigma=cfg.gap_sigma, gap_min_factor=cfg.gap_min_factor,
-            )
-            if external_flare_mask_arr is not None:
-                external_flare_mask_arr = external_flare_mask_arr[np.asarray(gap_info["keep_mask"], dtype=bool)]
-        except ValueError as exc:
-            warnings.warn(
-                f"Gap cleaning skipped: {exc} Continuing with the uncleaned series.",
-                RuntimeWarning,
-            )
-    return run_detrending(time, flux, flux_err, cfg, external_flare_mask=external_flare_mask_arr), gap_info
