@@ -216,40 +216,33 @@ def multi_sinusoid_correction(
     amp_limit_frac=3.0,
     min_improvement=0.02,
     label="Sinusoidal correction",
-    return_stats=False,
 ):
     """Remove dominant sinusoidal components from residuals.
 
     Components are accepted greedily and only kept when they produce a minimum
     additional scatter improvement. This prevents the function from always
     removing exactly ``n_components`` weak or alias-like sinusoids.
+
+    Returns
+    -------
+    corrected : numpy.ndarray
+        Residuals minus the accepted sinusoids (the input if none is accepted).
+    stats : dict
+        See ``_empty_sinusoid_stats``; ``reject_reason`` says why nothing was
+        applied.
     """
-    default_stats = _empty_sinusoid_stats()
-
-    def _finish(corrected, stats):
-        return (corrected, stats) if return_stats else corrected
-
-    if not _ASTROPY_LS:
-        warnings.warn(
-            f"{label} skipped because astropy LombScargle is unavailable.",
-            RuntimeWarning,
-        )
-        default_stats["reject_reason"] = "astropy unavailable"
-        return _finish(residuals, default_stats)
-
     times = np.asarray(times, dtype=float)
     residuals = np.asarray(residuals, dtype=float)
 
+    def reject(reason, **extra):
+        return residuals, _empty_sinusoid_stats(reject_reason=reason, **extra)
+
     if flare_mask is None:
         flare_mask = np.zeros(len(times), dtype=bool)
-    else:
-        flare_mask = np.asarray(flare_mask, dtype=bool)
-
-    q_mask = ~flare_mask & np.isfinite(times) & np.isfinite(residuals)
+    q_mask = ~np.asarray(flare_mask, dtype=bool) & np.isfinite(times) & np.isfinite(residuals)
     t_q, r_q = times[q_mask], residuals[q_mask]
     if len(t_q) < 30:
-        default_stats["reject_reason"] = "too few points"
-        return _finish(residuals, default_stats)
+        return reject("too few points")
 
     if sigma_local is not None:
         sigma_arr = np.asarray(sigma_local, dtype=float)
@@ -265,31 +258,27 @@ def multi_sinusoid_correction(
             t_q, r_q, min_frequency=24.0 / max_period_hr, max_frequency=24.0 / min_period_hr
         )
     except Exception as exc:
-        warnings.warn(
-            f"{label} skipped: Lomb-Scargle fitting failed ({exc}).",
-            RuntimeWarning,
-        )
-        default_stats["reject_reason"] = "Lomb-Scargle failed"
-        return _finish(residuals, default_stats)
-
+        warnings.warn(f"{label} skipped: Lomb-Scargle fitting failed ({exc}).", RuntimeWarning)
+        return reject("Lomb-Scargle failed")
     if len(freqs) == 0:
-        default_stats["reject_reason"] = "period range invalid for duration"
-        return _finish(residuals, default_stats)
+        return reject("period range invalid for duration")
 
-    def _design(t_arr, selected_freqs):
-        cols = [np.ones(len(t_arr))]
+    std_before = float(np.nanstd(residuals[q_mask]))
+    if not np.isfinite(std_before) or std_before <= 0:
+        return reject("invalid initial scatter")
+
+    fe_q = None if flux_err is None else np.asarray(flux_err, dtype=float)[q_mask]
+
+    def corrected_for(selected_freqs):
+        """Fit offset + sinusoids at ``selected_freqs`` and subtract them, with
+        each amplitude capped at ``amp_cap``. Returns None if the fit fails."""
+        cols = [np.ones(len(t_q))]
         for f in selected_freqs:
-            cols += [np.sin(2 * np.pi * f * t_arr), np.cos(2 * np.pi * f * t_arr)]
-        return np.column_stack(cols)
-
-    def _fit_correct(selected_freqs):
-        X_q = _design(t_q, selected_freqs)
-        fe_q = np.asarray(flux_err, dtype=float)[q_mask] if flux_err is not None else None
+            cols += [np.sin(2 * np.pi * f * t_q), np.cos(2 * np.pi * f * t_q)]
         try:
-            coeffs = _weighted_lstsq(X_q, r_q, fe_q)
+            coeffs = _weighted_lstsq(np.column_stack(cols), r_q, fe_q)
         except np.linalg.LinAlgError:
-            return None, None
-
+            return None
         model = np.full(len(times), float(coeffs[0]))
         for k, f in enumerate(selected_freqs):
             A, B = float(coeffs[1 + 2*k]), float(coeffs[2 + 2*k])
@@ -298,12 +287,7 @@ def multi_sinusoid_correction(
                 A *= amp_cap / amp
                 B *= amp_cap / amp
             model += A * np.sin(2 * np.pi * f * times) + B * np.cos(2 * np.pi * f * times)
-        return residuals - model, model
-
-    std_before = float(np.nanstd(residuals[q_mask]))
-    if not np.isfinite(std_before) or std_before <= 0:
-        default_stats["reject_reason"] = "invalid initial scatter"
-        return _finish(residuals, default_stats)
+        return residuals - model
 
     selected = []
     best_corrected = residuals.copy()
@@ -317,74 +301,40 @@ def multi_sinusoid_correction(
             continue
         if len(selected) >= n_components:
             break
-
-        trial_selected = selected + [f]
-        trial_corrected, _ = _fit_correct(trial_selected)
+        trial_corrected = corrected_for(selected + [f])
         if trial_corrected is None:
             continue
-
         trial_std = float(np.nanstd(trial_corrected[q_mask]))
         if not np.isfinite(trial_std):
             continue
-
-        total_improvement = (std_before - trial_std) / std_before
-        marginal_improvement = (best_std - trial_std) / std_before
-
-        # Accept the first component based on total improvement, and later
-        # components based on marginal improvement. This avoids always removing
-        # the configured maximum number of components.
-        if not selected:
-            accept = total_improvement >= min_improvement and trial_std < best_std
-        else:
-            accept = marginal_improvement >= min_improvement and trial_std < best_std
-
-        if accept:
-            selected = trial_selected
-            best_corrected = trial_corrected
-            best_std = trial_std
+        # Each component must lower the scatter by at least min_improvement
+        # (relative to the initial scatter), so weak or alias-like peaks are
+        # not removed just because n_components allows it.
+        if (best_std - trial_std) / std_before >= min_improvement and trial_std < best_std:
+            selected.append(f)
+            best_corrected, best_std = trial_corrected, trial_std
 
     improvement = (std_before - best_std) / std_before
     if not selected or improvement < min_improvement:
         logger.debug(f"  {label} discarded (improvement too small: {100 * max(improvement, 0.0):.2f}%).")
-        default_stats.update({
-            "reject_reason": "improvement too small",
-            "std_before": std_before,
-            "std_after": best_std,
-            "improvement": float(max(improvement, 0.0)),
-        })
-        return _finish(residuals, default_stats)
-
-    if best_std > std_before:
-        logger.debug(f"  {label} discarded (would increase noise).")
-        default_stats.update({
-            "reject_reason": "would increase noise",
-            "std_before": std_before,
-            "std_after": best_std,
-        })
-        return _finish(residuals, default_stats)
+        return reject("improvement too small", std_before=std_before, std_after=best_std,
+                      improvement=float(max(improvement, 0.0)))
 
     periods = [24.0 / f for f in selected]
-    periods_hr = [f"{p:.3f} hr" for p in periods]
-    boundary_hit = any(
-        (p <= min_period_hr * 1.02) or (p >= max_period_hr * 0.98)
-        for p in periods
-    )
-    boundary_note = " [boundary hit]" if boundary_hit else ""
+    boundary_hit = any(p <= min_period_hr * 1.02 or p >= max_period_hr * 0.98 for p in periods)
     logger.debug(
-        f"  {label}: removed {len(selected)} sinusoidal component(s): "
-        f"periods = {periods_hr}; scatter improvement = {100 * improvement:.2f}%{boundary_note}"
+        f"  {label}: removed {len(selected)} component(s) at {[round(p, 3) for p in periods]} hr; "
+        f"scatter improvement {100 * improvement:.2f}%{' [boundary hit]' if boundary_hit else ''}"
     )
-    stats = {
-        "applied": True,
-        "n_components": int(len(selected)),
-        "periods_hr": [float(p) for p in periods],
-        "improvement": float(improvement),
-        "std_before": float(std_before),
-        "std_after": float(best_std),
-        "boundary_hit": bool(boundary_hit),
-        "reject_reason": "",
-    }
-    return _finish(best_corrected, stats)
+    return best_corrected, _empty_sinusoid_stats(
+        applied=True,
+        n_components=len(selected),
+        periods_hr=[float(p) for p in periods],
+        improvement=float(improvement),
+        std_before=float(std_before),
+        std_after=float(best_std),
+        boundary_hit=bool(boundary_hit),
+    )
 
 
 def preliminary_flare_mask(
@@ -1113,7 +1063,6 @@ def run_detrending(
             amp_limit_frac=cfg.rotation_amp_limit_fraction,
             min_improvement=cfg.rotation_sinusoid_min_improvement,
             label="Long-period residual sinusoid correction",
-            return_stats=True,
         )
         rotation_sinusoid_stats["method"] = "generic_periodogram"
         rotation_sinusoid_model = sp_residuals - rotation_residuals_corr
