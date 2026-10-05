@@ -22,9 +22,9 @@ import astropy.units as u
 from scipy.interpolate import UnivariateSpline
 from scipy.ndimage import binary_dilation
 from scipy.optimize import minimize
-from astropy.timeseries import LombScargle
 
 from .altai import _find_iterative_median, equivalent_duration
+from .periodogram import lomb_scargle
 from .utils import MAD_TO_STD, upper_outlier_threshold
 
 try:
@@ -1012,12 +1012,6 @@ def custom_detrending(
         is split in two at its midpoint before fitting, so that the linear
         trend term has a shorter lever arm and the per-segment amplitude
         is more locally representative.  Defaults to 10.
-    max_prewhiten_iter : int
-        Maximum number of additional prewhitening iterations after the
-        initial multisine fit.  Each iteration runs a fresh Lomb-Scargle
-        periodogram on the current residuals; if a significant peak at a
-        new period is found, another multisine is fitted and subtracted.
-        Set to 0 to disable prewhitening.  Defaults to 3.
     clip_sigma : float
         Positive-residual clipping threshold used inside the per-segment
         multi-sine fit (see ``fit_multisine``).  Residuals more than
@@ -1795,20 +1789,9 @@ def detect_strong_periodicity(
     if period_max is None:
         period_max = (t[-1] - t[0]) / 2.0
 
-    # Guard against degenerate ranges
-    if period_max <= period_min:
-        period_max = period_min * 10.0
-
-    freq_min = 1.0 / period_max
-    freq_max = 1.0 / period_min
-
-    ls = LombScargle(t, f_centred)
-    frequency, power = ls.autopower(
-        minimum_frequency=freq_min,
-        maximum_frequency=freq_max,
-        samples_per_peak=10,
+    ls, frequency, power = lomb_scargle(
+        t, f_centred, min_frequency=1.0 / period_max, max_frequency=1.0 / period_min
     )
-
     if len(power) == 0:
         return False, np.nan, np.nan, np.nan
 
@@ -2057,8 +2040,9 @@ def fit_multisine(
                 refine_freqs = np.linspace(freq_lo, freq_hi, 400)
                 # Centre the clipped flux so LS is not confused by a DC offset
                 f_clipped_c = f_v[prelim_mask] - np.nanmedian(f_v[prelim_mask])
-                ls_seg = LombScargle(t_v[prelim_mask], f_clipped_c)
-                seg_power = ls_seg.power(refine_freqs)
+                _, _, seg_power = lomb_scargle(
+                    t_v[prelim_mask], f_clipped_c, frequency=refine_freqs
+                )
                 seg_period = 1.0 / refine_freqs[np.argmax(seg_power)]
 
         seg_periods[le] = seg_period

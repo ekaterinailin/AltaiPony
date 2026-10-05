@@ -16,7 +16,7 @@ from scipy.ndimage import gaussian_filter1d
 from .utils import MAD_TO_STD, robust_sigma
 
 try:
-    from astropy.timeseries import LombScargle
+    from .periodogram import lomb_scargle
     _ASTROPY_LS = True
 except ImportError:
     _ASTROPY_LS = False
@@ -260,22 +260,9 @@ def multi_sinusoid_correction(
         sigma_med = float(np.nanstd(r_q))
     amp_cap = amp_limit_frac * sigma_med if np.isfinite(sigma_med) else np.inf
 
-    duration = float(t_q.max() - t_q.min())
-    min_freq = 24.0 / max_period_hr
-    max_freq = 24.0 / min_period_hr
-    natural_min_freq = 1.0 / duration if duration > 0 else np.inf
-    min_freq = max(min_freq, natural_min_freq)
-
-    if min_freq >= max_freq:
-        default_stats["reject_reason"] = "period range invalid for duration"
-        return _finish(residuals, default_stats)
-
     try:
-        ls = LombScargle(t_q, r_q)
-        freqs, power = ls.autopower(
-            minimum_frequency=min_freq,
-            maximum_frequency=max_freq,
-            samples_per_peak=10,
+        _, freqs, power = lomb_scargle(
+            t_q, r_q, min_frequency=24.0 / max_period_hr, max_frequency=24.0 / min_period_hr
         )
     except Exception as exc:
         warnings.warn(
@@ -286,7 +273,7 @@ def multi_sinusoid_correction(
         return _finish(residuals, default_stats)
 
     if len(freqs) == 0:
-        default_stats["reject_reason"] = "empty periodogram"
+        default_stats["reject_reason"] = "period range invalid for duration"
         return _finish(residuals, default_stats)
 
     def _design(t_arr, selected_freqs):
