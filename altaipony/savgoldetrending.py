@@ -15,8 +15,7 @@ def detrend_savgol(lc, og_flux, og_flux_err, max_sigma=2.5, longdecay=6,
                        w=121, break_tolerance=10, **kwargs))
                        
     collection = lk.LightCurveCollection(new_lcs)
-    for new_lc in new_lcs:
-        print(new_lc.flux_err[:5])
+ 
 
     lcr = collection.stitch()
     lcr.flux_err = lcr.flux_err * u.electron/u.s

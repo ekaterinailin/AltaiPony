@@ -24,6 +24,8 @@ from scipy.ndimage import binary_dilation
 from scipy.optimize import minimize
 
 from .altai import _find_iterative_median, equivalent_duration
+from .lightcurve_detrender import run_detrending as _ld_run_detrending
+from .matchedfilter import matched_filter_flare_mask as _matched_filter_mask
 from .periodogram import lomb_scargle
 from .utils import MAD_TO_STD, upper_outlier_threshold
 
@@ -35,25 +37,6 @@ try:
 except ImportError:
     _CELERITE2_AVAILABLE = False
 
-try:
-    # Vendored alongside this module (drop lightcurve_detrender.py into the
-    # altaipony package).  Provides an alternative segmented-polynomial +
-    # sinusoid baseline used when ``baseline_method="detrender"``.
-    from .lightcurve_detrender import run_detrending as _ld_run_detrending
-
-    _LIGHTCURVE_DETRENDER_AVAILABLE = True
-except ImportError:
-    _LIGHTCURVE_DETRENDER_AVAILABLE = False
-
-try:
-    # Matched-filter flare detection (own module).  Used to build the GP's
-    # initial flare mask so wide, moderate-SNR flares — which per-cadence masks
-    # miss — are excluded from GP training and not detrended away.
-    from .matchedfilter import matched_filter_flare_mask as _matched_filter_mask
-
-    _MATCHED_FILTER_AVAILABLE = True
-except Exception:
-    _MATCHED_FILTER_AVAILABLE = False
 
 
 # ---------------------------------------------------------------------------
@@ -66,21 +49,7 @@ except Exception:
 NORMALIZED_BASELINE = 1.0
 
 
-# ---------------------------------------------------------------------------
-# Logging
-# ---------------------------------------------------------------------------
-# Status/progress messages go through the standard ``logging`` module instead
-# of bare ``print`` so callers can control verbosity centrally.  A visible
-# INFO-level stream handler is attached by default (with a bare "%(message)s"
-# format) so existing console output is preserved; silence it with
-#   logging.getLogger("altaipony.customdetrend").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
-if not logger.handlers:
-    _handler = logging.StreamHandler()
-    _handler.setFormatter(logging.Formatter("%(message)s"))
-    logger.addHandler(_handler)
-    logger.setLevel(logging.INFO)
-    logger.propagate = False
 
 
 # ---------------------------------------------------------------------------
@@ -174,6 +143,18 @@ _NULL_DEBUG = _DebugPlotter(enabled=False)
 # ---------------------------------------------------------------------------
 
 
+def _segment_bounds(t, gap_factor=10):
+    """Return ``(start, stop)`` index pairs of the segments of ``t`` separated
+    by time steps longer than ``gap_factor`` x the median cadence."""
+    n = len(t)
+    if n < 2:
+        return [(0, n)]
+    dt = np.diff(t)
+    breaks = np.where(dt > gap_factor * np.nanmedian(dt))[0] + 1
+    bounds = np.concatenate([[0], breaks, [n]]).astype(int)
+    return list(zip(bounds[:-1], bounds[1:]))
+
+
 def _identify_flare_mask(
     detrended_residuals,
     time=None,
@@ -227,38 +208,18 @@ def _identify_flare_mask(
     n = len(resid)
 
     # Segment boundaries from time gaps (one segment if no time given).
-    if time is not None and n > 1:
-        time = np.asarray(time)
-        cad = np.nanmedian(np.diff(time))
-        breaks = np.where(np.diff(time) > segment_gap_factor * cad)[0] + 1
-        seg_bounds = np.concatenate([[0], breaks, [n]]).astype(int)
+    if time is None:
+        segments = [(0, n)]
     else:
-        seg_bounds = np.array([0, n])
+        segments = _segment_bounds(np.asarray(time), segment_gap_factor)
 
     flagged = np.zeros(n, dtype=bool)
-    for a, b in zip(seg_bounds[:-1], seg_bounds[1:]):
+    for a, b in segments:
         seg = resid[a:b]
         valid = ~np.isnan(seg)
         if valid.sum() < 3:
             continue
-        threshold = upper_outlier_threshold(seg, sigma_threshold)
-        seg_flag = seg > threshold
-        flagged[a:b] = seg_flag
-        # DIAGNOSTIC: a per-segment masked fraction anywhere near 1 would mean
-        # this segment is being swallowed whole (the failure we are guarding
-        # against); log it so it is visible before dilation.
-        frac = seg_flag[valid].mean()
-        span = (time[b - 1] - time[a]) if time is not None else float(b - a)
-        logger.debug(
-            f"  flare mask seg [{a}:{b}] ({span:.3f} d): "
-            f"thr={threshold:.4g} -> {int(seg_flag.sum())} flagged "
-            f"({100 * frac:.1f}%)."
-        )
-        if frac > 0.5:
-            logger.warning(
-                f"  flare mask: segment [{a}:{b}] is {100 * frac:.0f}% flagged "
-                f"before dilation — likely a baseline offset, not flares."
-            )
+        flagged[a:b] = seg > upper_outlier_threshold(seg, sigma_threshold)
 
     # Dilate to capture decay tails
     if expand_cadences > 0:
@@ -280,21 +241,13 @@ def _segment_edge_mask(t, valid_mask=None, flux_err=None, segment_gap_factor=10)
     t = np.asarray(t)
     n = len(t)
     mask = np.zeros(n, dtype=bool)
-    if n == 0:
-        return mask
     if valid_mask is None:
         eligible = np.ones(n, dtype=bool)
     else:
         eligible = np.asarray(valid_mask, dtype=bool).copy()
         if flux_err is not None and not np.isscalar(flux_err):
             eligible &= np.isfinite(np.asarray(flux_err))
-    if n == 1:
-        mask[0] = bool(eligible[0])
-        return mask
-    cad = np.nanmedian(np.diff(t))
-    breaks = np.where(np.diff(t) > segment_gap_factor * cad)[0] + 1
-    bounds = np.concatenate([[0], breaks, [n]]).astype(int)
-    for a, b in zip(bounds[:-1], bounds[1:]):
+    for a, b in _segment_bounds(t, segment_gap_factor):
         idx = np.where(eligible[a:b])[0]
         if len(idx):
             mask[a + idx[0]] = True
@@ -343,13 +296,9 @@ def _bin_training_per_segment(t, f, e, bin_factor, segment_gap_factor=10):
     if n < 2 or bin_factor <= 1:
         return t, f, e
 
-    cad = np.median(np.diff(t))
-    breaks = np.where(np.diff(t) > segment_gap_factor * cad)[0] + 1
-    seg_bounds = np.concatenate([[0], breaks, [n]]).astype(int)
-
     tb_parts, fb_parts, eb_parts = [], [], []
     edge_keep = bin_factor  # cadences at each segment end kept at full resolution
-    for a, b in zip(seg_bounds[:-1], seg_bounds[1:]):
+    for a, b in _segment_bounds(t, segment_gap_factor):
         st, sf, se = t[a:b], f[a:b], e[a:b]
         m = b - a
         if m <= 2 * edge_keep + bin_factor:
@@ -424,7 +373,6 @@ def fit_gp_rotation(
     gp_clip_sigma=3.0,
     gp_clip_iters=3,
     anchor_edges=True,
-    verbose=True,
     return_std=False,
 ):
     """Fit a celerite2 quasi-periodic GP to flare-masked flux.
@@ -511,8 +459,6 @@ def fit_gp_rotation(
         *through* the segment edges instead of extrapolating past them.
         Prevents the large edge residuals / spurious edge flares seen on
         low-noise, high-amplitude rotators.  Defaults to True.
-    verbose : bool
-        Print optimisation result.  Defaults to True.
     return_std : bool
         Also compute the GP predictive standard deviation.  celerite2 builds
         dense (training x prediction) matrices for it, which takes several GB
@@ -577,15 +523,9 @@ def fit_gp_rotation(
     # one-sided post-fit clip can then unravel on low-noise, high-amplitude
     # light curves.  Prediction always runs at full cadence regardless.
     if bin_factor > 1:
-        n_before = len(t_train)
         t_train, f_train, err_train = _bin_training_per_segment(
             t_train, f_train, err_train, bin_factor
         )
-        if verbose:
-            logger.info(
-                f"  GP: binned {n_before} → {len(t_train)} training points "
-                f"(factor {bin_factor}, per-segment, edges anchored)."
-            )
 
     # ── initial hyperparameters ───────────────────────────────────────────
     f_std = float(np.std(f_train))
@@ -601,11 +541,14 @@ def fit_gp_rotation(
     def _make_kernel(sigma, per, Q0, dQ, f):
         return celerite2_terms.RotationTerm(sigma=sigma, period=per, Q0=Q0, dQ=dQ, f=f)
 
+    def _compute(jitter_sq):
+        gp.compute(t_train, yerr=np.sqrt(err_train**2 + jitter_sq), quiet=True)
+
     initial_jitter = f_std * 0.1
 
     kernel = _make_kernel(initial_sigma, period, initial_Q0, initial_dQ, initial_f)
     gp = celerite2.GaussianProcess(kernel, mean=f_mean)
-    gp.compute(t_train, yerr=np.sqrt(err_train**2 + initial_jitter**2), quiet=True)
+    _compute(initial_jitter**2)
 
     # ── optimise hyperparameters ──────────────────────────────────────────
     log_P = np.log(period)
@@ -615,16 +558,8 @@ def fit_gp_rotation(
         def _neg_log_like(log_params):
             ls, lp, lQ0, ldQ, lf, lj = log_params
             try:
-                gp.kernel = _make_kernel(
-                    np.exp(ls),
-                    np.exp(lp),
-                    np.exp(lQ0),
-                    np.exp(ldQ),
-                    np.exp(lf),
-                )
-                gp.compute(
-                    t_train, yerr=np.sqrt(err_train**2 + np.exp(2 * lj)), quiet=True
-                )
+                gp.kernel = _make_kernel(*(np.exp(x) for x in (ls, lp, lQ0, ldQ, lf)))
+                _compute(np.exp(2 * lj))
                 return -gp.log_likelihood(f_train)
             except Exception:
                 return 1e15
@@ -667,49 +602,8 @@ def fit_gp_rotation(
             nll=result.fun,
         )
         # Re-apply the fitted kernel and jitter at the optimum.
-        gp.kernel = _make_kernel(
-            fitted["sigma"],
-            fitted["period"],
-            fitted["Q0"],
-            fitted["dQ"],
-            fitted["f"],
-        )
-        gp.compute(
-            t_train, yerr=np.sqrt(err_train**2 + fitted["jitter"] ** 2), quiet=True
-        )
-
-        if verbose:
-            status = "converged" if result.success else "did not converge"
-            logger.info(
-                f"  GP optimisation {status} | "
-                f"σ={fitted['sigma']:.4g}  "
-                f"P={fitted['period']:.4f} d  "
-                f"Q0={fitted['Q0']:.2f}  "
-                f"dQ={fitted['dQ']:.2f}  "
-                f"f={fitted['f']:.3f}  "
-                f"jitter={fitted['jitter']:.4g}  "
-                f"NLL={fitted['nll']:.2f}"
-            )
-
-        # DIAGNOSTIC: flag hyperparameters that optimised to (within 1%% of) a
-        # bound.  A railed parameter means the best fit lies outside the
-        # allowed box — the kernel is being forced away from what the data
-        # wants, a common cause of a poor fit that no amount of re-running
-        # will cure without widening the relevant bound.
-        names = ["sigma", "period", "Q0", "dQ", "f", "jitter"]
-        railed = []
-        for val, (lo, hi), nm in zip(result.x, bounds, names):
-            span = hi - lo
-            if span > 0 and (val - lo) < 0.01 * span:
-                railed.append(f"{nm}=low")
-            elif span > 0 and (hi - val) < 0.01 * span:
-                railed.append(f"{nm}=high")
-        if railed:
-            logger.warning(
-                "  GP hyperparameters railed to a bound: "
-                + ", ".join(railed)
-                + " — the kernel is constrained away from the best fit here."
-            )
+        gp.kernel = _make_kernel(*(fitted[k] for k in ("sigma", "period", "Q0", "dQ", "f")))
+        _compute(fitted["jitter"] ** 2)
     else:
         fitted = dict(
             sigma=initial_sigma,
@@ -753,41 +647,12 @@ def fit_gp_rotation(
             f_train = f_train[keep]
             err_train = err_train[keep]
             if len(t_train) < 20:
-                if verbose:
-                    logger.info(
-                        f"  GP clip: stopping at iter {_clip + 1} "
-                        f"— fewer than 20 training points remaining."
-                    )
                 break
-            gp.compute(
-                t_train, yerr=np.sqrt(err_train**2 + fitted["jitter"] ** 2), quiet=True
-            )
-            if verbose:
-                logger.info(
-                    f"  GP clip iter {_clip + 1}: "
-                    f"removed {n_removed} point(s) above {thr:.4g}."
-                )
+            _compute(fitted["jitter"] ** 2)
 
     # ── predict at all valid cadences ─────────────────────────────────────
     # The GP predicts smoothly over masked windows because the kernel is a
     # continuous function of time separation — not data-point-to-data-point.
-    #
-    # DIAGNOSTIC: the GP can only *fit* where it has training points; anywhere
-    # else it extrapolates.  The largest gap in the sorted training times is
-    # therefore the prime suspect when a whole segment comes out undetrended —
-    # a gap of order the rotation period (or longer) means the GP is
-    # extrapolating across that stretch rather than fitting it.
-    if verbose:
-        ts = np.sort(t_train)
-        if len(ts) > 1:
-            dts = np.diff(ts)
-            gi = int(np.argmax(dts))
-            logger.info(
-                f"  GP training coverage: {len(ts)} pts over "
-                f"[{ts[0]:.3f}, {ts[-1]:.3f}] d; largest untrained gap "
-                f"{dts[gi]:.3f} d at [{ts[gi]:.3f}, {ts[gi + 1]:.3f}] d."
-            )
-
     t_pred = time[valid]
     gp_model = np.full_like(flux, np.nan, dtype=float)
     gp_model_std = None
@@ -846,12 +711,6 @@ def fit_lightcurve_detrender(time, flux, flux_err, gaps, config=None):
         the pipeline's ``final_flare_mask`` (full grid) under
         ``'ld_final_flare_mask'``.
     """
-    if not _LIGHTCURVE_DETRENDER_AVAILABLE:
-        raise ImportError(
-            "lightcurve_detrender is not importable.  Place lightcurve_detrender.py "
-            "in the altaipony package to use baseline_method='detrender'."
-        )
-
     time = np.asarray(time, dtype=float)
     flux = np.asarray(flux, dtype=float)
     if np.isscalar(flux_err):
@@ -898,10 +757,6 @@ def fit_lightcurve_detrender(time, flux, flux_err, gaps, config=None):
         "ld_poly_deg": result.summary.get("poly_deg"),
         "ld_rotation_sinusoid_applied": result.summary.get("rotation_sinusoid_applied"),
     }
-    logger.info(
-        f"  lightcurve_detrender: {int(finite.sum())} finite cadences, "
-        f"final flare mask {100 * final_mask[finite].mean():.1f} %."
-    )
     return newflux, model, best_params
 
 
@@ -1145,16 +1000,9 @@ def custom_detrending(
     # to the spline branch below along with the non-periodic case.
     use_multisine = is_periodic and dominant_period < 5
 
-    if is_periodic:
-        logger.info(
-            f"Strong periodicity detected: P = {dominant_period:.4f} d, "
-            f"rel. amplitude = {rel_amplitude:.4f}, FAP = {fap:.2e}. "
-        )
-
     if baseline_method == "detrender":
         # Replace both the multi-sine and spline baselines with the external
         # lightcurve_detrender pipeline.
-        logger.info("Using lightcurve_detrender baseline (skipping multisine/spline).")
         m2flux, _, best_params = fit_lightcurve_detrender(
             time, flux, lc.flux_err.value, gaps, config=detrender_config
         )
@@ -1164,20 +1012,12 @@ def custom_detrending(
     elif baseline_method in ("auto", "multisine") and (
         use_multisine or baseline_method == "multisine"
     ):
-        logger.info("Period is below 5 d — using multi-sine baseline fit.")
-
         flux_med = _find_iterative_median(flux, gaps, longdecay=longdecay)
 
         # Divide each real segment into equal subsegments of at most n_per
         # cycles.  Because the split is computed upfront for the whole segment
         # and the pieces are equal, there are no leftover slivers at the edges.
         multisine_gaps = _segment_gaps(gaps, time, dominant_period, n_per, debug=debug)
-
-        logger.info(
-            f"max segment: {n_per} cycles — "
-            f"{len(multisine_gaps)} segments "
-            f"(tight segmentation had {len(gaps)})."
-        )
 
         m2flux, _, best_params = fit_multisine(
             time,
@@ -1202,8 +1042,6 @@ def custom_detrending(
         m2flux, _, best_params = fit_spline(time, flux, gaps, longdecay=longdecay)
         best_params["method"] = "spline"
 
-    logger.info(f"Baseline detrending params: {best_params}")
-
     # Flare mask carried from the baseline stage (currently only the external
     # lightcurve_detrender produces one).  When present it is used as the GP's
     # initial flare mask instead of one rebuilt from a savgol residual.
@@ -1215,10 +1053,6 @@ def custom_detrending(
 
         lc.flux = m2flux * u.electron / u.s
         lc.flux_err = lc.flux_err * u.electron / u.s
-
-        # Snapshot of flux after baseline (spline or multisine) removal,
-        # aligned to the full interpolated grid before any Savitzky-Golay pass.
-        flux_after_baseline = m2flux.copy()
 
         debug.plot(
             "savgol",
@@ -1283,14 +1117,6 @@ def custom_detrending(
 
         # find median value
         lc4.find_iterative_median()
-
-        # Warn (and record) if either Savitzky-Golay pass left the flux
-        # unchanged.
-        savgol1_touched, savgol2_touched = _check_savgol_effect(
-            flux_after_baseline, lc, lc3, lc4
-        )
-        best_params["savgol1_touched"] = savgol1_touched
-        best_params["savgol2_touched"] = savgol2_touched
     else:
         # No Savitzky-Golay: the baseline output IS the detrended flux fed to
         # the GP step.  Flares were already flagged by the baseline stage
@@ -1328,71 +1154,6 @@ def custom_detrending(
     )
 
     return lc4
-
-
-def _check_savgol_effect(flux_after_baseline, lc, lc3, lc4):
-    """Report whether each Savitzky-Golay pass actually changed the flux.
-
-    A pass is considered to have had no effect when the RMS of its change is
-    below the point-to-point noise floor of the input stage.  The stage
-    outputs live on slightly different grids, so each is aligned to ``lc4``'s
-    time grid by nearest-index lookup before comparison.
-
-    Parameters
-    ----------
-    flux_after_baseline : ndarray
-        Flux after the baseline (spline/multisine) removal, on the full
-        interpolated grid.
-    lc, lc3, lc4 : FlareLightCurve
-        Light curves after the baseline, first SG pass, and second SG pass.
-
-    Returns
-    -------
-    (savgol1_touched, savgol2_touched) : (bool, bool)
-        Whether the first and second SG passes modified the light curve.
-    """
-    t4 = lc4.time.value
-    t_interp = lc.time.value
-
-    # Align flux_after_baseline to lc4's grid
-    if len(flux_after_baseline) == len(t4):
-        f_bl = flux_after_baseline
-    else:
-        idx = np.searchsorted(t_interp, t4)
-        idx = np.clip(idx, 0, len(flux_after_baseline) - 1)
-        f_bl = flux_after_baseline[idx]
-
-    # Align savgol1 output to lc4's grid
-    t3 = lc3.time.value
-    if len(lc3.detrended_flux) == len(t4):
-        f_sg1 = np.array(lc3.detrended_flux)
-    else:
-        idx3 = np.searchsorted(t3, t4)
-        idx3 = np.clip(idx3, 0, len(lc3.detrended_flux) - 1)
-        f_sg1 = np.array(lc3.detrended_flux)[idx3]
-
-    f_sg2 = np.array(lc4.detrended_flux)
-
-    def _touched(before, after):
-        """True when the RMS change exceeds the point-to-point noise floor."""
-        delta = after - before
-        valid = ~np.isnan(delta)
-        if valid.sum() < 10:
-            return False
-        rms_change = np.sqrt(np.mean(delta[valid] ** 2))
-        f_v = before[~np.isnan(before)]
-        noise = np.nanmedian(np.abs(np.diff(f_v))) * MAD_TO_STD / np.sqrt(2)
-        return bool(rms_change > noise)
-
-    savgol1_touched = _touched(f_bl, f_sg1)
-    savgol2_touched = _touched(f_sg1, f_sg2)
-
-    if not savgol1_touched:
-        logger.warning("WARNING: savgol1 did not modify the light curve.")
-    if not savgol2_touched:
-        logger.warning("WARNING: savgol2 did not modify the light curve.")
-
-    return savgol1_touched, savgol2_touched
 
 
 def _apply_gp_step(
@@ -1443,8 +1204,7 @@ def _apply_gp_step(
 
     if not (use_gp and is_periodic and _CELERITE2_AVAILABLE):
         if use_gp and not _CELERITE2_AVAILABLE:
-            logger.info("  GP requested but celerite2 is not installed — skipping.")
-            logger.info("  Install with:  pip install celerite2")
+            logger.warning("GP requested but celerite2 is not installed (pip install celerite2) — skipping.")
         return
 
     t4_gp = lc4.time.value
@@ -1454,7 +1214,6 @@ def _apply_gp_step(
 
     if external_flare_mask is not None:
         flare_mask = np.asarray(external_flare_mask, dtype=bool)
-        mask_source = "baseline (lightcurve_detrender)"
     else:
         flare_mask = _identify_flare_mask(
             det4,
@@ -1462,14 +1221,13 @@ def _apply_gp_step(
             sigma_threshold=gp_flare_sigma,
             expand_cadences=gp_flare_expand_cadences,
         )
-        mask_source = "savgol residuals"
 
     # Augment the per-cadence mask with a matched-filter pass on the
     # baseline-subtracted residual.  Per-cadence masks catch narrow flares but
     # miss wide, moderate-SNR ones (each cadence sits under the cut while the
     # integrated flux is large); the matched filter's coherent sum recovers
     # them, so the GP does not train on and absorb them.
-    if matched_filter_flares and _MATCHED_FILTER_AVAILABLE:
+    if matched_filter_flares:
         mf_mask = _matched_filter_mask(
             t4_gp,
             det4,
@@ -1477,44 +1235,9 @@ def _apply_gp_step(
             snr_threshold=matched_filter_snr,
             fwhm_grid=matched_filter_fwhm_grid,
         )
-        n_add = int((mf_mask & ~flare_mask).sum())
         flare_mask = flare_mask | mf_mask
-        logger.info(
-            f"  GP: matched filter flagged {int(mf_mask.sum())} cadences, "
-            f"adding {n_add} beyond the per-cadence mask."
-        )
-        mask_source += " + matched filter"
-    elif matched_filter_flares and not _MATCHED_FILTER_AVAILABLE:
-        logger.warning(
-            "  matched_filter_flares requested but matchedfilter module "
-            "is unavailable — skipping."
-        )
 
     n_masked = int(flare_mask.sum())
-    n_valid = int((~np.isnan(f4_gp)).sum())
-    logger.info(
-        f"  GP: masking {n_masked} cadences "
-        f"({100 * n_masked / max(n_valid, 1):.1f} %) "
-        f"as large flares — using {mask_source}."
-    )
-
-    # DIAGNOSTIC: a whole undetrended segment usually shows up here as one long
-    # contiguous masked run (the mask ate the segment, so the GP never trains
-    # on it).  Report the longest run and its time span; a span of order a day
-    # or the rotation period points the finger at over-masking rather than the
-    # GP itself.
-    if n_masked:
-        edges = np.diff(np.concatenate([[0], flare_mask.astype(int), [0]]))
-        starts = np.where(edges == 1)[0]
-        ends = np.where(edges == -1)[0]  # exclusive
-        run_len = ends - starts
-        j = int(np.argmax(run_len))
-        run_span = t4_gp[ends[j] - 1] - t4_gp[starts[j]]
-        logger.info(
-            f"  GP mask: longest contiguous masked run = {run_len[j]} cadences "
-            f"({run_span:.3f} d) at [{t4_gp[starts[j]]:.3f}, "
-            f"{t4_gp[ends[j] - 1]:.3f}] d."
-        )
 
     try:
         gp_model, _, gp_params = fit_gp_rotation(
@@ -1529,7 +1252,6 @@ def _apply_gp_step(
             gp_clip_sigma=gp_clip_sigma,
             gp_clip_iters=gp_clip_iters,
             anchor_edges=gp_anchor_edges,
-            verbose=True,
         )
 
         unmasked_valid = ~flare_mask & ~np.isnan(f4_gp) & ~np.isnan(gp_model)
@@ -1544,36 +1266,6 @@ def _apply_gp_step(
         gp_detrended = f4_gp - gp_model + gp_offset + NORMALIZED_BASELINE
         lc4.detrended_flux = gp_detrended * u.electron / u.s
         lc4.gp_model = gp_model + gp_offset
-
-        # DIAGNOSTIC: explain a downstream `nan` noise estimate and localise a
-        # bad fit.  (a) Report any non-finite GP output — an all-NaN/inf
-        # segment is what makes estimate_detrended_noise return nan.  (b) Print
-        # the residual RMS per segment (in units of the formal error) so a
-        # single blown segment/edge stands out against the good ones.
-        n_bad = int(np.sum(~np.isfinite(gp_model)))
-        if n_bad:
-            logger.warning(
-                f"  GP: {n_bad} non-finite gp_model cadences — these propagate "
-                f"to detrended_flux and can make the noise estimate nan."
-            )
-        resid_gp = f4_gp - gp_model
-        cad = np.nanmedian(np.diff(t4_gp))
-        seg_breaks = np.where(np.diff(t4_gp) > 10 * cad)[0] + 1
-        seg_bounds = np.concatenate([[0], seg_breaks, [len(t4_gp)]]).astype(int)
-        for a, b in zip(seg_bounds[:-1], seg_bounds[1:]):
-            m = (~flare_mask[a:b]) & np.isfinite(resid_gp[a:b])
-            if m.sum() < 3:
-                continue
-            rms = np.std(resid_gp[a:b][m])
-            ne = min(40, (b - a) // 4)
-            le = np.nanmax(np.abs(resid_gp[a : a + ne])) if ne else np.nan
-            re = np.nanmax(np.abs(resid_gp[b - ne : b])) if ne else np.nan
-            unit = np.nanmedian(fe4_gp[a:b]) or 1.0
-            logger.debug(
-                f"  GP resid seg [{t4_gp[a]:.2f},{t4_gp[b - 1]:.2f}] d: "
-                f"rms={rms / unit:.1f}σ  left_edge={le / unit:.1f}σ  "
-                f"right_edge={re / unit:.1f}σ"
-            )
 
         debug.plot(
             "gp", t4_gp, gp_model, "r-", linewidth=0.8, label="GP model", alpha=0.7
@@ -1605,7 +1297,6 @@ def _apply_gp_step(
         best_params["method"] = f"{best_params.get('method', 'baseline')}+gp"
         best_params["gp"] = gp_params
         best_params["n_gp_masked"] = n_masked
-        logger.info("  GP detrending applied successfully.")
 
     except Exception as exc:
         logger.warning(f"  GP fit failed ({exc!r}); keeping pre-GP result.")
@@ -2001,11 +1692,6 @@ def fit_multisine(
             model[le:ri] = fmed_seg
             seg_periods[le] = period
             seg_amplitudes[le] = np.nan  # too few points for a reliable fit
-            logger.debug(
-                f"  multisine seg t=[{t_seg[0]:.3f},{t_seg[-1]:.3f}] "
-                f"({ri - le} cad): only {n_valid} valid < {n_cols + 1} params "
-                f"-> left UNDETRENDED (raw flux copied)."
-            )
             continue
 
         t_v = t_seg[valid]
@@ -2015,7 +1701,6 @@ def fit_multisine(
         # Centre time on the segment midpoint so the linear term is
         # orthogonal to the constant offset and numerically well-conditioned.
         t_mid = 0.5 * (t_v[0] + t_v[-1])
-        t_v_c = t_v - t_mid
         t_seg_c = t_seg - t_mid
 
         # --- optional per-segment period refinement -----------------------
@@ -2058,35 +1743,27 @@ def fit_multisine(
         # still absorbs slow baseline drift.  Column order keeps the k=1, p=0
         # cos/sin at indices 2 and 3, so the mid-segment fundamental amplitude
         # below is unchanged.
-        A_valid = np.ones((n_valid, n_cols))
         A_full = np.ones((ri - le, n_cols))
 
         # Column 1: linear trend (time centred on segment midpoint)
-        A_valid[:, 1] = t_v_c
         A_full[:, 1] = t_seg_c
 
         # Normalised time for the amplitude-modulation polynomial (bounded so
         # the higher powers stay well-conditioned).
         half_span = 0.5 * seg_len_days if seg_len_days > 0 else 1.0
-        tau_v = t_v_c / half_span
         tau_f = t_seg_c / half_span
 
         col = 2
         for k in range(1, n_harmonics + 1):
-            cos_v = np.cos(2.0 * np.pi * k * t_v / seg_period)
-            sin_v = np.sin(2.0 * np.pi * k * t_v / seg_period)
             cos_f = np.cos(2.0 * np.pi * k * t_seg / seg_period)
             sin_f = np.sin(2.0 * np.pi * k * t_seg / seg_period)
-            pow_v = np.ones_like(tau_v)
             pow_f = np.ones_like(tau_f)
             for _p in range(amp_degree + 1):
-                A_valid[:, col] = cos_v * pow_v
-                A_valid[:, col + 1] = sin_v * pow_v
                 A_full[:, col] = cos_f * pow_f
                 A_full[:, col + 1] = sin_f * pow_f
                 col += 2
-                pow_v = pow_v * tau_v
                 pow_f = pow_f * tau_f
+        A_valid = A_full[valid]
 
         # --- iterative one-sided least-squares solution -------------------
         #
@@ -2167,34 +1844,11 @@ def fit_multisine(
         # Store the residual re-centred on the iterative-median baseline
         # ``fmed_seg`` so that the downstream Savitzky-Golay step operates on a
         # near-baseline signal rather than a near-zero one.
-        #
-        # NOTE: an optional extra DC-offset correction (subtracting the
-        # residual median to force exact centring at ``fmed_seg`` regardless of
-        # fit quality) is intentionally left disabled here; the active path
-        # applies no such correction.  Re-enable both the model and newflux
-        # terms together if you reinstate it, so the model and residual stay
-        # consistent.
         residual = f_seg - model_seg
 
         model[le:ri] = model_seg
         newflux[le:ri] = residual + fmed_seg
         debug.plot("multisine", t_seg, residual + fmed_seg, "b-", linewidth=2)
-
-        # DIAGNOSTIC: compare the scatter the baseline removed.  If the
-        # residual scatter is not much below the raw scatter, this segment was
-        # effectively NOT detrended (poor/failed harmonic fit or a constant-
-        # median fallback), and it will stay elevated into the flare-mask/GP
-        # stages.  reduction ≈ 0 on a long segment is the failure to look for.
-        raw_std = np.nanstd(f_seg - np.nanmedian(f_seg))
-        res_std = np.nanstd(residual)
-        reduction = 1.0 - res_std / raw_std if raw_std > 0 else np.nan
-        logger.debug(
-            f"  multisine seg t=[{t_seg[0]:.3f},{t_seg[-1]:.3f}] "
-            f"({ri - le} cad, P={seg_period:.4f} d): "
-            f"raw_std={raw_std:.3g} -> resid_std={res_std:.3g} "
-            f"(scatter reduced {100 * reduction:.0f}%"
-            f"{', CONSTANT-MEDIAN FALLBACK' if coeffs is None else ''})."
-        )
 
     best_params = {
         "n_harmonics": n_harmonics,
@@ -2273,9 +1927,8 @@ def fit_spline(
 
     dt = np.nanmin(np.diff(time))
 
-    candidates = []
-
-    # Generate all candidate fits
+    # Try every candidate and keep the best-scoring one (the first on ties).
+    best = None
     for coarseness in coarseness_values:
         for k in spline_orders:
             for phase_idx in range(n_phase_shifts):
@@ -2292,13 +1945,11 @@ def fit_spline(
                     percentile_anchor,
                     smoothing,
                 )
-
                 score = _evaluate_spline_fit(
                     flux, model, gaps, edge_penalty_weight=edge_penalty_weight
                 )
-
-                candidates.append(
-                    {
+                if best is None or score < best["score"]:
+                    best = {
                         "model": model,
                         "newflux": newflux,
                         "score": score,
@@ -2306,10 +1957,6 @@ def fit_spline(
                         "order": k,
                         "phase": phase_idx,
                     }
-                )
-
-    # Select best candidate
-    best = min(candidates, key=lambda x: x["score"])
 
     best_params = {
         "coarseness": best["coarseness"],
@@ -2352,46 +1999,46 @@ def _fit_single_spline(
 
     for le, ri in gaps:
         segment_len = ri - le
+        t_s, f_s = time[le:ri], flux[le:ri]
 
         # Calculate phase offset for this segment
         phase_offset = min((phase_idx * n) // max(n_phases, 1), segment_len - 1)
 
         if segment_len <= n:
             # Segment too short for binning
-            newflux[le:ri] = flux[le:ri]
-            model[le:ri] = np.nanmedian(flux[le:ri])
+            newflux[le:ri] = f_s
+            model[le:ri] = np.nanmedian(f_s)
             continue
 
         # Build knot points (with per-knot scatter) using robust statistics
         t_knots, f_knots, s_knots = _build_knot_points(
-            time[le:ri], flux[le:ri], n, phase_offset, percentile
+            t_s, f_s, n, phase_offset, percentile
         )
 
-        if len(t_knots) <= k:
-            # Too few knots, use linear fit
-            valid = ~np.isnan(flux[le:ri])
-            if np.sum(valid) > 1:
-                p2 = np.polyfit(time[le:ri][valid], flux[le:ri][valid], 1)
-                model[le:ri] = np.polyval(p2, time[le:ri])
-                newflux[le:ri] = flux[le:ri] - model[le:ri] + flux_med[le:ri]
-            else:
-                newflux[le:ri] = flux[le:ri]
-                model[le:ri] = flux_med[le:ri]
-        else:
-            # Fit weighted smoothing spline.  Weights are 1/scatter (the
-            # convention expected by UnivariateSpline) and the smoothing
-            # budget s = smoothing × n_knots targets a reduced χ² ≈ smoothing.
+        # Weighted smoothing spline.  Weights are 1/scatter (the convention
+        # expected by UnivariateSpline) and the smoothing budget
+        # s = smoothing × n_knots targets a reduced χ² ≈ smoothing.
+        seg_model = None
+        if len(t_knots) > k:
             try:
-                weights = 1.0 / s_knots
-                s = smoothing * len(t_knots)
-                spline = UnivariateSpline(t_knots, f_knots, w=weights, k=k, s=s)
-                model[le:ri] = spline(time[le:ri])
-                newflux[le:ri] = flux[le:ri] - model[le:ri] + flux_med[le:ri]
+                spline = UnivariateSpline(
+                    t_knots, f_knots, w=1.0 / s_knots, k=k, s=smoothing * len(t_knots)
+                )
+                seg_model = spline(t_s)
             except Exception:
-                # Fallback to linear
-                p2 = np.polyfit(time[le:ri], flux[le:ri], 1)
-                model[le:ri] = np.polyval(p2, time[le:ri])
-                newflux[le:ri] = flux[le:ri] - model[le:ri] + flux_med[le:ri]
+                pass
+
+        if seg_model is None:
+            # Too few knots, or the spline failed: linear fit
+            valid = ~np.isnan(f_s)
+            if valid.sum() < 2:
+                newflux[le:ri] = f_s
+                model[le:ri] = flux_med[le:ri]
+                continue
+            seg_model = np.polyval(np.polyfit(t_s[valid], f_s[valid], 1), t_s)
+
+        model[le:ri] = seg_model
+        newflux[le:ri] = f_s - seg_model + flux_med[le:ri]
 
     return model, newflux
 
@@ -2535,8 +2182,7 @@ def _evaluate_spline_fit(flux, model, gaps, edge_fraction=0.1, edge_penalty_weig
         seg_len = ri - le
         valid = ~(np.isnan(model[le:ri]) | np.isnan(flux[le:ri]))
 
-        if np.sum(valid) > 0:
-            residuals.extend(flux[le:ri][valid] - model[le:ri][valid])
+        residuals.append(flux[le:ri][valid] - model[le:ri][valid])
 
         # Calculate edge deviation penalty for this segment
         if seg_len > 20:  # Only for segments long enough to have meaningful edges
@@ -2557,7 +2203,7 @@ def _evaluate_spline_fit(flux, model, gaps, edge_fraction=0.1, edge_penalty_weig
 
             edge_deviations.extend([left_dev, right_dev])
 
-    residuals = np.array(residuals)
+    residuals = np.concatenate(residuals) if residuals else np.array([])
 
     if len(residuals) < 10:
         return np.inf
