@@ -75,10 +75,15 @@ def split_gaps(gaps, splits):
 
 
 
+#: Multiply a median absolute deviation (MAD) by this factor to obtain the
+#: equivalent Gaussian standard deviation.
+MAD_TO_STD = 1.4826
+
+
 def medsig(a):
     """Return median and outlier-robust estimate
     of standard deviation
-       (1.48 x median of absolute deviations).
+       (1.4826 x median of absolute deviations).
     Adapted from K2SC (Aigrain et al. 2016).
     """
     l = np.isfinite(a)
@@ -88,8 +93,46 @@ def medsig(a):
     if nfinite == 1:
         return a[l], np.nan
     med = np.median(a[l])
-    sig = 1.48 * np.median(np.abs(a[l] - med))
+    sig = MAD_TO_STD * np.median(np.abs(a[l] - med))
     return med, sig
+
+
+def _median_mad(a):
+    """Return the median and the median absolute deviation, ignoring NaNs."""
+    a = np.asarray(a, dtype=float)
+    med = np.nanmedian(a)
+    return med, np.nanmedian(np.abs(a - med))
+
+
+def robust_sigma(a):
+    """Return the MAD-based standard deviation estimate
+    ``1.4826 * median(|a - median(a)|)``. Non-finite values are ignored.
+    """
+    return MAD_TO_STD * float(_median_mad(a)[1])
+
+
+def upper_outlier_threshold(a, n_sigma, center=None):
+    """Return the level above which values of ``a`` count as positive
+    outliers (e.g. flares): ``center + n_sigma * 1.4826 * MAD(a)``.
+
+    Parameters:
+    ------------
+    a : array-like
+        Sample used to estimate the median and MAD. Non-finite values
+        are ignored.
+    n_sigma : float
+        Threshold in units of the MAD-based standard deviation.
+    center : float or None
+        Reference level. Defaults to the median of ``a``.
+
+    Return:
+    -------
+    float
+    """
+    med, mad = _median_mad(a)
+    if center is None:
+        center = med
+    return center + n_sigma * mad * MAD_TO_STD
 
 
 def sigma_clip(a, max_iter=10, max_sigma=3., 

@@ -25,6 +25,7 @@ from scipy.optimize import minimize
 from astropy.timeseries import LombScargle
 
 from .altai import _find_iterative_median, equivalent_duration
+from .utils import MAD_TO_STD, upper_outlier_threshold
 
 try:
     import celerite2
@@ -58,11 +59,6 @@ except Exception:
 # ---------------------------------------------------------------------------
 # Module constants
 # ---------------------------------------------------------------------------
-
-#: Multiply a median-absolute-deviation (MAD) by this factor to obtain the
-#: equivalent Gaussian standard deviation.  Used everywhere a robust,
-#: flare-insensitive scale estimate is turned into a sigma-clipping threshold.
-MAD_TO_STD = 1.4826
 
 #: Common baseline that every detrended light curve is normalised to, so that
 #: light curves from different stars / sectors share the same flux zero-point
@@ -245,9 +241,7 @@ def _identify_flare_mask(
         valid = ~np.isnan(seg)
         if valid.sum() < 3:
             continue
-        med = np.nanmedian(seg)
-        mad = np.median(np.abs(seg[valid] - med))
-        threshold = med + sigma_threshold * mad * MAD_TO_STD
+        threshold = upper_outlier_threshold(seg, sigma_threshold)
         seg_flag = seg > threshold
         flagged[a:b] = seg_flag
         # DIAGNOSTIC: a per-segment masked fraction anywhere near 1 would mean
@@ -256,8 +250,8 @@ def _identify_flare_mask(
         frac = seg_flag[valid].mean()
         span = (time[b - 1] - time[a]) if time is not None else float(b - a)
         logger.debug(
-            f"  flare mask seg [{a}:{b}] ({span:.3f} d): med={med:.4g} "
-            f"mad={mad:.4g} thr={threshold:.4g} -> {int(seg_flag.sum())} flagged "
+            f"  flare mask seg [{a}:{b}] ({span:.3f} d): "
+            f"thr={threshold:.4g} -> {int(seg_flag.sum())} flagged "
             f"({100 * frac:.1f}%)."
         )
         if frac > 0.5:
@@ -431,6 +425,7 @@ def fit_gp_rotation(
     gp_clip_iters=3,
     anchor_edges=True,
     verbose=True,
+    return_std=False,
 ):
     """Fit a celerite2 quasi-periodic GP to flare-masked flux.
 
@@ -518,14 +513,19 @@ def fit_gp_rotation(
         low-noise, high-amplitude rotators.  Defaults to True.
     verbose : bool
         Print optimisation result.  Defaults to True.
+    return_std : bool
+        Also compute the GP predictive standard deviation.  celerite2 builds
+        dense (training x prediction) matrices for it, which takes several GB
+        on long light curves, so it is off by default.
 
     Returns
     -------
     gp_model : ndarray
         GP predictive mean at every cadence in ``time``
         (NaN where ``time`` is NaN).
-    gp_model_std : ndarray
-        GP predictive standard deviation (same shape).
+    gp_model_std : ndarray or None
+        GP predictive standard deviation (same shape), or None unless
+        ``return_std`` is True.
     params : dict
         Fitted hyperparameters plus ``converged`` and ``nll`` keys.
     """
@@ -739,9 +739,7 @@ def fit_gp_rotation(
         for _clip in range(gp_clip_iters):
             mu_tr = gp.predict(f_train, t=t_train, return_var=False)
             resid = f_train - mu_tr
-            med_r = np.median(resid)
-            mad_r = np.median(np.abs(resid - med_r))
-            thr = med_r + gp_clip_sigma * mad_r * MAD_TO_STD
+            thr = upper_outlier_threshold(resid, gp_clip_sigma)
             keep = resid <= thr  # one-sided: positive only
             if anchor_edges:
                 # Never clip the first/last point of a segment: removing an
@@ -791,12 +789,15 @@ def fit_gp_rotation(
             )
 
     t_pred = time[valid]
-    mu, var = gp.predict(f_train, t=t_pred, return_var=True)
-
     gp_model = np.full_like(flux, np.nan, dtype=float)
-    gp_model_std = np.full_like(flux, np.nan, dtype=float)
+    gp_model_std = None
+    if return_std:
+        mu, var = gp.predict(f_train, t=t_pred, return_var=True)
+        gp_model_std = np.full_like(flux, np.nan, dtype=float)
+        gp_model_std[valid] = np.sqrt(np.abs(var))
+    else:
+        mu = gp.predict(f_train, t=t_pred)
     gp_model[valid] = mu
-    gp_model_std[valid] = np.sqrt(np.abs(var))
 
     return gp_model, gp_model_std, fitted
 
@@ -1657,7 +1658,9 @@ def estimate_detrended_noise(
         flc = flc.find_gaps()
 
     # Extract arrays we need (avoids repeated attribute access)
-    detrended_flux = flc.detrended_flux
+    detrended_flux = np.asarray(
+        getattr(flc.detrended_flux, "value", flc.detrended_flux), dtype=float
+    )
     n_points = len(detrended_flux)
 
     # Initialize output array
@@ -1671,10 +1674,7 @@ def estimate_detrended_noise(
         # --- first pass: one-sided positive clip on the raw segment ----------
         # Only mask upward outliers (flares).  Clipping the lower tail would
         # bias the noise estimate high at spot minima.
-        valid = ~np.isnan(flux_segment)
-        med1 = np.nanmedian(flux_segment)
-        mad1 = np.median(np.abs(flux_segment[valid] - med1))
-        upper_threshold1 = med1 + mask_pos_outliers_sigma * mad1 * MAD_TO_STD
+        upper_threshold1 = upper_outlier_threshold(flux_segment, mask_pos_outliers_sigma)
         mask = flux_segment <= upper_threshold1  # True = keep
 
         flux_segment_masked = flux_segment.copy()
@@ -1692,10 +1692,7 @@ def estimate_detrended_noise(
         flux_normalized = flux_segment - it_med_segment
 
         # One-sided clip on the centred residuals.  Same logic: positive-only.
-        valid2 = ~np.isnan(flux_normalized)
-        med2 = np.nanmedian(flux_normalized)
-        mad2 = np.median(np.abs(flux_normalized[valid2] - med2))
-        upper_threshold2 = med2 + mask_pos_outliers_sigma * mad2 * MAD_TO_STD
+        upper_threshold2 = upper_outlier_threshold(flux_normalized, mask_pos_outliers_sigma)
         mask_refined = flux_normalized <= upper_threshold2
 
         flux_normalized_masked = flux_normalized.copy()
@@ -2049,9 +2046,7 @@ def fit_multisine(
             # (no iteration) is sufficient here because we only need the peak
             # period to within the ±period_refine_window window, not a precise
             # amplitude estimate.
-            prelim_med = np.nanmedian(f_v)
-            prelim_mad = np.median(np.abs(f_v - prelim_med))
-            prelim_mask = f_v <= prelim_med + clip_sigma * prelim_mad * MAD_TO_STD
+            prelim_mask = f_v <= upper_outlier_threshold(f_v, clip_sigma)
 
             freq_ctr = 1.0 / period
             freq_delta = freq_ctr * period_refine_window
@@ -2150,12 +2145,10 @@ def fit_multisine(
 
                 # MAD over the current in-mask residuals only, so the scale
                 # is not inflated by surviving flare signal outside the mask.
-                mad_iter = np.median(
-                    np.abs(residuals[clip_mask] - np.median(residuals[clip_mask]))
-                )
-
                 # One-sided threshold: clip only above the model
-                threshold = clip_sigma * mad_iter * MAD_TO_STD
+                threshold = upper_outlier_threshold(
+                    residuals[clip_mask], clip_sigma, center=0.0
+                )
                 new_mask = clip_mask & (residuals < threshold)
 
                 coeffs = coeffs_iter  # commit this iteration's solution
