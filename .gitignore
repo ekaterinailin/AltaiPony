@@ -13,6 +13,6 @@ docs/build/
 build/
 
 #File types
-
+*.png
 *.pyc/
 dev_*
