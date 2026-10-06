@@ -111,6 +111,18 @@ class FlareLightCurve(LightCurve):
     def detrended_flux(self, detrended_flux):
         self["detrended_flux"] = detrended_flux 
 
+    @property
+    def gp_model(self) -> np.array:
+        try:
+            return self["gp_model"]
+        except KeyError:
+            self["gp_model"] = np.full_like(self.time.value, np.nan)
+            return self["gp_model"]
+
+    @gp_model.setter
+    def gp_model(self, gp_model):
+        self["gp_model"] = gp_model 
+
 
     @property
     def it_med(self):
