@@ -18,7 +18,7 @@ smooth, symmetric starspot modulation — that shape mismatch is what separates
 flares from rotation.
 
 This module is self-contained: it builds the mask and returns it.  The GP
-pipeline in ``customdetrend`` only calls :func:`matched_filter_flare_mask` and
+pipeline in ``detrending.pipeline`` only calls :func:`matched_filter_flare_mask` and
 unions the result into the GP's initial flare mask.
 
 The flare template is Davenport et al. (2014).  When ``altaipony`` is
@@ -32,7 +32,7 @@ import logging
 import numpy as np
 from scipy.signal import fftconvolve
 
-from .utils import MAD_TO_STD
+from ..utils import MAD_TO_STD
 
 logger = logging.getLogger(__name__)
 

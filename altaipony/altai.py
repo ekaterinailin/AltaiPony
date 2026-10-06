@@ -446,3 +446,52 @@ def chi_square(residual, error):
     chisq =  1 / N * SUM(i) ( (data(i) - model(i))/error(i) )^2
     '''
     return np.sum( (residual / error)**2.0 ) / np.size(error)
+
+
+def measure_flare(flc, sta, sto):
+    """Give start and stop indices into a de-trended
+    light curve, calculate flare properties assuming that
+    what's inbetween is a flares, and add the result
+    to FlareLightCurve.flares.
+
+    Parameters:
+    -------------
+    flc : FlareLightCurve
+        de-trended light curve
+    sta : int
+        start index of flare
+    sto : int
+        stop index of flare
+    """
+    # get ED
+    ed_rec, ed_rec_err = equivalent_duration(flc, sta, sto, err=True)
+
+    # get amplitude
+    ampl_rec = np.max(flc.detrended_flux.value[sta:sto]) / flc.it_med.value[sta] - 1.0
+
+    # get cadence numbers
+    cstart = flc.cadenceno.value[sta]
+    cstop = flc.cadenceno.value[sto]
+
+    # get time stamps
+    tstart = flc.time.value[sta]
+    tstop = flc.time.value[sto]
+
+    # add result to flare table
+    newline = pd.Series(
+        {
+            "ed_rec": ed_rec,
+            "ed_rec_err": ed_rec_err,
+            "ampl_rec": ampl_rec,
+            "istart": sta,
+            "istop": sto,
+            "cstart": cstart,
+            "cstop": cstop,
+            "tstart": tstart,
+            "tstop": tstop,
+            "dur": tstop - tstart,
+            "total_n_valid_data_points": flc.flux.value.shape[0],
+        }
+    )
+
+    flc.flares = pd.concat([flc.flares, newline.to_frame().T], ignore_index=True)

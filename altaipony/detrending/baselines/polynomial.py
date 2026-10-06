@@ -1,7 +1,9 @@
-"""Light-curve detrending utilities.
+"""Segmented-polynomial baseline.
 
 The functions in this module fit segmented polynomial baselines, optionally
 remove sinusoidal residuals, and build flare masks and noise estimates.
+``fit_lightcurve_detrender`` adapts ``run_detrending`` to the baseline
+interface of ``custom_detrending``.
 """
 from __future__ import annotations
 
@@ -13,10 +15,10 @@ import numpy as np
 import pandas as pd
 from scipy.ndimage import gaussian_filter1d
 
-from .utils import MAD_TO_STD, robust_sigma
+from ...utils import MAD_TO_STD, robust_sigma
 
 try:
-    from .periodogram import lomb_scargle
+    from ..periodicity import lomb_scargle
     _ASTROPY_LS = True
 except ImportError:
     _ASTROPY_LS = False
@@ -1161,3 +1163,96 @@ def run_detrending(
         seg_stats_p2=seg_stats_p2,
         summary=summary,
     )
+
+
+def fit_lightcurve_detrender(time, flux, flux_err, gaps, config=None):
+    """Baseline fit via the external ``lightcurve_detrender`` pipeline.
+
+    Adapter that runs :func:`lightcurve_detrender.run_detrending` and returns
+    the same ``(newflux, model, best_params)`` contract as ``fit_multisine`` /
+    ``fit_spline``, so it drops straight into the baseline slot of
+    ``custom_detrending``.  The external pipeline fits a segmented-polynomial
+    baseline plus optional sinusoid corrections and carries its own robust,
+    fraction-capped flare masking.
+
+    Notes
+    -----
+    * ``run_detrending`` requires finite inputs, so the fit runs on the
+      finite (non-NaN) subset of ``time``/``flux``/``flux_err`` and the results
+      are mapped back onto the full grid (NaN elsewhere).
+    * ``flux_err`` is forced strictly positive and finite (non-finite or
+      non-positive values are replaced by the median positive error).
+    * The pipeline's ``final_residual`` is centred near zero; it is rebased to
+      the flux level (``+ median(flux)``) so the downstream Savitzky-Golay
+      passes see a signal at the original level, matching the convention of the
+      other baseline fitters.
+    * ``gaps`` is accepted for signature compatibility but not used directly —
+      the external pipeline detects its own continuous blocks from ``time``.
+
+    Parameters
+    ----------
+    time, flux, flux_err : ndarray
+        Full-grid arrays in days / flux units (may contain NaNs).
+    gaps : list of (int, int)
+        Segment boundaries (unused; see Notes).
+    config : lightcurve_detrender.DetrendConfig or None
+        Optional configuration forwarded to ``run_detrending``.
+
+    Returns
+    -------
+    newflux : ndarray
+        Detrended flux at the original flux level (NaN where input was NaN).
+    model : ndarray
+        Baseline (``second_pass_trend``) on the full grid.
+    best_params : dict
+        ``method='lightcurve_detrender'`` plus selected run-summary fields and
+        the pipeline's ``final_flare_mask`` (full grid) under
+        ``'ld_final_flare_mask'``.
+    """
+    time = np.asarray(time, dtype=float)
+    flux = np.asarray(flux, dtype=float)
+    if np.isscalar(flux_err):
+        flux_err = np.full(len(time), float(flux_err))
+    flux_err = np.asarray(flux_err, dtype=float)
+
+    finite = np.isfinite(time) & np.isfinite(flux)
+    if finite.sum() < 20:
+        raise ValueError("Too few finite cadences for the lightcurve detrender.")
+
+    # Force strictly positive, finite errors on the finite subset.
+    err = flux_err[finite]
+    good_err = np.isfinite(err) & (err > 0)
+    fill = np.median(err[good_err]) if good_err.any() else 1.0
+    err = np.where(good_err, err, fill)
+
+    # Run the external pipeline on the finite subset.
+    result = run_detrending(time[finite], flux[finite], err, config)
+
+    df = result.final_df
+    # run_detrending returns rows time-sorted and 1:1 with its input; the finite
+    # subset is already time-ordered, so rows map back by position.
+    trend_sub = df["second_pass_trend"].to_numpy(dtype=float)
+    resid_sub = df["final_residual"].to_numpy(dtype=float)
+    mask_sub = df["final_flare_mask"].to_numpy(dtype=bool)
+
+    flux_level = np.nanmedian(flux[finite])
+
+    model = np.full_like(flux, np.nan, dtype=float)
+    newflux = np.full_like(flux, np.nan, dtype=float)
+    final_mask = np.zeros(len(flux), dtype=bool)
+    model[finite] = trend_sub
+    newflux[finite] = resid_sub + flux_level
+    final_mask[finite] = mask_sub
+
+    best_params = {
+        "method": "lightcurve_detrender",
+        "ld_final_flare_mask": final_mask,
+        "ld_n_final_masked": int(final_mask.sum()),
+        "ld_median_local_sigma": float(
+            result.summary.get("median_local_sigma", np.nan)
+        ),
+        "ld_window_sizes": result.summary.get("window_sizes"),
+        "ld_poly_deg": result.summary.get("poly_deg"),
+        "ld_rotation_sinusoid_applied": result.summary.get("rotation_sinusoid_applied"),
+    }
+    return newflux, model, best_params
