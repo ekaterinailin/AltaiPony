@@ -122,7 +122,30 @@ def find_flares_in_cont_obs_period(flux, median, error, sigma=None,
         
     return isflare
 
-def find_flares(flc, minsep=3, sigma=None, **kwargs):
+def _merge_elevated_gaps(istart, istop, flux, median, error, merge_sigma):
+    """Merge consecutive flare candidates if the flux between them stays
+    elevated, i.e. the mean of ``(flux - median) / error`` over the cadences
+    between the end of one candidate and the start of the next is at least
+    ``merge_sigma``.  Merges chain, so several fragments of one long flare
+    become one candidate.  ``istart``/``istop`` are inclusive indices into
+    ``flux``."""
+    if merge_sigma is None or len(istart) < 2:
+        return istart, istop
+    x = (np.asarray(getattr(flux, "value", flux), dtype=float)
+         - np.asarray(getattr(median, "value", median), dtype=float)) / np.asarray(
+        getattr(error, "value", error), dtype=float)
+    starts, stops = [istart[0]], [istop[0]]
+    for a, b in zip(istart[1:], istop[1:]):
+        gap = x[stops[-1] + 1:a]
+        if np.isfinite(gap).any() and np.nanmean(gap) >= merge_sigma:
+            stops[-1] = b
+        else:
+            starts.append(a)
+            stops.append(b)
+    return np.array(starts), np.array(stops)
+
+
+def find_flares(flc, minsep=3, sigma=None, merge_sigma=None, **kwargs):
     '''
     Main wrapper to obtain and process a light curve.
 
@@ -135,6 +158,13 @@ def find_flares(flc, minsep=3, sigma=None, **kwargs):
     sigma : numpy array
         local scatter of the flux. Array should be the same length as the
         detrended flux array.
+    merge_sigma : float or None
+        If given, merge consecutive candidates when the flux between them
+        stays elevated: the mean of (detrended flux - iterative median) over
+        the cadences between them is at least ``merge_sigma`` times the
+        noise (``sigma`` if given, else ``detrended_flux_err``).  Long, faint
+        flares are otherwise split into several short candidates wherever the
+        flux dips below the detection threshold.  Default None (no merging).
     kwargs : dict
         keyword arguments to pass to :func:`find_flares_in_cont_obs_period`
     Return
@@ -175,6 +205,10 @@ def find_flares(flc, minsep=3, sigma=None, **kwargs):
             istart_gap = candidates[ np.append([0], separated_candidates + 1) ]
             istop_gap = candidates[ np.append(separated_candidates,
                                     [len(candidates) - 1]) ]
+            istart_gap, istop_gap = _merge_elevated_gaps(
+                istart_gap, istop_gap, flux, median,
+                error if sigma is None else sigma[le:ri], merge_sigma,
+            )
 
         #stitch indices back into the original light curve
         istart = np.array(np.append(istart, istart_gap + le), dtype='int')

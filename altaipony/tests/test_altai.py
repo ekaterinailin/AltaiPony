@@ -5,7 +5,8 @@ from ..altai import (find_flares,
                      find_flares_in_cont_obs_period,
                      chi_square,
                      equivalent_duration,
-                     _find_iterative_median)
+                     _find_iterative_median,
+                     _merge_elevated_gaps)
 
 from ..flarelc import FlareLightCurve
 from .test_flarelc import mock_flc
@@ -371,3 +372,75 @@ class TestFindIterativeMedian:
         # Both should exclude outliers
         assert result_n1[0] > result_n10[0] 
 
+
+def _burst_lc(bursts, gaps, sigma=1e-3, seed=42):
+    """Flat, detrended light curve (white noise ``sigma``) with bursts at
+    +10 sigma.  ``bursts`` are (start, stop) cadence ranges; ``gaps`` are
+    (start, stop, level) ranges raised by ``level`` sigma, e.g. the stretch
+    between two fragments of one flare."""
+    rng = np.random.default_rng(seed)
+    n = 1000
+    time = np.arange(n) * 2. / 1440.
+    flux = 1. + rng.normal(0., sigma, n)
+    for a, b in bursts:
+        flux[a:b] += 10. * sigma
+    for a, b, level in gaps:
+        flux[a:b] += level * sigma
+    flc = FlareLightCurve(time=time, flux=flux, flux_err=np.full(n, sigma))
+    flc.detrended_flux = flux
+    flc.detrended_flux_err = np.full(n, sigma)
+    return flc
+
+
+def test_find_flares_merges_fragments_of_one_flare():
+    """Two bursts with the flux staying ~1.5 sigma above baseline in between
+    are one flare that dipped under the detection threshold."""
+    flc = _burst_lc(bursts=[(400, 410), (430, 440)], gaps=[(410, 430, 1.5)])
+
+    unmerged = flc.find_flares().flares
+    assert len(unmerged) == 2
+
+    merged = flc.find_flares(merge_sigma=1.).flares
+    assert len(merged) == 1
+    assert merged.istart.iloc[0] <= 401
+    assert merged.istop.iloc[0] >= 438
+    # the merged flare's ED covers both fragments and the gap
+    assert merged.ed_rec.iloc[0] > unmerged.ed_rec.sum()
+
+
+def test_find_flares_merging_chains_fragments():
+    """Three fragments of one flare become one detection."""
+    flc = _burst_lc(bursts=[(300, 310), (330, 340), (360, 370)],
+                    gaps=[(310, 330, 1.5), (340, 360, 1.5)])
+    assert len(flc.find_flares().flares) == 3
+    assert len(flc.find_flares(merge_sigma=1.).flares) == 1
+
+
+def test_find_flares_keeps_separate_flares_apart():
+    """Two bursts with the flux back at baseline in between stay separate."""
+    flc = _burst_lc(bursts=[(400, 410), (430, 440)], gaps=[])
+    assert len(flc.find_flares(merge_sigma=1.).flares) == 2
+
+
+def test_merge_elevated_gaps():
+    """Unit test: merge decisions use the mean (flux - median) / error over the
+    gap; an all-NaN gap does not merge."""
+    flux = np.zeros(30)
+    flux[10:15] = 2.    # elevated gap between candidates 1 and 2 (mean 2)
+    flux[20:25] = 0.5   # weakly elevated gap between candidates 2 and 3
+    median, error = np.zeros(30), np.ones(30)
+    istart, istop = np.array([5, 15, 25]), np.array([9, 19, 29])
+
+    a, b = _merge_elevated_gaps(istart, istop, flux, median, error, None)
+    assert list(a) == [5, 15, 25] and list(b) == [9, 19, 29]
+
+    a, b = _merge_elevated_gaps(istart, istop, flux, median, error, 1.)
+    assert list(a) == [5, 25] and list(b) == [19, 29]
+
+    a, b = _merge_elevated_gaps(istart, istop, flux, median, error, 0.4)
+    assert list(a) == [5] and list(b) == [29]
+
+    flux_nan = flux.copy()
+    flux_nan[10:15] = np.nan
+    a, b = _merge_elevated_gaps(istart, istop, flux_nan, median, error, 0.4)
+    assert list(a) == [5, 15] and list(b) == [9, 29]

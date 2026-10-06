@@ -649,7 +649,12 @@ class FlareLightCurve(LightCurve):
             How many times above sigma and detrended_flux_err is required
         N3 : int (Default is 3)
             The number of consecutive points required to flag as a flare.
-        
+        merge_sigma : float or None (Default is None)
+            Merge consecutive candidates when the mean flux between them
+            stays at least ``merge_sigma`` times the noise above the
+            iterative median, so that long, faint flares are not split into
+            several candidates. None disables merging.
+
         Returns
         ----------
         FlareLightCurve

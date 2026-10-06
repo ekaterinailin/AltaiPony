@@ -100,9 +100,13 @@ def flare_eqn(t, ampl):
 
     f2 = 1 - f1
 
-    eqn = ((1 / 2) * np.sqrt(np.pi) * A * C * f1 * np.exp(-D1 * t + ((B / C) + (D1 * C / 2)) ** 2)
-                        * special.erfc(((B - t) / C) + (C * D1 / 2))) + ((1 / 2) * np.sqrt(np.pi) * A * C * f2
-                        * np.exp(-D2 * t+ ((B / C) + (D2 * C / 2)) ** 2) * special.erfc(((B - t) / C) + (C * D2 / 2)))
+    # Long before the peak, exp() overflows to inf while erfc() underflows to
+    # 0, and inf * 0 gives NaN.  The template is exactly 0 there.
+    with np.errstate(over="ignore", invalid="ignore"):
+        eqn = ((1 / 2) * np.sqrt(np.pi) * A * C * f1 * np.exp(-D1 * t + ((B / C) + (D1 * C / 2)) ** 2)
+                            * special.erfc(((B - t) / C) + (C * D1 / 2))) + ((1 / 2) * np.sqrt(np.pi) * A * C * f2
+                            * np.exp(-D2 * t+ ((B / C) + (D2 * C / 2)) ** 2) * special.erfc(((B - t) / C) + (C * D2 / 2)))
+    eqn = np.where(np.isfinite(eqn), eqn, 0.0)
     return eqn * ampl
 
 
