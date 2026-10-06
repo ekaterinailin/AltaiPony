@@ -11,12 +11,10 @@ This module contains custom detrending functions.
 """
 
 import logging
-import os
 
 import numpy as np
 import pandas as pd
 
-import matplotlib.pyplot as plt
 import astropy.units as u
 
 from scipy.interpolate import UnivariateSpline
@@ -38,7 +36,6 @@ except ImportError:
     _CELERITE2_AVAILABLE = False
 
 
-
 # ---------------------------------------------------------------------------
 # Module constants
 # ---------------------------------------------------------------------------
@@ -50,92 +47,6 @@ NORMALIZED_BASELINE = 1.0
 
 
 logger = logging.getLogger(__name__)
-
-
-# ---------------------------------------------------------------------------
-# Diagnostic plotting
-# ---------------------------------------------------------------------------
-
-
-class _DebugPlotter:
-    """Collect diagnostic plots without cluttering the numerical routines.
-
-    The numerical functions in this module can be handed a ``_DebugPlotter``
-    and call its methods unconditionally.  When ``enabled`` is False every
-    method is a no-op — nothing is imported, drawn, or saved — so there is no
-    performance cost and, crucially, no side effects on whatever matplotlib
-    figure happens to be active elsewhere.  When enabled, each *named* plot
-    gets its own dedicated Figure/Axes owned by this instance, so diagnostic
-    traces never leak onto an unrelated figure.
-
-    Parameters
-    ----------
-    enabled : bool
-        Master switch.  When False the object is an inert stand-in.
-    savedir : str or None
-        Directory to write saved figures into.  Created on demand.  If None,
-        ``save`` calls are ignored.
-    """
-
-    def __init__(self, enabled=False, savedir=None):
-        self.enabled = enabled
-        self.savedir = savedir
-        self._figures = {}
-
-    def _ax(self, name, figsize=(8, 4)):
-        """Return (creating if needed) the Axes for the named figure."""
-        if name not in self._figures:
-            fig, ax = plt.subplots(figsize=figsize)
-            self._figures[name] = (fig, ax)
-        return self._figures[name][1]
-
-    def plot(self, name, *args, **kwargs):
-        if self.enabled:
-            self._ax(name).plot(*args, **kwargs)
-
-    def scatter(self, name, *args, **kwargs):
-        if self.enabled:
-            self._ax(name).scatter(*args, **kwargs)
-
-    def axvline(self, name, x, **kwargs):
-        if self.enabled:
-            self._ax(name).axvline(x, **kwargs)
-
-    def finalize(self, name, xlabel=None, ylabel=None, legend=True, save=None):
-        """Label and optionally save the figure.
-
-        In interactive sessions (Jupyter, GUI backends) the figure is left
-        open for display.  In batch runs (non-interactive backend such as
-        Agg) it is closed after saving, since it can never be displayed and
-        open figures would otherwise accumulate over many light curves.
-        """
-        if not self.enabled or name not in self._figures:
-            return
-        fig, ax = self._figures[name]
-        if xlabel is not None:
-            ax.set_xlabel(xlabel)
-        if ylabel is not None:
-            ax.set_ylabel(ylabel)
-        if legend:
-            ax.legend()
-        if save is not None and self.savedir is not None:
-            os.makedirs(self.savedir, exist_ok=True)
-            fig.savefig(os.path.join(self.savedir, save), dpi=300)
-        if _is_batch_backend():
-            plt.close(fig)
-            del self._figures[name]
-
-
-def _is_batch_backend():
-    """Return True if matplotlib uses a non-interactive (file-only) backend."""
-    return plt.get_backend().lower() in {
-        "agg", "cairo", "pdf", "pgf", "ps", "svg", "template",
-    }
-
-
-#: Shared inert plotter used as the default when a caller passes ``debug=None``.
-#: Lets the numerical routines call ``debug.plot(...)`` unconditionally.
-_NULL_DEBUG = _DebugPlotter(enabled=False)
 
 
 # ---------------------------------------------------------------------------
@@ -769,7 +680,6 @@ def custom_detrending(
     max_sigma=2.5,
     longdecay=6,
     maxgap=10,
-    debug_plot=False,
     break_tolerance=10,
     periodicity_fap_threshold=1e-3,
     periodicity_amplitude_threshold=0.01,
@@ -794,7 +704,6 @@ def custom_detrending(
     matched_filter_flares=True,
     matched_filter_snr=5.0,
     matched_filter_fwhm_grid=(0.02, 0.05, 0.1, 0.15),
-    debug_savedir="diag_plots",
 ):
     """Custom de-trending for TESS and Kepler
     short cadence light curves, including TESS Cycle 3 20s
@@ -826,9 +735,6 @@ def custom_detrending(
         Long decay time for outlier rejection. Defaults to 6.
     maxgap : float
         Maximum gap size in days for spline fitting. Defaults to 10 x cadence size.
-    debug_plot: bool
-        If True will plot a figure with the flux after each of the detrending steps,
-        i.e., spline, and the two Sav-Gol iterations
     break_tolerance: int
         If there are large gaps in time, flatten will split the flux into
         several sub-lightcurves and apply savgol_filter to each individually.
@@ -958,17 +864,11 @@ def custom_detrending(
     matched_filter_fwhm_grid : sequence of float
         Flare FWHMs (days) the matched filter templates against.  Defaults to
         ``(0.02, 0.05, 0.1, 0.15)``.
-    debug_savedir : str or None
-        Directory into which diagnostic figures are written when
-        ``debug_plot`` is True.  Created on demand.  Defaults to
-        ``"diag_plots"``.
 
     Return:
     -------
     FlareLightCurve with detrended_flux attribute
     """
-    debug = _DebugPlotter(enabled=debug_plot, savedir=debug_savedir)
-
     dt = np.mean(np.diff(lc.time.value))
     gaps = lc.find_gaps(maxgap=maxgap * dt).gaps
     # Store original flux as a column so it survives filtering operations
@@ -1017,7 +917,7 @@ def custom_detrending(
         # Divide each real segment into equal subsegments of at most n_per
         # cycles.  Because the split is computed upfront for the whole segment
         # and the pieces are equal, there are no leftover slivers at the edges.
-        multisine_gaps = _segment_gaps(gaps, time, dominant_period, n_per, debug=debug)
+        multisine_gaps = _segment_gaps(gaps, time, dominant_period, n_per)
 
         m2flux, _, best_params = fit_multisine(
             time,
@@ -1030,7 +930,6 @@ def custom_detrending(
             clip_sigma=clip_sigma,
             max_clip_iter=max_clip_iter,
             amp_degree=multisine_amp_degree,
-            debug=debug,
         )
         best_params["method"] = "multisine"
         best_params["dominant_period"] = dominant_period
@@ -1054,15 +953,6 @@ def custom_detrending(
         lc.flux = m2flux * u.electron / u.s
         lc.flux_err = lc.flux_err * u.electron / u.s
 
-        debug.plot(
-            "savgol",
-            lc.time.value,
-            lc.flux.value + 5000,
-            "k.",
-            markersize=1,
-            label="after baseline fit",
-        )
-
         # use Savitzy-Golay to iron out the rest
         lc3 = lc.detrend(
             "savgol",
@@ -1074,15 +964,6 @@ def custom_detrending(
         )
 
         lc3.flux = lc3.detrended_flux
-
-        debug.plot(
-            "savgol",
-            lc3.time.value,
-            lc3.flux.value,
-            "r.",
-            markersize=1,
-            label="after first Sav-Gol step",
-        )
 
         # choose a uneven window size
         w2 = int((np.rint(savgol2 / 24.0 / dt) // 2) * 2 + 1)
@@ -1096,16 +977,6 @@ def custom_detrending(
             longdecay=longdecay,
             break_tolerance=break_tolerance,
         )
-
-        debug.plot(
-            "savgol",
-            lc4.time.value,
-            lc4.detrended_flux.value,
-            "b.",
-            markersize=1,
-            label="after second Sav-Gol step",
-        )
-        debug.finalize("savgol", xlabel="Time [BTJD or BKJD]", ylabel="Flux [e-/s]")
 
         # Restore original flux from the column (now filtered to lc4's length)
         lc4.flux = lc4["original_flux"] * u.electron / u.s
@@ -1150,7 +1021,6 @@ def custom_detrending(
         matched_filter_flares=matched_filter_flares,
         matched_filter_snr=matched_filter_snr,
         matched_filter_fwhm_grid=matched_filter_fwhm_grid,
-        debug=debug,
     )
 
     return lc4
@@ -1175,7 +1045,6 @@ def _apply_gp_step(
     matched_filter_flares=True,
     matched_filter_snr=5.0,
     matched_filter_fwhm_grid=(0.02, 0.05, 0.1, 0.15),
-    debug=None,
 ):
     """Apply the final Gaussian-Process detrending step, in place.
 
@@ -1199,9 +1068,6 @@ def _apply_gp_step(
     (``detrended_flux``, ``gp_model``) and ``best_params`` are modified in
     place.
     """
-    if debug is None:
-        debug = _NULL_DEBUG
-
     if not (use_gp and is_periodic and _CELERITE2_AVAILABLE):
         if use_gp and not _CELERITE2_AVAILABLE:
             logger.warning("GP requested but celerite2 is not installed (pip install celerite2) — skipping.")
@@ -1266,33 +1132,6 @@ def _apply_gp_step(
         gp_detrended = f4_gp - gp_model + gp_offset + NORMALIZED_BASELINE
         lc4.detrended_flux = gp_detrended * u.electron / u.s
         lc4.gp_model = gp_model + gp_offset
-
-        debug.plot(
-            "gp", t4_gp, gp_model, "r-", linewidth=0.8, label="GP model", alpha=0.7
-        )
-        debug.plot(
-            "gp",
-            t4_gp,
-            gp_detrended,
-            "g.",
-            markersize=0.5,
-            label="after GP subtraction",
-        )
-        debug.scatter(
-            "gp",
-            t4_gp[flare_mask],
-            f4_gp[flare_mask],
-            s=3,
-            c="orange",
-            zorder=5,
-            label="masked (flares)",
-        )
-        debug.finalize(
-            "gp",
-            xlabel="Time [BTJD or BKJD]",
-            ylabel="Flux [e-/s]",
-            save="gp_detrend_debug.png",
-        )
 
         best_params["method"] = f"{best_params.get('method', 'baseline')}+gp"
         best_params["gp"] = gp_params
@@ -1505,7 +1344,7 @@ def detect_strong_periodicity(
     return is_periodic, peak_period, rel_amplitude, fap
 
 
-def _segment_gaps(gaps, time, period, n_per, debug=None):
+def _segment_gaps(gaps, time, period, n_per):
     """Divide each real gap segment into evenly-sized subsegments.
 
     For each segment in ``gaps`` (which represent real data gaps, not
@@ -1527,9 +1366,6 @@ def _segment_gaps(gaps, time, period, n_per, debug=None):
         Dominant period in days.
     n_per : float
         Maximum allowed subsegment length in units of ``period``.
-    debug : _DebugPlotter or None
-        Optional diagnostic plotter.  When enabled, real-gap boundaries are
-        marked on the ``"multisine"`` figure.  Defaults to a no-op.
 
     Returns
     -------
@@ -1537,17 +1373,10 @@ def _segment_gaps(gaps, time, period, n_per, debug=None):
         New segment list where every subsegment is ≤ ``n_per`` cycles long
         and all subsegments within a real gap are equal in length.
     """
-    if debug is None:
-        debug = _NULL_DEBUG
-
     result = []
     max_span = n_per * period
 
     for le, ri in gaps:
-        debug.axvline("multisine", time[le], color="magenta", linestyle="-", alpha=0.5)
-        debug.axvline(
-            "multisine", time[ri - 1], color="magenta", linestyle="-", alpha=0.5
-        )
         span = time[ri - 1] - time[le]
         n_pieces = int(np.ceil(span / max_span)) if span > max_span else 1
         # Divide the index range into n_pieces equal slices
@@ -1570,7 +1399,6 @@ def fit_multisine(
     clip_sigma=3.0,
     max_clip_iter=5,
     amp_degree=1,
-    debug=None,
 ):
     """Fit a multi-harmonic sine baseline to the light curve.
 
@@ -1648,10 +1476,6 @@ def fit_multisine(
         Maximum number of clipping iterations per segment.  In practice
         convergence is reached in 2–3 passes; 5 is a safe upper bound.
         Defaults to 5.
-    debug : _DebugPlotter or None
-        Optional diagnostic plotter.  When enabled, the per-segment model and
-        re-centred residual are drawn on the ``"multisine"`` figure.  Defaults
-        to a no-op.
 
     Returns
     -------
@@ -1664,9 +1488,6 @@ def fit_multisine(
         per-segment fundamental amplitudes sqrt(a₁² + b₁²).  The amplitude
         entries use the segment left-index as key, matching ``seg_periods``.
     """
-    if debug is None:
-        debug = _NULL_DEBUG
-
     model = np.full_like(flux, np.nan, dtype=float)
     newflux = np.full_like(flux, np.nan, dtype=float)
 
@@ -1839,8 +1660,6 @@ def fit_multisine(
         else:
             seg_amplitudes[le] = np.nan
 
-        debug.plot("multisine", t_seg, model_seg, "b-", linewidth=2)
-
         # Store the residual re-centred on the iterative-median baseline
         # ``fmed_seg`` so that the downstream Savitzky-Golay step operates on a
         # near-baseline signal rather than a near-zero one.
@@ -1848,7 +1667,6 @@ def fit_multisine(
 
         model[le:ri] = model_seg
         newflux[le:ri] = residual + fmed_seg
-        debug.plot("multisine", t_seg, residual + fmed_seg, "b-", linewidth=2)
 
     best_params = {
         "n_harmonics": n_harmonics,
