@@ -7,7 +7,6 @@ import copy
 from scipy.signal import savgol_filter
 
 from .utils import sigma_clip
-import time
 
 
 LOG = logging.getLogger(__name__)
