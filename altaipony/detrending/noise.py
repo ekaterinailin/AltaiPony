@@ -42,9 +42,9 @@ def estimate_detrended_noise(
     flc : FlareLightCurve
         Input light curve with detrended_flux_err attribute updated.
     """
-    # Find gaps if not already done
-    if flc.gaps is None:
-        flc = flc.find_gaps()
+    # Find continuous windows if not already done
+    if flc.cont_windows is None:
+        flc = flc.find_cont_windows()
 
     # Extract arrays we need (avoids repeated attribute access)
     detrended_flux = np.asarray(
@@ -56,7 +56,7 @@ def estimate_detrended_noise(
     detrended_flux_err = np.full(n_points, np.nan)
 
     # Process each gap segment
-    for le, ri in flc.gaps:
+    for le, ri in flc.cont_windows:
         # Extract segment
         flux_segment = detrended_flux[le:ri].copy()
 
@@ -75,7 +75,7 @@ def estimate_detrended_noise(
         # by any residual low-frequency trend.
         it_med_segment = _find_iterative_median(
             flux_segment,
-            gaps=[(0, ri - le)],
+            cont_windows=[(0, ri - le)],
             longdecay=longdecay,
         )
         flux_normalized = flux_segment - it_med_segment

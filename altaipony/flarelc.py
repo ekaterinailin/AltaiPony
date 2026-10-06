@@ -34,7 +34,7 @@ from .fakeflares import (merge_fake_and_recovered_events,
                          flare_model,
                          )
 from .injrecanalysis import wrap_characterization_of_flares, _heatmap
-from .utils import split_gaps
+from .utils import split_cont_windows
 from .utils import get_response_curve
 from .savgoldetrending import detrend_savgol
 
@@ -71,9 +71,9 @@ class FlareLightCurve(LightCurve):
         K2SC detrend flux, same units as flux.
     detrended_flux_err : array-like
         K2SC detrend flux error, same units as flux.
-    gaps : list of tuples of ints
-        Each tuple contains the start and end indices of observation gaps. See
-        ``find_gaps``.
+    cont_windows : list of tuples of ints
+        Continuous observing windows as (start, stop) index pairs, with stop
+        exclusive. See ``find_cont_windows``.
     flares : DataFrame
         Table of flares, their start and stop time, recovered equivalent duration
         (ED), and, if applicable, recovery probability, ratio of recovered ED to
@@ -178,16 +178,29 @@ class FlareLightCurve(LightCurve):
 
 
     @property
-    def gaps(self):
+    def cont_windows(self):
         try:
-            return self.meta["gaps"]
+            return self.meta["cont_windows"]
         except KeyError:
-            self.meta["gaps"] = None
-            return self.meta["gaps"]
+            self.meta["cont_windows"] = None
+            return self.meta["cont_windows"]
+
+    @cont_windows.setter
+    def cont_windows(self, cont_windows):
+        self.meta["cont_windows"] = cont_windows
+
+    @property
+    def gaps(self):
+        """Deprecated alias of ``cont_windows``."""
+        warnings.warn("FlareLightCurve.gaps is deprecated; use cont_windows.",
+                      DeprecationWarning, stacklevel=2)
+        return self.cont_windows
 
     @gaps.setter
-    def gaps(self, gaps):
-        self.meta["gaps"] = gaps 
+    def gaps(self, cont_windows):
+        warnings.warn("FlareLightCurve.gaps is deprecated; use cont_windows.",
+                      DeprecationWarning, stacklevel=2)
+        self.cont_windows = cont_windows
 
     @property
     def cadenceno(self) -> np.array:
@@ -411,7 +424,7 @@ class FlareLightCurve(LightCurve):
         --------
         >>> flc.find_iterative_median()
         >>> # Or chain methods:
-        >>> flc.find_gaps().find_iterative_median()
+        >>> flc.find_cont_windows().find_iterative_median()
         """
         # Extract arrays from self
         if detrended == True:
@@ -419,14 +432,14 @@ class FlareLightCurve(LightCurve):
         else:
             detrended_flux = self.flux
         
-        # Get gaps (find them if not already computed)
-        gaps = self.gaps
-        if gaps is None:
-            self.find_gaps()
-            gaps = self.gaps
+        # Get continuous windows (find them if not already computed)
+        cont_windows = self.cont_windows
+        if cont_windows is None:
+            self.find_cont_windows()
+            cont_windows = self.cont_windows
         
         # Call internal function
-        it_med = _find_iterative_median(detrended_flux, gaps, n, **kwargs)
+        it_med = _find_iterative_median(detrended_flux, cont_windows, n, **kwargs)
         
         # Set result on self
         self["it_med"] = it_med
@@ -434,9 +447,12 @@ class FlareLightCurve(LightCurve):
         
         return self
     
-    def find_gaps(self, maxgap=0.09, minspan=10, splits=[]):
+    def find_cont_windows(self, maxgap=0.09, minspan=10, splits=[]):
         '''
-        Find gaps in light curve and stores them in the gaps attribute.
+        Find the continuous observing windows of the light curve, i.e. the
+        stretches between time gaps of at least ``maxgap``, and store them in
+        the ``cont_windows`` attribute as (start, stop) index pairs with stop
+        exclusive. Windows shorter than ``minspan`` cadences are dropped.
         If required, adds additional splits in an arbitrary number of places.
         Caution: passing splits values means that you override the minspan
         and maxgap.
@@ -473,13 +489,19 @@ class FlareLightCurve(LightCurve):
         too_short = np.where(np.diff(gap_out) < minspan)
         left, right = np.delete(left,too_short), np.delete(right,(too_short))
 
-        # get the gaps
-        gaps = list(zip(left, right))
+        # get the continuous windows
+        cont_windows = list(zip(left, right))
         
         # split up the time series in additional place if needed
-        lc.meta["gaps"] = split_gaps(gaps, splits)
+        lc.meta["cont_windows"] = split_cont_windows(cont_windows, splits)
 
         return lc
+
+    def find_gaps(self, *args, **kwargs):
+        """Deprecated alias of ``find_cont_windows``."""
+        warnings.warn("FlareLightCurve.find_gaps is deprecated; use find_cont_windows.",
+                      DeprecationWarning, stacklevel=2)
+        return self.find_cont_windows(*args, **kwargs)
 
     def detrend(self, mode, save=False,
                 path='detrended_lc.fits',
@@ -668,7 +690,7 @@ class FlareLightCurve(LightCurve):
                        'tstop', 'ed_rec', 'ed_rec_err', 'ampl_rec', 'dur']
             lc.flares = pd.DataFrame(columns=columns)
             #find continuous observing periods
-            lc = lc.find_gaps()
+            lc = lc.find_cont_windows()
             #find the true median value iteratively
             lc = lc.find_iterative_median(n=4)
             #find flares
@@ -782,7 +804,7 @@ class FlareLightCurve(LightCurve):
         lc = copy.deepcopy(self)
         if inject_before_detrending == True:
             lc = lc.detrend(mode, func=func, **detrend_kwargs)
-        lc = lc.find_gaps()
+        lc = lc.find_cont_windows()
         lc = lc.find_flares()
         lc = lc.find_iterative_median()
         
@@ -1028,9 +1050,9 @@ class FlareLightCurve(LightCurve):
             LOG.debug('Injecting after detrending.')
         
         # How many flares do you want to inject
-        # At least one per gap
+        # At least one per continuous window
         # or as defined by the frequency
-        nfakesum = max(len(fake_lc.gaps),
+        nfakesum = max(len(fake_lc.cont_windows),
                        int(np.rint(fakefreq *
                            (fake_lc.time.value.max() - fake_lc.time.value.min()))
                            )
@@ -1050,7 +1072,7 @@ class FlareLightCurve(LightCurve):
         ckm = 0
         
         # Iterate over continuous observing periods
-        for (le,ri) in fake_lc.gaps:
+        for (le,ri) in fake_lc.cont_windows:
             
             # Pick the observing period
             gap_fake_lc = fake_lc[le:ri]
@@ -1360,53 +1382,54 @@ class FlareLightCurve(LightCurve):
         lc : FlareLightCurve
             the light curve
         kwargs : dict
-            keyword arguments to pass to find_gaps method
+            keyword arguments to pass to find_cont_windows method
             
         Return:
         -------
         interpolated FlareLightCurve
         """
-        # find gaps that are too big to be interpolated with a good conscience
-        gaps = lc.find_gaps(**kwargs).gaps
+        # find the continuous windows; the gaps between them are too big to
+        # be interpolated with a good conscience
+        cont_windows = lc.find_cont_windows(**kwargs).cont_windows
         
         # set up interpolated arrays
         time, flux, flux_err, newcadence = [], [], [], []
         original_flux, original_flux_err, quality = [], [], []
         
-        # interpolate within each gap
-        for i, j in gaps:
-            # select gap
-            gaplc = lc[i:j]
+        # interpolate within each continuous window
+        for i, j in cont_windows:
+            # select window
+            windowlc = lc[i:j]
             # get old cadence
-            oldx = gaplc.cadenceno.value
+            oldx = windowlc.cadenceno.value
             # cadenceno are complete in uncorrected flux, 
             # so we fill in the removed cadences
-            newx = np.arange(gaplc.cadenceno.value[0], gaplc.cadenceno.value[-1]+1)
+            newx = np.arange(windowlc.cadenceno.value[0], windowlc.cadenceno.value[-1]+1)
             newcadence.append(newx)
             
             # interpolate flux error
-            f = interp1d(oldx, gaplc.flux_err, fill_value='extrapolate')
+            f = interp1d(oldx, windowlc.flux_err, fill_value='extrapolate')
             flux_err.append(f(newx))
             
             # interpolate time
-            f = interp1d(oldx, gaplc.time.value, fill_value='extrapolate')
+            f = interp1d(oldx, windowlc.time.value, fill_value='extrapolate')
             time.append(f(newx))
             
             # interpolate flux
-            f = interp1d(oldx, gaplc.flux.value, fill_value='extrapolate')
+            f = interp1d(oldx, windowlc.flux.value, fill_value='extrapolate')
             flux.append(f(newx))
 
             # interpolate original_flux if it exists
-            if 'original_flux' in gaplc.colnames:
-                f = interp1d(oldx, gaplc['original_flux'].value, fill_value='extrapolate')
+            if 'original_flux' in windowlc.colnames:
+                f = interp1d(oldx, windowlc['original_flux'].value, fill_value='extrapolate')
                 original_flux.append(f(newx))   
             # interpolate original_flux_err if it exists
-            if 'original_flux_err' in gaplc.colnames:
-                f = interp1d(oldx, gaplc['original_flux_err'].value, fill_value='extrapolate')
+            if 'original_flux_err' in windowlc.colnames:
+                f = interp1d(oldx, windowlc['original_flux_err'].value, fill_value='extrapolate')
                 original_flux_err.append(f(newx))
             # interpolate original_flux if it exists
-            if 'quality' in gaplc.colnames:
-                f = interp1d(oldx, gaplc['quality'].value, fill_value='extrapolate')
+            if 'quality' in windowlc.colnames:
+                f = interp1d(oldx, windowlc['quality'].value, fill_value='extrapolate')
                 quality.append(f(newx))   
         
         # Copy the original light curve to preserve all attributes

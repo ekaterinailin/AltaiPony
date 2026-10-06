@@ -5,10 +5,9 @@ from astropy.time import Time
 import astropy.units as u
 
 from ..flarelc import FlareLightCurve
-from ..customdetrend import (
-    custom_detrending,
-    estimate_detrended_noise,
-    measure_flare,
+from ..altai import measure_flare
+from ..detrending import custom_detrending, estimate_detrended_noise
+from ..detrending.baselines.spline import (
     fit_spline,
     _fit_single_spline,
     _build_knot_points,
@@ -143,7 +142,7 @@ class TestCustomDetrending:
         # Check required attributes exist
         assert hasattr(flc_detrended, 'detrended_flux')
         assert hasattr(flc_detrended, 'it_med')
-        assert hasattr(flc_detrended, 'gaps')
+        assert hasattr(flc_detrended, 'cont_windows')
         
         # Check they have consistent lengths with the output flux
         assert len(flc_detrended.detrended_flux) == len(flc_detrended.flux)
@@ -348,8 +347,8 @@ class TestFitSpline:
         np.random.seed(42)
         time = np.linspace(0, 10, 1000)
         flux = 1000 + np.random.normal(0, 10, 1000)
-        gaps = [(0, 1000)]
-        return time, flux, gaps
+        cont_windows = [(0, 1000)]
+        return time, flux, cont_windows
     
     @pytest.fixture
     def time_flux_with_trend(self):
@@ -358,8 +357,8 @@ class TestFitSpline:
         time = np.linspace(0, 10, 1000)
         # Add linear trend
         flux = 1000 + 50 * time + np.random.normal(0, 10, 1000)
-        gaps = [(0, 1000)]
-        return time, flux, gaps
+        cont_windows = [(0, 1000)]
+        return time, flux, cont_windows
     
     @pytest.fixture
     def time_flux_with_flares(self):
@@ -370,8 +369,8 @@ class TestFitSpline:
         # Add flares
         flux[100:110] += 200  # Small flare
         flux[500:520] += 500  # Large flare
-        gaps = [(0, 1000)]
-        return time, flux, gaps
+        cont_windows = [(0, 1000)]
+        return time, flux, cont_windows
     
     @pytest.fixture
     def time_flux_with_gap(self):
@@ -381,16 +380,16 @@ class TestFitSpline:
         flux = 1000 + np.random.normal(0, 10, 1000)
         # Create gap by setting middle section to NaN
         flux[400:600] = np.nan
-        gaps = [(0, 400), (600, 1000)]
-        return time, flux, gaps
+        cont_windows = [(0, 400), (600, 1000)]
+        return time, flux, cont_windows
     
     # ========== Test fit_spline return structure ==========
     
     def test_fit_spline_returns_three_values(self, simple_time_flux):
         """Test that fit_spline returns newflux, model, and best_params"""
-        time, flux, gaps = simple_time_flux
+        time, flux, cont_windows = simple_time_flux
         
-        result = fit_spline(time, flux, gaps)
+        result = fit_spline(time, flux, cont_windows)
         
         assert len(result) == 3
         newflux, model, best_params = result
@@ -401,27 +400,27 @@ class TestFitSpline:
     
     def test_fit_spline_output_lengths(self, simple_time_flux):
         """Test that output arrays have correct length"""
-        time, flux, gaps = simple_time_flux
+        time, flux, cont_windows = simple_time_flux
         
-        newflux, model, best_params = fit_spline(time, flux, gaps)
+        newflux, model, best_params = fit_spline(time, flux, cont_windows)
         
         assert len(newflux) == len(flux)
         assert len(model) == len(flux)
     
     def test_fit_spline_best_params_keys(self, simple_time_flux):
         """Test that best_params contains expected keys"""
-        time, flux, gaps = simple_time_flux
+        time, flux, cont_windows = simple_time_flux
         
-        newflux, model, best_params = fit_spline(time, flux, gaps)
+        newflux, model, best_params = fit_spline(time, flux, cont_windows)
         
         expected_keys = {'coarseness', 'order', 'phase', 'score'}
         assert set(best_params.keys()) == expected_keys
     
     def test_fit_spline_best_params_types(self, simple_time_flux):
         """Test that best_params values have correct types"""
-        time, flux, gaps = simple_time_flux
+        time, flux, cont_windows = simple_time_flux
         
-        newflux, model, best_params = fit_spline(time, flux, gaps)
+        newflux, model, best_params = fit_spline(time, flux, cont_windows)
         
         assert isinstance(best_params['coarseness'], (int, np.integer))
         assert isinstance(best_params['order'], (int, np.integer))
@@ -430,9 +429,9 @@ class TestFitSpline:
     
     def test_fit_spline_score_is_finite(self, simple_time_flux):
         """Test that the best score is finite"""
-        time, flux, gaps = simple_time_flux
+        time, flux, cont_windows = simple_time_flux
         
-        newflux, model, best_params = fit_spline(time, flux, gaps)
+        newflux, model, best_params = fit_spline(time, flux, cont_windows)
         
         assert np.isfinite(best_params['score'])
         assert best_params['score'] > 0
@@ -441,9 +440,9 @@ class TestFitSpline:
     
     def test_fit_spline_removes_trend(self, time_flux_with_trend):
         """Test that spline fitting removes linear trends"""
-        time, flux, gaps = time_flux_with_trend
+        time, flux, cont_windows = time_flux_with_trend
         
-        newflux, model, best_params = fit_spline(time, flux, gaps)
+        newflux, model, best_params = fit_spline(time, flux, cont_windows)
         
         # Detrended flux mean in the first and last 100 points should be similar
         mean_start = np.nanmean(newflux[:100])
@@ -452,9 +451,9 @@ class TestFitSpline:
     
     def test_fit_spline_preserves_flares(self, time_flux_with_flares):
         """Test that spline fitting doesn't remove flares"""
-        time, flux, gaps = time_flux_with_flares
+        time, flux, cont_windows = time_flux_with_flares
         
-        newflux, model, best_params = fit_spline(time, flux, gaps)
+        newflux, model, best_params = fit_spline(time, flux, cont_windows)
         
         # Flares should still be visible as positive outliers
         median_flux = np.nanmedian(newflux)
@@ -465,9 +464,9 @@ class TestFitSpline:
     
     def test_fit_spline_handles_gaps(self, time_flux_with_gap):
         """Test that spline fitting handles data gaps correctly"""
-        time, flux, gaps = time_flux_with_gap
+        time, flux, cont_windows = time_flux_with_gap
         
-        newflux, model, best_params = fit_spline(time, flux, gaps)
+        newflux, model, best_params = fit_spline(time, flux, cont_windows)
         
         # NaN regions should remain NaN
         assert np.all(np.isnan(newflux[400:600]))
@@ -481,11 +480,11 @@ class TestFitSpline:
     
     def test_fit_spline_selects_from_candidates(self, simple_time_flux):
         """Test that fit_spline actually selects best from multiple candidates"""
-        time, flux, gaps = simple_time_flux
+        time, flux, cont_windows = simple_time_flux
         
         # Use small range to limit candidates
         newflux, model, best_params = fit_spline(
-            time, flux, gaps,
+            time, flux, cont_windows,
             coarseness_range=(5, 10, 5),  # Only 2 coarseness values
             spline_orders=(2,),  # Only 1 order
             n_phase_shifts=2  # 2 phase shifts
@@ -498,10 +497,10 @@ class TestFitSpline:
     
     def test_fit_spline_respects_coarseness_range(self, simple_time_flux):
         """Test that selected coarseness is within specified range"""
-        time, flux, gaps = simple_time_flux
+        time, flux, cont_windows = simple_time_flux
         
         newflux, model, best_params = fit_spline(
-            time, flux, gaps,
+            time, flux, cont_windows,
             coarseness_range=(8, 12, 2)
         )
         
@@ -509,10 +508,10 @@ class TestFitSpline:
     
     def test_fit_spline_respects_spline_orders(self, simple_time_flux):
         """Test that selected order is from specified options"""
-        time, flux, gaps = simple_time_flux
+        time, flux, cont_windows = simple_time_flux
         
         newflux, model, best_params = fit_spline(
-            time, flux, gaps,
+            time, flux, cont_windows,
             spline_orders=(2, 3, 4)
         )
         
@@ -614,8 +613,8 @@ class TestEvaluateSplineFit:
         np.random.seed(42)
         flux = 1000 + np.random.normal(0, 10, 1000)
         model = np.full(1000, 1000.0)  # Flat model at mean
-        gaps = [(0, 1000)]
-        return flux, model, gaps
+        cont_windows = [(0, 1000)]
+        return flux, model, cont_windows
     
     @pytest.fixture
     def edge_effect_data(self):
@@ -626,45 +625,45 @@ class TestEvaluateSplineFit:
         # Add edge deviation - model curves away at edges
         model[:100] = 1050  # Left edge higher
         model[-100:] = 950  # Right edge lower
-        gaps = [(0, 1000)]
-        return flux, model, gaps
+        cont_windows = [(0, 1000)]
+        return flux, model, cont_windows
     
     def test_evaluate_returns_finite_score(self, perfect_fit_data):
         """Test that evaluation returns a finite score"""
-        flux, model, gaps = perfect_fit_data
+        flux, model, cont_windows = perfect_fit_data
         
-        score = _evaluate_spline_fit(flux, model, gaps)
+        score = _evaluate_spline_fit(flux, model, cont_windows)
         
         assert np.isfinite(score)
         assert score > 0
     
     def test_evaluate_edge_penalty_increases_score(self, perfect_fit_data, edge_effect_data):
         """Test that edge deviations increase the score (worse fit)"""
-        flux_good, model_good, gaps = perfect_fit_data
+        flux_good, model_good, cont_windows = perfect_fit_data
         flux_bad, model_bad, _ = edge_effect_data
         
-        score_good = _evaluate_spline_fit(flux_good, model_good, gaps, edge_penalty_weight=0.5)
-        score_bad = _evaluate_spline_fit(flux_bad, model_bad, gaps, edge_penalty_weight=0.5)
+        score_good = _evaluate_spline_fit(flux_good, model_good, cont_windows, edge_penalty_weight=0.5)
+        score_bad = _evaluate_spline_fit(flux_bad, model_bad, cont_windows, edge_penalty_weight=0.5)
         
         # Edge effects should increase score
         assert score_bad > score_good
     
     def test_evaluate_edge_penalty_weight_effect(self, edge_effect_data):
         """Test that higher edge_penalty_weight increases penalty"""
-        flux, model, gaps = edge_effect_data
+        flux, model, cont_windows = edge_effect_data
         
-        score_low = _evaluate_spline_fit(flux, model, gaps, edge_penalty_weight=0.1)
-        score_high = _evaluate_spline_fit(flux, model, gaps, edge_penalty_weight=1.0)
+        score_low = _evaluate_spline_fit(flux, model, cont_windows, edge_penalty_weight=0.1)
+        score_high = _evaluate_spline_fit(flux, model, cont_windows, edge_penalty_weight=1.0)
         
         # Higher weight should give higher score for same edge effects
         assert score_high > score_low
     
     def test_evaluate_zero_edge_penalty(self, edge_effect_data):
         """Test that zero edge_penalty_weight disables edge penalty"""
-        flux, model, gaps = edge_effect_data
+        flux, model, cont_windows = edge_effect_data
         
-        score_with = _evaluate_spline_fit(flux, model, gaps, edge_penalty_weight=0.5)
-        score_without = _evaluate_spline_fit(flux, model, gaps, edge_penalty_weight=0.0)
+        score_with = _evaluate_spline_fit(flux, model, cont_windows, edge_penalty_weight=0.5)
+        score_without = _evaluate_spline_fit(flux, model, cont_windows, edge_penalty_weight=0.0)
         
         # Without edge penalty, score should be lower
         assert score_without < score_with
@@ -681,10 +680,10 @@ class TestEvaluateSplineFit:
         # Model that ignores the flare (good)
         model_ignores_flare = np.full(1000, 1000.0)
         
-        gaps = [(0, 1000)]
+        cont_windows = [(0, 1000)]
         
-        score_tracks = _evaluate_spline_fit(flux, model_tracks_flare, gaps)
-        score_ignores = _evaluate_spline_fit(flux, model_ignores_flare, gaps)
+        score_tracks = _evaluate_spline_fit(flux, model_tracks_flare, cont_windows)
+        score_ignores = _evaluate_spline_fit(flux, model_ignores_flare, cont_windows)
         
         # Model that tracks flare should have worse (higher) score
         # because residuals will be more symmetric
@@ -698,9 +697,9 @@ class TestEvaluateSplineFit:
         flux[400:600] = np.nan
         model[400:600] = np.nan
         
-        gaps = [(0, 400), (600, 1000)]
+        cont_windows = [(0, 400), (600, 1000)]
         
-        score = _evaluate_spline_fit(flux, model, gaps)
+        score = _evaluate_spline_fit(flux, model, cont_windows)
         
         assert np.isfinite(score)
     
@@ -711,10 +710,10 @@ class TestEvaluateSplineFit:
         model = np.full(100, 1050.0)  # Offset model
         
         # Segment of only 15 points (< 20 threshold)
-        gaps = [(0, 15)]
+        cont_windows = [(0, 15)]
         
         # Should not crash and should return valid score
-        score = _evaluate_spline_fit(flux[:15], model[:15], gaps)
+        score = _evaluate_spline_fit(flux[:15], model[:15], cont_windows)
         
         assert np.isfinite(score) or score == np.inf
     
@@ -722,9 +721,9 @@ class TestEvaluateSplineFit:
         """Test that too few valid points returns inf"""
         flux = np.array([1, 2, 3, 4, 5])
         model = np.array([1, 2, 3, 4, 5])
-        gaps = [(0, 5)]
+        cont_windows = [(0, 5)]
         
-        score = _evaluate_spline_fit(flux, model, gaps)
+        score = _evaluate_spline_fit(flux, model, cont_windows)
         
         assert score == np.inf
 
@@ -738,11 +737,11 @@ class TestFitSingleSpline:
         time = np.linspace(0, 10, 1000)
         flux = 1000 + np.random.normal(0, 10, 1000)
         flux_med = np.full(1000, 1000.0)
-        gaps = [(0, 1000)]
+        cont_windows = [(0, 1000)]
         dt = np.diff(time)[0]
         
         model, newflux = _fit_single_spline(
-            time, flux, flux_med, gaps,
+            time, flux, flux_med, cont_windows,
             coarseness=10, k=3, dt=dt,
             phase_idx=0, n_phases=3, percentile=35
         )
@@ -757,12 +756,12 @@ class TestFitSingleSpline:
         time = np.linspace(0, 0.1, 10)  # Very short
         flux = np.array([100, 102, 98, 101, 99, 103, 97, 100, 101, 99])
         flux_med = np.full(10, 100.0)
-        gaps = [(0, 10)]
+        cont_windows = [(0, 10)]
         dt = np.diff(time)[0]
         
         # Use large coarseness so segment is too short
         model, newflux = _fit_single_spline(
-            time, flux, flux_med, gaps,
+            time, flux, flux_med, cont_windows,
             coarseness=100, k=3, dt=dt,
             phase_idx=0, n_phases=1, percentile=50
         )
@@ -776,11 +775,11 @@ class TestFitSingleSpline:
         flux = 1000 + np.random.normal(0, 10, 1000)
         flux[400:600] = np.nan
         flux_med = np.full(1000, 1000.0)
-        gaps = [(0, 400), (600, 1000)]
+        cont_windows = [(0, 400), (600, 1000)]
         dt = np.diff(time)[0]
         
         model, newflux = _fit_single_spline(
-            time, flux, flux_med, gaps,
+            time, flux, flux_med, cont_windows,
             coarseness=5, k=3, dt=dt,
             phase_idx=0, n_phases=1, percentile=35
         )

@@ -57,7 +57,7 @@ different numbers of flares (1 to ``max_flares``) using ``emcee``.
 
     import matplotlib.pyplot as plt
     from altaipony.lcio import to_flare_lightcurve
-    from altaipony.customdetrend import custom_detrending
+    from altaipony.detrending import custom_detrending
     import lightkurve as lk
 
 

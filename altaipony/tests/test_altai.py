@@ -118,18 +118,18 @@ class TestFindIterativeMedian:
     def test_returns_correct_shape(self):
         """Test that output has same shape as input"""
         flux = np.random.normal(1.0, 0.1, 100)
-        gaps = [(0, 100)]
+        cont_windows = [(0, 100)]
         
-        result = _find_iterative_median(flux, gaps, n=3)
+        result = _find_iterative_median(flux, cont_windows, n=3)
         
         assert result.shape == flux.shape
         assert len(result) == len(flux)
     
-    def test_single_segment_no_gaps(self):
-        """Test with no gaps (entire array as one segment)"""
+    def test_single_segment_no_windows(self):
+        """Test with no windows (entire array as one segment)"""
         flux = np.random.normal(1.0, 0.1, 100)
         
-        result = _find_iterative_median(flux, gaps=None, n=3)
+        result = _find_iterative_median(flux, cont_windows=None, n=3)
         
         assert result.shape == flux.shape
         # All values should be the same (global median)
@@ -137,26 +137,26 @@ class TestFindIterativeMedian:
         # Should be close to true median
         assert result[0] == pytest.approx(np.nanmedian(flux), abs=0.1)
     
-    def test_single_segment_empty_gaps_list(self):
-        """Test with empty gaps list"""
+    def test_single_segment_empty_windows_list(self):
+        """Test with empty windows list"""
         flux = np.random.normal(1.0, 0.1, 100)
         
-        result = _find_iterative_median(flux, gaps=[], n=3)
+        result = _find_iterative_median(flux, cont_windows=[], n=3)
         
         assert result.shape == flux.shape
         assert np.all(result == result[0])
     
     def test_multiple_segments(self):
-        """Test with multiple segments (gaps)"""
+        """Test with multiple continuous windows"""
         # Create three segments with different means
         seg1 = np.random.normal(1.0, 0.05, 50)
         seg2 = np.random.normal(2.0, 0.05, 50)
         seg3 = np.random.normal(1.5, 0.05, 50)
         flux = np.concatenate([seg1, seg2, seg3])
         
-        gaps = [(0, 50), (50, 100), (100, 150)]
+        cont_windows = [(0, 50), (50, 100), (100, 150)]
         
-        result = _find_iterative_median(flux, gaps, n=3)
+        result = _find_iterative_median(flux, cont_windows, n=3)
         
         # Each segment should have a different median
         median1 = result[25]
@@ -179,9 +179,9 @@ class TestFindIterativeMedian:
         flux[10] = 10.0  # Strong outlier
         flux[20] = 0.1   # Weak outlier
         
-        gaps = [(0, 100)]
+        cont_windows = [(0, 100)]
         
-        result = _find_iterative_median(flux, gaps, n=3, max_sigma=3.0)
+        result = _find_iterative_median(flux, cont_windows, n=3, max_sigma=3.0)
         
         # Median should be close to 1.0, not affected by outliers
         assert result[0] == pytest.approx(1.0, abs=0.05)
@@ -191,13 +191,13 @@ class TestFindIterativeMedian:
         flux = np.random.normal(1,0.5,100) * 1.0
         flux[10:15] = 1.9  # Add some outliers
         
-        gaps = [(0, 100)]
+        cont_windows = [(0, 100)]
         
         # With strict clipping
-        result_strict = _find_iterative_median(flux, gaps, n=5, max_sigma=2.0)
+        result_strict = _find_iterative_median(flux, cont_windows, n=5, max_sigma=2.0)
         
         # With loose clipping
-        result_loose = _find_iterative_median(flux, gaps, n=5, max_sigma=5.0)
+        result_loose = _find_iterative_median(flux, cont_windows, n=5, max_sigma=5.0)
         
         # Results should be different (loose allows more outliers)
         # Strict should be closer to 1.0
@@ -210,17 +210,17 @@ class TestFindIterativeMedian:
     def test_empty_array(self):
         """Test with empty array. Should throw ValueError."""
         flux = np.array([])
-        gaps = []
+        cont_windows = []
         
         with pytest.raises(ValueError, match="Input detrended_flux array is empty."):
-            _find_iterative_median(flux, gaps, n=3)
+            _find_iterative_median(flux, cont_windows, n=3)
             
     def test_single_value(self):
         """Test with single value"""
         flux = np.array([1.5])
-        gaps = [(0, 1)]
+        cont_windows = [(0, 1)]
         
-        result = _find_iterative_median(flux, gaps, n=3)
+        result = _find_iterative_median(flux, cont_windows, n=3)
         
         assert len(result) == 1
         assert result[0] == 1.5
@@ -228,9 +228,9 @@ class TestFindIterativeMedian:
     def test_all_nan_values(self):
         """Test with all NaN values"""
         flux = np.full(100, np.nan)
-        gaps = [(0, 100)]
+        cont_windows = [(0, 100)]
         
-        result = _find_iterative_median(flux, gaps, n=3)
+        result = _find_iterative_median(flux, cont_windows, n=3)
         
         # Result should be all NaN
         assert np.all(np.isnan(result))
@@ -241,9 +241,9 @@ class TestFindIterativeMedian:
         flux = np.random.normal(1.0, 0.1, 100)
         flux[10:20] = np.nan  # Add NaN gap
         
-        gaps = [(0, 100)]
+        cont_windows = [(0, 100)]
         
-        result = _find_iterative_median(flux, gaps, n=3)
+        result = _find_iterative_median(flux, cont_windows, n=3)
         
         # Should compute median ignoring NaNs
         assert not np.all(np.isnan(result))
@@ -257,9 +257,9 @@ class TestFindIterativeMedian:
         seg3 = np.random.normal(2.0, 0.1, 50)
         flux = np.concatenate([seg1, seg2, seg3])
         
-        gaps = [(0, 50), (50, 100), (100, 150)]
+        cont_windows = [(0, 50), (50, 100), (100, 150)]
         
-        result = _find_iterative_median(flux, gaps, n=3)
+        result = _find_iterative_median(flux, cont_windows, n=3)
         
         # First and third segments should have finite values
         assert np.isfinite(result[0])
@@ -274,9 +274,9 @@ class TestFindIterativeMedian:
         flux = np.random.normal(1.0, 0.01, 100)
         flux[40:60] = 1.0 + np.random.normal(0, 5.0, 20)  # Very noisy segment
         
-        gaps = [(0, 40), (40, 60), (60, 100)]
+        cont_windows = [(0, 40), (40, 60), (60, 100)]
         
-        result = _find_iterative_median(flux, gaps, n=3, max_sigma=1.0)
+        result = _find_iterative_median(flux, cont_windows, n=3, max_sigma=1.0)
         
         # All segments should have finite medians
         assert np.all(np.isfinite(result))
@@ -287,9 +287,9 @@ class TestFindIterativeMedian:
         """Test that input array is not modified"""
         flux = np.random.normal(1.0, 0.1, 100)
         flux_copy = flux.copy()
-        gaps = [(0, 100)]
+        cont_windows = [(0, 100)]
         
-        _find_iterative_median(flux, gaps, n=3)
+        _find_iterative_median(flux, cont_windows, n=3)
         
         # Original array should be unchanged
         assert np.allclose(flux, flux_copy)
@@ -297,9 +297,9 @@ class TestFindIterativeMedian:
     def test_returns_copy_not_view(self):
         """Test that result is a copy, not a view"""
         flux = np.random.normal(1.0, 0.1, 100)
-        gaps = [(0, 100)]
+        cont_windows = [(0, 100)]
         
-        result = _find_iterative_median(flux, gaps, n=3)
+        result = _find_iterative_median(flux, cont_windows, n=3)
         
         # Modifying result should not affect input
         result[0] = 999.0
@@ -310,9 +310,9 @@ class TestFindIterativeMedian:
     def test_single_point_gap(self):
         """Test with a gap containing only one point"""
         flux = np.random.normal(1.0, 0.1, 100)
-        gaps = [(0, 50), (50, 51), (51, 100)]  # Single point gap
+        cont_windows = [(0, 50), (50, 51), (51, 100)]  # Single-point window
         
-        result = _find_iterative_median(flux, gaps, n=3)
+        result = _find_iterative_median(flux, cont_windows, n=3)
         
         assert result.shape == flux.shape
         assert np.all(np.isfinite(result))
@@ -323,10 +323,10 @@ class TestFindIterativeMedian:
         """Test that median is calculated accurately"""
         # Create data with known median
         flux = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
-        gaps = [(0, 5)]
+        cont_windows = [(0, 5)]
         
         # high max_sigma to avoid clipping
-        result = _find_iterative_median(flux, gaps, n=1, max_sigma=10.0)
+        result = _find_iterative_median(flux, cont_windows, n=1, max_sigma=10.0)
         
         # Median should be 3.0
         assert result[0] == pytest.approx(3.0)
@@ -338,10 +338,10 @@ class TestFindIterativeMedian:
         flux = np.ones(100) * 1.0
         flux[90:95] = [2.0, 3.0, 4.0, 5.0, 6.0]  # Progressive outliers
         
-        gaps = [(0, 100)]
+        cont_windows = [(0, 100)]
         
         # Multiple iterations should converge
-        result = _find_iterative_median(flux, gaps, n=10, max_sigma=2.0)
+        result = _find_iterative_median(flux, cont_windows, n=10, max_sigma=2.0)
         
         # Should be close to 1.0 (outliers excluded)
         assert result[0] == pytest.approx(1.0, abs=0.05)
@@ -358,13 +358,13 @@ class TestFindIterativeMedian:
         flux[[5,6,7,8,9,20,21,22,23,25,49]] = 1.06
         flux[[15,16,17,18,19,30,31,32,33,24,48]] = 1.05
         
-        gaps = [(0, 150)]
+        cont_windows = [(0, 150)]
         
         # With n=1 (less iteration)
-        result_n1 = _find_iterative_median(flux, gaps, n=1, max_sigma=5.0)
+        result_n1 = _find_iterative_median(flux, cont_windows, n=1, max_sigma=5.0)
         
         # With n=10 (more iteration)
-        result_n10 = _find_iterative_median(flux, gaps, n=10, max_sigma=5.0)
+        result_n10 = _find_iterative_median(flux, cont_windows, n=10, max_sigma=5.0)
         print(result_n1[0], result_n10[0])
         # More iterations should converge better
         assert np.isfinite(result_n1[0])
@@ -373,9 +373,9 @@ class TestFindIterativeMedian:
         assert result_n1[0] > result_n10[0] 
 
 
-def _burst_lc(bursts, gaps, sigma=1e-3, seed=42):
+def _burst_lc(bursts, elevated, sigma=1e-3, seed=42):
     """Flat, detrended light curve (white noise ``sigma``) with bursts at
-    +10 sigma.  ``bursts`` are (start, stop) cadence ranges; ``gaps`` are
+    +10 sigma.  ``bursts`` are (start, stop) cadence ranges; ``elevated`` are
     (start, stop, level) ranges raised by ``level`` sigma, e.g. the stretch
     between two fragments of one flare."""
     rng = np.random.default_rng(seed)
@@ -384,7 +384,7 @@ def _burst_lc(bursts, gaps, sigma=1e-3, seed=42):
     flux = 1. + rng.normal(0., sigma, n)
     for a, b in bursts:
         flux[a:b] += 10. * sigma
-    for a, b, level in gaps:
+    for a, b, level in elevated:
         flux[a:b] += level * sigma
     flc = FlareLightCurve(time=time, flux=flux, flux_err=np.full(n, sigma))
     flc.detrended_flux = flux
@@ -395,7 +395,7 @@ def _burst_lc(bursts, gaps, sigma=1e-3, seed=42):
 def test_find_flares_merges_fragments_of_one_flare():
     """Two bursts with the flux staying ~1.5 sigma above baseline in between
     are one flare that dipped under the detection threshold."""
-    flc = _burst_lc(bursts=[(400, 410), (430, 440)], gaps=[(410, 430, 1.5)])
+    flc = _burst_lc(bursts=[(400, 410), (430, 440)], elevated=[(410, 430, 1.5)])
 
     unmerged = flc.find_flares().flares
     assert len(unmerged) == 2
@@ -411,14 +411,14 @@ def test_find_flares_merges_fragments_of_one_flare():
 def test_find_flares_merging_chains_fragments():
     """Three fragments of one flare become one detection."""
     flc = _burst_lc(bursts=[(300, 310), (330, 340), (360, 370)],
-                    gaps=[(310, 330, 1.5), (340, 360, 1.5)])
+                    elevated=[(310, 330, 1.5), (340, 360, 1.5)])
     assert len(flc.find_flares().flares) == 3
     assert len(flc.find_flares(merge_sigma=1.).flares) == 1
 
 
 def test_find_flares_keeps_separate_flares_apart():
     """Two bursts with the flux back at baseline in between stay separate."""
-    flc = _burst_lc(bursts=[(400, 410), (430, 440)], gaps=[])
+    flc = _burst_lc(bursts=[(400, 410), (430, 440)], elevated=[])
     assert len(flc.find_flares(merge_sigma=1.).flares) == 2
 
 

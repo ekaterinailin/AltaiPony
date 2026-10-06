@@ -6,12 +6,12 @@ from ...utils import upper_outlier_threshold
 from ..periodicity import lomb_scargle
 
 
-def _segment_gaps(gaps, time, period, n_per):
-    """Divide each real gap segment into evenly-sized subsegments.
+def _split_cont_windows(cont_windows, time, period, n_per):
+    """Divide each continuous observing window into evenly-sized subsegments.
 
-    For each segment in ``gaps`` (which represent real data gaps, not
+    For each window in ``cont_windows`` (bounded by real data gaps, not
     artificial cuts), compute how many equal pieces are needed so that no
-    piece exceeds ``n_per`` cycles, then split the segment evenly by index.
+    piece exceeds ``n_per`` cycles, then split the window evenly by index.
     Segments already shorter than ``n_per`` cycles are left untouched.
 
     Because the number of pieces is chosen upfront and the segment is divided
@@ -20,8 +20,8 @@ def _segment_gaps(gaps, time, period, n_per):
 
     Parameters
     ----------
-    gaps : list of (int, int)
-        Real segment boundaries from ``FlareLightCurve.find_gaps``.
+    cont_windows : list of (int, int)
+        Real segment boundaries from ``FlareLightCurve.find_cont_windows``.
     time : array_like
         Full time array (days).
     period : float
@@ -38,7 +38,7 @@ def _segment_gaps(gaps, time, period, n_per):
     result = []
     max_span = n_per * period
 
-    for le, ri in gaps:
+    for le, ri in cont_windows:
         span = time[ri - 1] - time[le]
         n_pieces = int(np.ceil(span / max_span)) if span > max_span else 1
         # Divide the index range into n_pieces equal slices
@@ -53,7 +53,7 @@ def fit_multisine(
     time,
     flux,
     flux_med,
-    gaps,
+    cont_windows,
     period,
     n_harmonics=5,
     refine_period=True,
@@ -115,9 +115,9 @@ def fit_multisine(
         Raw flux values.
     flux_med : array_like
         Iterative-median baseline (output of ``_find_iterative_median``).
-    gaps : list of (int, int)
+    cont_windows : list of (int, int)
         Segment boundaries ``(left_index, right_index)`` as produced by
-        ``FlareLightCurve.find_gaps``.
+        ``FlareLightCurve.find_cont_windows``.
     period : float
         Starting period in days (typically the Lomb-Scargle peak).
     n_harmonics : int
@@ -161,7 +161,7 @@ def fit_multisine(
     seg_periods = {}
     seg_amplitudes = {}  # mid-segment fundamental amplitude sqrt(a₁² + b₁²)
 
-    for le, ri in gaps:
+    for le, ri in cont_windows:
         t_seg = time[le:ri]
         f_seg = flux[le:ri]
         fmed_seg = np.nanmedian(flux_med[le:ri])

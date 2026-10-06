@@ -179,7 +179,7 @@ def find_flares(flc, minsep=3, sigma=None, merge_sigma=None, **kwargs):
         raise TypeError('Flare finding only works on de-trended light curves.')
 
     #Now work on periods of continuous observation with no gaps
-    for (le,ri) in lc.gaps:
+    for (le,ri) in lc.cont_windows:
         error = lc.detrended_flux_err[le:ri]
         flux = lc.detrended_flux[le:ri]
         
@@ -259,7 +259,7 @@ def detrend_savgol(lc, window_length=None, pad=3, printwl=False, **kwargs):
     window_length : int
         number of datapoints for Sav.-Gol. filter,
         either one value for entire light curve
-        of piecewise for gaps
+        or one value per continuous window
     pad : int
         mask this number of data points before and
         after each outlier. Note that sigma_clip
@@ -278,16 +278,17 @@ def detrend_savgol(lc, window_length=None, pad=3, printwl=False, **kwargs):
     lc["flux_model"] = np.full_like(lc.flux.value, np.nan)
     lc.detrended_flux_err = lc.flux_err.value
     
-    if lc.gaps is None:
-        lc = lc.find_gaps()
+    if lc.cont_windows is None:
+        lc = lc.find_cont_windows()
+    cw = lc.cont_windows
     if (isinstance(window_length, tuple) or isinstance(window_length, list)):
-        gaps = [(window_length[i], lc.gaps[i][0], lc.gaps[i][1]) for i in range(len(lc.gaps))]
+        windows = [(window_length[i], cw[i][0], cw[i][1]) for i in range(len(cw))]
     elif isinstance(window_length, int):
-        gaps = [(window_length, lc.gaps[i][0], lc.gaps[i][1]) for i in range(len(lc.gaps))]
+        windows = [(window_length, cw[i][0], cw[i][1]) for i in range(len(cw))]
     elif window_length is None:
-        gaps = [(-999, lc.gaps[i][0], lc.gaps[i][1]) for i in range(len(lc.gaps))]
+        windows = [(-999, cw[i][0], cw[i][1]) for i in range(len(cw))]
     
-    for (wl,le,ri) in gaps:
+    for (wl,le,ri) in windows:
         
         # Do the iterative sigma clipping
         ok = np.where(sigma_clip(lc.flux.value[le:ri], **kwargs))[0] + le
@@ -385,7 +386,7 @@ def detrend_savgol(lc, window_length=None, pad=3, printwl=False, **kwargs):
     return lc
 
 
-def _find_iterative_median(detrended_flux, gaps, n=10, **kwargs):
+def _find_iterative_median(detrended_flux, cont_windows, n=10, **kwargs):
     """
     Internal function to compute iterative median from arrays.
     
@@ -393,8 +394,8 @@ def _find_iterative_median(detrended_flux, gaps, n=10, **kwargs):
     ----------
     detrended_flux : np.ndarray
         Detrended flux array
-    gaps : list of tuples or None
-        List of (start_idx, end_idx) tuples defining continuous segments
+    cont_windows : list of tuples or None
+        List of (start_idx, end_idx) tuples defining continuous windows
     **kwargs : dict
         Keyword arguments to pass to sigma_clip
     
@@ -409,15 +410,15 @@ def _find_iterative_median(detrended_flux, gaps, n=10, **kwargs):
     # Initialize it_med with global median
     it_med = np.full_like(detrended_flux, np.nanmedian(detrended_flux))
     
-    # If no gaps provided, treat entire array as one segment
-    if gaps is None or len(gaps) == 0:
+    # If no windows provided, treat entire array as one segment
+    if cont_windows is None or len(cont_windows) == 0:
         good_mask = sigma_clip(detrended_flux, max_iter=n, **kwargs)
         good_flux = detrended_flux[good_mask]
         if len(good_flux) > 0:
             it_med[:] = np.nanmedian(good_flux)
     else:
-        # Process each gap segment
-        for (le, ri) in gaps:
+        # Process each continuous window
+        for (le, ri) in cont_windows:
             flux_segment = detrended_flux[le:ri]
             
             # Find median that is not skewed by outliers

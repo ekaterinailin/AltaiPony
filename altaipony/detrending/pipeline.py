@@ -16,7 +16,7 @@ import numpy as np
 import astropy.units as u
 
 from ..altai import _find_iterative_median
-from .baselines.multisine import _segment_gaps, fit_multisine
+from .baselines.multisine import _split_cont_windows, fit_multisine
 from .baselines.polynomial import fit_lightcurve_detrender
 from .baselines.spline import fit_spline
 from .gp import _CELERITE2_AVAILABLE, _identify_flare_mask, fit_gp_rotation
@@ -230,7 +230,7 @@ def custom_detrending(
     FlareLightCurve with detrended_flux attribute
     """
     dt = np.mean(np.diff(lc.time.value))
-    gaps = lc.find_gaps(maxgap=maxgap * dt).gaps
+    cont_windows = lc.find_cont_windows(maxgap=maxgap * dt).cont_windows
     # Store original flux as a column so it survives filtering operations
     lc["original_flux"] = lc.flux.copy()
     lc["original_flux_err"] = lc.flux_err.copy()
@@ -264,7 +264,7 @@ def custom_detrending(
         # Replace both the multi-sine and spline baselines with the external
         # lightcurve_detrender pipeline.
         m2flux, _, best_params = fit_lightcurve_detrender(
-            time, flux, lc.flux_err.value, gaps, config=detrender_config
+            time, flux, lc.flux_err.value, cont_windows, config=detrender_config
         )
         if is_periodic:
             best_params["dominant_period"] = dominant_period
@@ -272,18 +272,18 @@ def custom_detrending(
     elif baseline_method in ("auto", "multisine") and (
         use_multisine or baseline_method == "multisine"
     ):
-        flux_med = _find_iterative_median(flux, gaps, longdecay=longdecay)
+        flux_med = _find_iterative_median(flux, cont_windows, longdecay=longdecay)
 
         # Divide each real segment into equal subsegments of at most n_per
         # cycles.  Because the split is computed upfront for the whole segment
         # and the pieces are equal, there are no leftover slivers at the edges.
-        multisine_gaps = _segment_gaps(gaps, time, dominant_period, n_per)
+        multisine_windows = _split_cont_windows(cont_windows, time, dominant_period, n_per)
 
         m2flux, _, best_params = fit_multisine(
             time,
             flux,
             flux_med,
-            multisine_gaps,
+            multisine_windows,
             period=dominant_period,
             n_harmonics=n_sine_harmonics,
             refine_period=refine_period_per_segment,
@@ -293,12 +293,12 @@ def custom_detrending(
         )
         best_params["method"] = "multisine"
         best_params["dominant_period"] = dominant_period
-        best_params["multisine_n_segments"] = len(multisine_gaps)
+        best_params["multisine_n_segments"] = len(multisine_windows)
 
     else:
         # Non-periodic, or strong but long-period: fit a spline to the general
         # trends.
-        m2flux, _, best_params = fit_spline(time, flux, gaps, longdecay=longdecay)
+        m2flux, _, best_params = fit_spline(time, flux, cont_windows, longdecay=longdecay)
         best_params["method"] = "spline"
 
     # Flare mask carried from the baseline stage (currently only the external

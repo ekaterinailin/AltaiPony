@@ -4,7 +4,7 @@ import pytest
 import numpy as np
 
 from ..flarelc import FlareLightCurve
-from ..utils import split_gaps, expand_mask
+from ..utils import split_cont_windows, split_gaps, expand_mask
 
 import copy
 
@@ -26,11 +26,11 @@ def test_expand_mask():
 
 
 
-def test_split_gaps_basic():
+def test_split_cont_windows_basic():
     """Test basic functionality with the example from docstring"""
-    gaps = [(0., 20.), (21., 34.), (37., 41.)]
+    cont_windows = [(0., 20.), (21., 34.), (37., 41.)]
     splits = [1.5, 14., 39.]
-    result = split_gaps(gaps, splits)
+    result = split_cont_windows(cont_windows, splits)
     
     expected = [(0., 1.5), (1.5, 14.), (14., 20.), 
                 (21.0, 34.), (37., 39.), (39., 41.)]
@@ -38,24 +38,24 @@ def test_split_gaps_basic():
     assert result == expected, f"Expected {expected}, but got {result}"
 
 
-def test_split_gaps_multiple_splits_in_one_gap():
-    """Test multiple splits within a single gap"""
-    gaps = [(0., 100.), (150., 200.)]
+def test_split_cont_windows_multiple_splits_in_one_window():
+    """Test multiple splits within a single window"""
+    cont_windows = [(0., 100.), (150., 200.)]
     splits = [25., 50., 75.]
-    result = split_gaps(gaps, splits)
+    result = split_cont_windows(cont_windows, splits)
     
     expected = [(0., 25.), (25., 50.), (50., 75.), (75., 100.), 
                 (150., 200.)]
     
     assert result == expected
-    assert len(result) == 5, "Should have 5 gaps total"
+    assert len(result) == 5, "Should have 5 windows total"
 
 
-def test_split_gaps_single_split():
+def test_split_cont_windows_single_split():
     """Test with a single split value"""
-    gaps = [(10., 30.), (40., 60.)]
+    cont_windows = [(10., 30.), (40., 60.)]
     splits = [20.]
-    result = split_gaps(gaps, splits)
+    result = split_cont_windows(cont_windows, splits)
     
     expected = [(10., 20.), (20., 30.), (40., 60.)]
     
@@ -63,26 +63,26 @@ def test_split_gaps_single_split():
     assert len(result) == 3
 
 
-def test_split_gaps_invalid_splits_raises_error():
+def test_split_cont_windows_invalid_splits_raises_error():
     """Test that invalid split values raise an IndexError"""
-    gaps = [(0., 20.), (30., 50.)]
+    cont_windows = [(0., 20.), (30., 50.)]
     
-    # Split value outside any gap range
-    invalid_splits = [25.]  # This is between gaps, not inside any gap
+    # Split value outside any window
+    invalid_splits = [25.]  # This is in the gap between the windows, not inside any window
     
     with pytest.raises(IndexError) as exc_info:
-        split_gaps(gaps, invalid_splits)
+        split_cont_windows(cont_windows, invalid_splits)
     
     assert "splits you passed are wrong" in str(exc_info.value)
 
 
-def test_split_gaps_preserves_gap_order():
-    """Test that gaps remain sorted after splitting"""
-    gaps = [(100., 200.), (10., 50.), (250., 300.)]
-    gaps.sort(key=lambda x: x[0])  # Pre-sort
+def test_split_cont_windows_preserves_window_order():
+    """Test that windows remain sorted after splitting"""
+    cont_windows = [(100., 200.), (10., 50.), (250., 300.)]
+    cont_windows.sort(key=lambda x: x[0])  # Pre-sort
     splits = [25., 150.]
     
-    result = split_gaps(gaps, splits)
+    result = split_cont_windows(cont_windows, splits)
     
     # Check that result is sorted
     for i in range(len(result) - 1):
@@ -349,3 +349,9 @@ class TestSqrtRounding:
             f"Run of {run_length}: expected {expected_zeros} zeros, got {zero_count}"
         )
 
+
+def test_split_gaps_is_deprecated_alias():
+    """The old name still works but warns."""
+    windows, splits = [(0., 20.), (21., 34.)], [10.]
+    with pytest.warns(DeprecationWarning):
+        assert split_gaps(windows, splits) == split_cont_windows(windows, splits)

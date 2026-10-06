@@ -68,7 +68,7 @@ def test_generate_fake_flare_distribution():
 # def test_inject_fake_flares():
 #     flc = mock_flc(detrended=True)
 #     np.random.seed(84712)
-#     flc = flc.find_gaps()
+#     flc = flc.find_cont_windows()
 #     fake_flc = inject_fake_flares(flc)
 #
 #     assert fake_flc.fake_flares.size == 20
@@ -81,7 +81,7 @@ def test_generate_fake_flare_distribution():
 #     assert fake_flc.detrended_flux.shape == flc.detrended_flux.shape
 #     flc = mock_flc(detrended=False)
 #     np.random.seed(84712)
-#     flc = flc.find_gaps()
+#     flc = flc.find_cont_windows()
 #     fake_flc = inject_fake_flares(flc, inject_before_detrending=True)
 #
 #     assert fake_flc.fake_flares.size == 20

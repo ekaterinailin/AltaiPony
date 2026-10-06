@@ -11,7 +11,7 @@ from ...utils import MAD_TO_STD
 def fit_spline(
     time,
     flux,
-    gaps,
+    cont_windows,
     coarseness_range=(5, 15, 1),
     spline_orders=(2, 3),
     n_phase_shifts=3,
@@ -29,7 +29,7 @@ def fit_spline(
         Time values
     flux : array
         Flux values
-    gaps : list of tuples
+    cont_windows : list of tuples
         List of (start, end) indices for continuous segments
     coarseness_range : tuple
         (min, max, step) for spline coarseness in hours
@@ -63,7 +63,7 @@ def fit_spline(
     best_params : dict
         Parameters of the best fit
     """
-    flux_med = _find_iterative_median(flux, gaps, **kwargs)
+    flux_med = _find_iterative_median(flux, cont_windows, **kwargs)
 
     coarseness_values = np.arange(
         coarseness_range[0], coarseness_range[1] + 1, coarseness_range[2]
@@ -80,7 +80,7 @@ def fit_spline(
                     time,
                     flux,
                     flux_med,
-                    gaps,
+                    cont_windows,
                     coarseness,
                     k,
                     dt,
@@ -90,7 +90,7 @@ def fit_spline(
                     smoothing,
                 )
                 score = _evaluate_spline_fit(
-                    flux, model, gaps, edge_penalty_weight=edge_penalty_weight
+                    flux, model, cont_windows, edge_penalty_weight=edge_penalty_weight
                 )
                 if best is None or score < best["score"]:
                     best = {
@@ -117,7 +117,7 @@ def _fit_single_spline(
     time,
     flux,
     flux_med,
-    gaps,
+    cont_windows,
     coarseness,
     k,
     dt,
@@ -141,7 +141,7 @@ def _fit_single_spline(
     model = np.full_like(flux, np.nan)
     newflux = np.full_like(flux, np.nan)
 
-    for le, ri in gaps:
+    for le, ri in cont_windows:
         segment_len = ri - le
         t_s, f_s = time[le:ri], flux[le:ri]
 
@@ -297,7 +297,7 @@ def _build_knot_points(time, flux, n, phase_offset, percentile):
     return _sanitize_knots(t_knots, f_knots, s_knots)
 
 
-def _evaluate_spline_fit(flux, model, gaps, edge_fraction=0.1, edge_penalty_weight=0.5):
+def _evaluate_spline_fit(flux, model, cont_windows, edge_fraction=0.1, edge_penalty_weight=0.5):
     """Evaluate spline fit quality, penalizing flare contamination and edge effects.
 
     A good baseline should have:
@@ -312,7 +312,7 @@ def _evaluate_spline_fit(flux, model, gaps, edge_fraction=0.1, edge_penalty_weig
         Original flux values
     model : array
         Spline model values
-    gaps : list of tuples
+    cont_windows : list of tuples
         Segment boundaries
     edge_fraction : float
         Fraction of segment to consider as "edge" (default 10%)
@@ -322,7 +322,7 @@ def _evaluate_spline_fit(flux, model, gaps, edge_fraction=0.1, edge_penalty_weig
     residuals = []
     edge_deviations = []
 
-    for le, ri in gaps:
+    for le, ri in cont_windows:
         seg_len = ri - le
         valid = ~(np.isnan(model[le:ri]) | np.isnan(flux[le:ri]))
 

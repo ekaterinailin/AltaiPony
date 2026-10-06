@@ -6,73 +6,79 @@ import pandas as pd
 import numpy as np
 			
 import logging
+import warnings
 LOG = logging.getLogger(__name__)
 
 
-def split_gaps(gaps, splits):
+def split_cont_windows(cont_windows, splits):
     """Helper function that splices up a list
     of tuples into more tuples at values defined by
     splits, like:
     ```
-    gaps = [(0., 20.), (21., 34.), (37., 41.)]
+    cont_windows = [(0., 20.), (21., 34.), (37., 41.)]
     splits = [1.5, 14., 39.]
-    result = split_gaps(gaps, splits)
+    result = split_cont_windows(cont_windows, splits)
     >>> result = [(0., 1.5), (1.5, 14.), (14., 20.), 
     >>>           (21.0, 34.), (37., 39.), (39., 41.)]
     
     Parameters:
     ------------
-    gaps : list of tuples of floats or ints
-        
+    cont_windows : list of tuples of floats or ints
+        Continuous windows as (start, stop) pairs.
     splits: list of floats or ints
     
     Return:
     -------
-    list of tuples of floats or ints - extended gaps
+    list of tuples of floats or ints - the split windows
     
     """
     try:
-        # transform gaps to an array
-        npgaps = np.array(gaps).T
+        # transform the windows to an array
+        npwindows = np.array(cont_windows).T
 
-        # find where the existing gaps must be split up
-        splitloc = [np.where((s > npgaps[0]) & (s < npgaps[1]))[0][0] for s in splits]
+        # find where the existing windows must be split up
+        splitloc = [np.where((s > npwindows[0]) & (s < npwindows[1]))[0][0] for s in splits]
         
     except IndexError:
         raise IndexError(f"The splits you passed are wrong or NaN. "
-                         f"They should be values between {gaps[0][0]} and {gaps[-1][1]}.")
+                         f"They should be values between {cont_windows[0][0]} and {cont_windows[-1][1]}.")
 
     # sort the user's inputs
     df = pd.DataFrame({"splits":splits,
                        "splitlocs":splitloc})
 
     # create an independent duplicate
-    gaps2 = copy.deepcopy(gaps)
+    windows2 = copy.deepcopy(cont_windows)
 
 
     # group splitting locations
     for loc, g in df.groupby('splitlocs'):
 
-        # remove gaps that will be replaced by new ones
-        gaps2.remove(gaps[loc])
+        # remove windows that will be replaced by new ones
+        windows2.remove(cont_windows[loc])
 
-        # take left boundary from old gap, 
+        # take left boundary from old window, 
         # then append new splits that go inbetween, 
         # and then add the right boundary
-        l = [gaps[loc][0]] + list(g.splits.values) + [gaps[loc][1]]
+        l = [cont_windows[loc][0]] + list(g.splits.values) + [cont_windows[loc][1]]
 
-        # reformat the list into a set of gaps
-        newgaps = [(i,j) for i, j in zip(l[:-1],l[1:])]
+        # reformat the list into a set of windows
+        new_windows = [(i,j) for i, j in zip(l[:-1],l[1:])]
 
-        # insert new gaps into the new list of gaps
-        gaps2[loc:loc] = newgaps 
+        # insert new windows into the new list of windows
+        windows2[loc:loc] = new_windows 
 
     # sort in ascending order
-    gaps2.sort(key=lambda x: x[0])
+    windows2.sort(key=lambda x: x[0])
 
-    return gaps2 
+    return windows2 
 
 
+def split_gaps(gaps, splits):
+    """Deprecated alias of ``split_cont_windows``."""
+    warnings.warn("split_gaps is deprecated; use split_cont_windows.",
+                  DeprecationWarning, stacklevel=2)
+    return split_cont_windows(gaps, splits)
 
 
 #: Multiply a median absolute deviation (MAD) by this factor to obtain the

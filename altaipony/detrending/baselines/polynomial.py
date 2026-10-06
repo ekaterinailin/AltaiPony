@@ -1165,7 +1165,7 @@ def run_detrending(
     )
 
 
-def fit_lightcurve_detrender(time, flux, flux_err, gaps, config=None):
+def fit_lightcurve_detrender(time, flux, flux_err, cont_windows, config=None):
     """Baseline fit via the external ``lightcurve_detrender`` pipeline.
 
     Adapter that runs :func:`lightcurve_detrender.run_detrending` and returns
@@ -1186,14 +1186,14 @@ def fit_lightcurve_detrender(time, flux, flux_err, gaps, config=None):
       the flux level (``+ median(flux)``) so the downstream Savitzky-Golay
       passes see a signal at the original level, matching the convention of the
       other baseline fitters.
-    * ``gaps`` is accepted for signature compatibility but not used directly —
+    * ``cont_windows`` is accepted for signature compatibility but not used directly —
       the external pipeline detects its own continuous blocks from ``time``.
 
     Parameters
     ----------
     time, flux, flux_err : ndarray
         Full-grid arrays in days / flux units (may contain NaNs).
-    gaps : list of (int, int)
+    cont_windows : list of (int, int)
         Segment boundaries (unused; see Notes).
     config : lightcurve_detrender.DetrendConfig or None
         Optional configuration forwarded to ``run_detrending``.

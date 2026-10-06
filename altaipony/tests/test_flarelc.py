@@ -100,7 +100,7 @@ def test_sample_flare_recovery():
     assert data[(data.istart > 14) & (data.istart < 19)].shape[0] == 0
     #test if all injected event are covered in the merged flares:
     assert data.shape[0] == 2
-    assert fflc.gaps == [(0, 1000)]
+    assert fflc.cont_windows == [(0, 1000)]
     assert np.median(fflc.it_med.value) == pytest.approx(500.005274113832)
     
     # Custom case
@@ -119,7 +119,7 @@ def test_sample_flare_recovery():
     assert data[(data.istart > 14) & (data.istart < 19)].shape[0] == 0
     #test if all injected event are covered in the merged flares:
     assert data.shape[0] == 10
-    assert fflc.gaps == [(0, 1000)]
+    assert fflc.cont_windows == [(0, 1000)]
     assert np.median(fflc.it_med.value) == pytest.approx(500.005274113832/2.)
     assert flcd.detrended_flux.value == pytest.approx(flc.flux/2.)
 
@@ -144,7 +144,7 @@ def test_sample_flare_recovery():
     
     #test if all injected event are covered in the merged flares:
     assert data.shape[0] == 10
-    assert fflc.gaps == [(0, 1000)]
+    assert fflc.cont_windows == [(0, 1000)]
     assert float(np.median(fflc.it_med)) == pytest.approx(500.005274113832/2.)
     assert flcd.detrended_flux == pytest.approx(flc.flux/2.)
        
@@ -196,7 +196,7 @@ def test_invalid_lightcurve():
         FlareLightCurve(time=time, flux=flux)
 
 
-def test_find_gaps():
+def test_find_cont_windows():
     flux = np.random.rand(1000)
     time = np.linspace(0,30,1000)
     flux[20:200] = np.nan
@@ -204,8 +204,21 @@ def test_find_gaps():
     flux = flux[np.where(~np.isnan(flux))]
     flc = FlareLightCurve(time=time, flux=flux)
 
-    flc = flc.find_gaps()
-    assert flc.gaps == [(0, 20), (20, 820)]
+    flc = flc.find_cont_windows()
+    assert flc.cont_windows == [(0, 20), (20, 820)]
+
+
+def test_gaps_and_find_gaps_are_deprecated_aliases():
+    """The old names still work but warn."""
+    time = np.linspace(0, 30, 1000)
+    flc = FlareLightCurve(time=time, flux=np.random.rand(1000))
+    with pytest.warns(DeprecationWarning):
+        flc_old = flc.find_gaps()
+    with pytest.warns(DeprecationWarning):
+        assert flc_old.gaps == flc.find_cont_windows().cont_windows
+    with pytest.warns(DeprecationWarning):
+        flc_old.gaps = [(0, 500), (500, 1000)]
+    assert flc_old.cont_windows == [(0, 500), (500, 1000)]
 
 def test_detrend():
     # Test SAVGOL detrending
@@ -399,10 +412,10 @@ def test_get_energies():
 def test_inject_fake_flares():
     flc = mock_flc(detrended=True)
     np.random.seed(84712)
-    flc = flc.find_gaps()
+    flc = flc.find_cont_windows()
     fake_flc = flc.inject_fake_flares()
     # make sure you inject only one flare per LC
-    assert len(fake_flc.gaps) == fake_flc.fake_flares.shape[0]
+    assert len(fake_flc.cont_windows) == fake_flc.fake_flares.shape[0]
     assert (set(fake_flc.fake_flares.columns.values.tolist()) == 
             {'amplitude', 'duration_d', 'ed_inj', 'peak_time'})
     assert fake_flc.detrended_flux_err.value.all() >= 1e-10
@@ -410,11 +423,11 @@ def test_inject_fake_flares():
     assert fake_flc.detrended_flux.value.shape == flc.detrended_flux.value.shape
     flc = mock_flc(detrended=False)
     np.random.seed(84712)
-    flc = flc.find_gaps()
+    flc = flc.find_cont_windows()
     fake_flc = flc.inject_fake_flares(inject_before_detrending=True)
 
     # make sure you inject only one flare per LC
-    assert len(fake_flc.gaps) == fake_flc.fake_flares.shape[0]
+    assert len(fake_flc.cont_windows) == fake_flc.fake_flares.shape[0]
     assert (set(fake_flc.fake_flares.columns.values.tolist()) == 
             {'amplitude', 'duration_d', 'ed_inj', 'peak_time'})
     assert fake_flc.flux_err.value.all() >= 1e-10

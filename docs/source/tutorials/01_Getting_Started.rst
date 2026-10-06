@@ -10,7 +10,7 @@ curve via ``lightkurve``.
 
     import lightkurve as lk
     
-    from altaipony.customdetrend import custom_detrending
+    from altaipony.detrending import custom_detrending
     from altaipony.lcio import to_flare_lightcurve
     
     import matplotlib.pyplot as plt

@@ -7,11 +7,11 @@ import matplotlib.pyplot as plt
 
 def detrend_savgol(lc, og_flux, og_flux_err, max_sigma=2.5, longdecay=6, 
                    w=121, break_tolerance=10, **kwargs):
-    gaps = lc.find_gaps().gaps
+    cont_windows = lc.find_cont_windows().cont_windows
     
     new_lcs = []
-    for [le,ri] in gaps:
-        new_lcs.append(detrend_savgol_gap(lc[le:ri], og_flux[le:ri], og_flux_err[le:ri], max_sigma=2.5, longdecay=6, 
+    for [le,ri] in cont_windows:
+        new_lcs.append(detrend_savgol_window(lc[le:ri], og_flux[le:ri], og_flux_err[le:ri], max_sigma=2.5, longdecay=6, 
                        w=121, break_tolerance=10, **kwargs))
                        
     collection = lk.LightCurveCollection(new_lcs)
@@ -22,7 +22,7 @@ def detrend_savgol(lc, og_flux, og_flux_err, max_sigma=2.5, longdecay=6,
     return lcr
 
 
-def detrend_savgol_gap(lc, og_flux, og_flux_err, max_sigma=2.5, longdecay=6, 
+def detrend_savgol_window(lc, og_flux, og_flux_err, max_sigma=2.5, longdecay=6, 
                    w=121, break_tolerance=10, **kwargs):
     """New detrending with savgol filter.
     
