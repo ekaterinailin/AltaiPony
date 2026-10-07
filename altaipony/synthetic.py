@@ -3,7 +3,8 @@ Synthetic light curves for tests and injection-recovery experiments.
 
 A light curve is built from a cadence grid with data gaps, sinusoidal stellar
 variability, optional fast-rotation spot modulation, white noise, and flares
-from the Tovar Mendoza et al. (2022) template.  Each component has a function
+from the Tovar Mendoza et al. (2022) template, scaled to a quiescent baseline
+in e-/s.  All amplitudes and the noise level are relative to that baseline.  Each component has a function
 that builds it from explicit parameters (for tests) and, where applicable, one
 that draws random parameters (for injection-recovery experiments).
 """
@@ -130,8 +131,9 @@ def generate_synthetic_lc(
     fast_rotator_fraction=0.2,
     fast_period_range_hr=(6.0, 18.0),
     fast_amplitude_range=(0.02, 0.05),
+    baseline_range=(1000.0, 100000.0),
 ):
-    """Generate one random synthetic light curve, normalised to ~1.
+    """Generate one random synthetic light curve in e-/s.
 
     Parameters
     ----------
@@ -156,14 +158,18 @@ def generate_synthetic_lc(
         modulation and its 6–36 h sinusoid correction takes over.
     fast_amplitude_range : tuple of float
         Range of relative fast-rotation amplitudes.  Default 2–5 %.
+    baseline_range : tuple of float or None
+        Range of the quiescent baseline in e-/s, drawn uniformly.  Default
+        1000–100000.  None gives a light curve normalised to ~1.
 
     Returns
     -------
     time : ndarray
     flux : ndarray
     meta : dict
-        ``noise_ppm``, ``n_modes``, ``seed``, ``fast_rot_period_hr`` and
-        ``fast_rot_amp`` (both NaN if the light curve is not a fast rotator).
+        ``noise_ppm``, ``n_modes``, ``seed``, ``baseline`` (e-/s, or 1),
+        ``fast_rot_period_hr`` and ``fast_rot_amp`` (both NaN if the light
+        curve is not a fast rotator).
     """
     rng = np.random.default_rng(seed)
     # Separate stream for the fast rotator, so that adding it does not change
@@ -186,7 +192,15 @@ def generate_synthetic_lc(
 
     flux += rng.normal(0.0, noise_ppm * 1e-6, size=len(time))
 
-    meta = dict(noise_ppm=noise_ppm, n_modes=n_modes, seed=seed,
+    # Quiescent level in e-/s, from its own stream so that the shape of the
+    # light curve does not depend on whether it is scaled.
+    baseline = 1.0
+    if baseline_range is not None:
+        baseline_rng = np.random.default_rng(None if seed is None else [seed, 2])
+        baseline = baseline_rng.uniform(*baseline_range)
+        flux = flux * baseline
+
+    meta = dict(noise_ppm=noise_ppm, n_modes=n_modes, seed=seed, baseline=baseline,
                 fast_rot_period_hr=fast_period_hr, fast_rot_amp=fast_amp)
     return time, flux, meta
 
@@ -195,13 +209,17 @@ def generate_synthetic_lc(
 # Flares
 # ---------------------------------------------------------------------------
 
-def inject_flares(time, flux, n_flares=None, rng=None, flares=None, mean_n_flares=7.5):
+def inject_flares(time, flux, n_flares=None, rng=None, flares=None, mean_n_flares=7.5,
+                  baseline=1.0):
     """Add flares (Tovar Mendoza et al. 2022 template) to a light curve.
 
     Either pass ``flares`` explicitly, or let them be drawn at random:
     ``n_flares`` (default Poisson(``mean_n_flares``)) flares at random cadences, with FWHM
     log-uniform in 6–180 min and amplitude log-uniform in 2.5–50 times the
     point-to-point noise of ``flux``.
+
+    Amplitudes are relative to the quiescent level ``baseline`` (in the units
+    of ``flux``); the injected flux is ``baseline`` times the template.
 
     ``fwhm`` and ``ampl`` are the template's parameters: the template peaks at
     about 0.95 ``ampl``, its measured FWHM is about 1.09 ``fwhm``, and its
@@ -218,20 +236,23 @@ def inject_flares(time, flux, n_flares=None, rng=None, flares=None, mean_n_flare
     mean_n_flares : float
         Mean number of random flares per light curve when ``n_flares`` is
         None.  Default 7.5 (about 0.3 per day in a 25-day light curve).
+    baseline : float
+        Quiescent flux level the relative amplitudes refer to, e.g.
+        ``meta["baseline"]`` from ``generate_synthetic_lc``.  Default 1.
 
     Returns
     -------
     flux_with_flares : ndarray
     flare_table : pd.DataFrame
-        One row per flare with columns tpeak, fwhm, ampl, t_start, t_end
-        (the window where the flare exceeds 10 % of ``ampl``).
+        One row per flare with columns tpeak, fwhm, ampl (relative),
+        t_start, t_end (the window where the flare exceeds 10 % of ``ampl``).
     """
     if flares is None:
         if rng is None:
             rng = np.random.default_rng()
         if n_flares is None:
             n_flares = rng.poisson(mean_n_flares)
-        noise_est = np.nanmedian(np.abs(np.diff(flux))) * 1.4826 / np.sqrt(2)
+        noise_est = np.nanmedian(np.abs(np.diff(flux))) * 1.4826 / np.sqrt(2) / baseline
         fwhm_min_days, fwhm_max_days = 6.0 / 1440.0, 180.0 / 1440.0
         flares = []
         for _ in range(n_flares):
@@ -244,7 +265,7 @@ def inject_flares(time, flux, n_flares=None, rng=None, flares=None, mean_n_flare
     flux_out = flux.copy()
     for tpeak, fwhm, ampl in flares:
         flare_flux = flare_model_mendoza2022(time, tpeak, fwhm, ampl)
-        flux_out += flare_flux
+        flux_out += flare_flux * baseline
         above = flare_flux > 0.1 * ampl
         if above.any():
             t_start, t_end = time[above][0], time[above][-1]

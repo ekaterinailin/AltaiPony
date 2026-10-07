@@ -227,7 +227,13 @@ def custom_detrending(
 
     Return:
     -------
-    FlareLightCurve with detrended_flux attribute
+    FlareLightCurve with
+        detrended_flux : relative flux whose flat, flare-free baseline is
+            ``NORMALIZED_BASELINE`` (1.0), independent of the units of the
+            input flux (still labelled e-/s for now).
+        it_med : iterative median of the final detrended flux.
+        gp_model : the GP baseline in input flux units (NaN if no GP was
+            fitted).
     """
     dt = np.mean(np.diff(lc.time.value))
     cont_windows = lc.find_cont_windows(maxgap=maxgap * dt).cont_windows
@@ -338,8 +344,12 @@ def custom_detrending(
             break_tolerance=break_tolerance,
         )
 
-        # Restore original flux from the column (now filtered to lc4's length)
+        # Restore original flux and errors from the columns (now filtered to
+        # lc4's length).  The Savitzky-Golay passes divide flux_err by their
+        # trend, so the GP would otherwise get flux in input units but errors
+        # in relative units.
         lc4.flux = lc4["original_flux"] * u.electron / u.s
+        lc4.flux_err = lc4["original_flux_err"] * u.electron / u.s
 
         # Clean up the temporary column
         lc4.remove_column("original_flux")
@@ -382,6 +392,17 @@ def custom_detrending(
         matched_filter_snr=matched_filter_snr,
         matched_filter_fwhm_grid=matched_filter_fwhm_grid,
     )
+
+    if "gp" not in best_params:
+        # No GP model (non-periodic star, GP disabled, or GP fit failed): the
+        # detrended flux is still at the input flux level.  Express it as
+        # relative flux too, scaled by its global iterative median.
+        det = np.asarray(getattr(lc4.detrended_flux, "value", lc4.detrended_flux), dtype=float)
+        level = _find_iterative_median(det, None)[0]
+        lc4.detrended_flux = (NORMALIZED_BASELINE * det / level) * u.electron / u.s
+
+    # Iterative median of the final detrended flux.
+    lc4.find_iterative_median()
 
     return lc4
 
@@ -466,10 +487,14 @@ def _apply_gp_step(
     n_masked = int(flare_mask.sum())
 
     try:
+        # Fit the GP to flux normalised by its median, so that the fit (and the
+        # optimiser's convergence) does not depend on the units of the flux.
+        # The fitted sigma and jitter are therefore relative to the median.
+        norm = np.nanmedian(f4_gp)
         gp_model, _, gp_params = fit_gp_rotation(
             t4_gp,
-            f4_gp,
-            fe4_gp,
+            f4_gp / norm,
+            fe4_gp / norm,
             period=dominant_period,
             flare_mask=flare_mask,
             optimize_hyperparams=gp_optimize,
@@ -479,19 +504,20 @@ def _apply_gp_step(
             gp_clip_iters=gp_clip_iters,
             anchor_edges=gp_anchor_edges,
         )
+        gp_model = gp_model * norm
 
-        unmasked_valid = ~flare_mask & ~np.isnan(f4_gp) & ~np.isnan(gp_model)
-        gp_offset = np.nanmedian(f4_gp[unmasked_valid]) - np.nanmedian(
-            gp_model[unmasked_valid]
-        )
+        # Baseline model in input flux units: the GP shifted so that the
+        # residuals of the unmasked (quiescent) cadences have zero median.
+        resid = f4_gp - gp_model
+        quiet = ~flare_mask & np.isfinite(resid)
+        model = gp_model + np.nanmedian(resid[quiet])
 
-        # Add NORMALIZED_BASELINE so every detrended light curve shares the
-        # same flux zero-point (a flat, flare-free baseline sits at exactly
-        # NORMALIZED_BASELINE), which keeps light curves from different
-        # stars/sectors directly comparable downstream.
-        gp_detrended = f4_gp - gp_model + gp_offset + NORMALIZED_BASELINE
-        lc4.detrended_flux = gp_detrended * u.electron / u.s
-        lc4.gp_model = gp_model + gp_offset
+        # Relative flux, 1 + residual / quiescent level: the flat, flare-free
+        # baseline sits at exactly NORMALIZED_BASELINE and flare amplitudes
+        # are relative, whatever the units of the input flux.
+        level = np.nanmedian(model[quiet])
+        lc4.detrended_flux = (NORMALIZED_BASELINE + (f4_gp - model) / level) * u.electron / u.s
+        lc4.gp_model = model
 
         best_params["method"] = f"{best_params.get('method', 'baseline')}+gp"
         best_params["gp"] = gp_params
