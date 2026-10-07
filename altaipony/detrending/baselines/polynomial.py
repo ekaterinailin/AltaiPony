@@ -1166,14 +1166,14 @@ def run_detrending(
 
 
 def fit_lightcurve_detrender(time, flux, flux_err, cont_windows, config=None):
-    """Baseline fit via the external ``lightcurve_detrender`` pipeline.
+    """Segmented-polynomial baseline fit for ``custom_detrending``.
 
-    Adapter that runs :func:`lightcurve_detrender.run_detrending` and returns
-    the same ``(newflux, model, best_params)`` contract as ``fit_multisine`` /
-    ``fit_spline``, so it drops straight into the baseline slot of
-    ``custom_detrending``.  The external pipeline fits a segmented-polynomial
-    baseline plus optional sinusoid corrections and carries its own robust,
-    fraction-capped flare masking.
+    Adapter that runs :func:`run_detrending` on the finite cadences and
+    returns ``(newflux, model, best_params)`` on the full grid, as
+    ``custom_detrending`` expects.
+    ``run_detrending`` fits a segmented-polynomial baseline plus an optional
+    6–36 h sinusoid correction and carries its own robust, fraction-capped
+    flare masking.
 
     Notes
     -----
@@ -1187,7 +1187,7 @@ def fit_lightcurve_detrender(time, flux, flux_err, cont_windows, config=None):
       passes see a signal at the original level, matching the convention of the
       other baseline fitters.
     * ``cont_windows`` is accepted for signature compatibility but not used directly —
-      the external pipeline detects its own continuous blocks from ``time``.
+      ``run_detrending`` detects its own continuous blocks from ``time``.
 
     Parameters
     ----------
@@ -1195,7 +1195,7 @@ def fit_lightcurve_detrender(time, flux, flux_err, cont_windows, config=None):
         Full-grid arrays in days / flux units (may contain NaNs).
     cont_windows : list of (int, int)
         Segment boundaries (unused; see Notes).
-    config : lightcurve_detrender.DetrendConfig or None
+    config : DetrendConfig or None
         Optional configuration forwarded to ``run_detrending``.
 
     Returns
@@ -1225,7 +1225,7 @@ def fit_lightcurve_detrender(time, flux, flux_err, cont_windows, config=None):
     fill = np.median(err[good_err]) if good_err.any() else 1.0
     err = np.where(good_err, err, fill)
 
-    # Run the external pipeline on the finite subset.
+    # Run the polynomial baseline on the finite subset.
     result = run_detrending(time[finite], flux[finite], err, config)
 
     df = result.final_df

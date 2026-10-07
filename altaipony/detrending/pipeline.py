@@ -7,7 +7,8 @@ AltaiPony
 
 Ekaterina Ilin, 2023, MIT License
 
-The detrending pipeline: baseline fit, Savitzky-Golay passes, and GP model.
+The detrending pipeline: polynomial baseline, Savitzky-Golay passes, and GP
+model.
 """
 
 import logging
@@ -16,10 +17,8 @@ import numpy as np
 import astropy.units as u
 
 from ..altai import _find_iterative_median
-from .baselines.multisine import _split_cont_windows, fit_multisine
 from .baselines.polynomial import fit_lightcurve_detrender
-from .baselines.spline import fit_spline
-from .gp import _CELERITE2_AVAILABLE, _identify_flare_mask, fit_gp_rotation
+from .gp import _CELERITE2_AVAILABLE, fit_gp_rotation
 from .matchedfilter import matched_filter_flare_mask as _matched_filter_mask
 from .periodicity import detect_strong_periodicity, lomb_scargle
 
@@ -44,17 +43,8 @@ def custom_detrending(
     periodicity_fap_threshold=1e-3,
     periodicity_amplitude_threshold=0.01,
     period_min_days=0.1,
-    n_sine_harmonics=5,
-    refine_period_per_segment=True,
-    n_per=10,
-    clip_sigma=3.0,
-    max_clip_iter=5,
-    multisine_amp_degree=1,
-    baseline_method="auto",
     detrender_config=None,
     use_gp=True,
-    gp_flare_sigma=5.0,
-    gp_flare_expand_cadences=10,
     gp_optimize=True,
     gp_period_tolerance=0.05,
     gp_bin_factor=10,
@@ -83,10 +73,8 @@ def custom_detrending(
     use_savgol : bool
         If True (default), run the two Savitzky-Golay passes between the
         baseline fit and the GP step.  If False, skip them entirely: the
-        baseline output is fed straight to the GP, and — when the baseline is
-        ``lightcurve_detrender`` — that stage's flare mask is used as the GP's
-        initial mask.  The intended detrender pipeline is therefore
-        ``baseline_method="detrender", use_savgol=False``.  Defaults to True.
+        baseline output is fed straight to the GP.  Either way, the baseline
+        stage's flare mask is the GP's initial mask.  Defaults to True.
     pad : 3
         Outliers in Savitzky-Golay filter are padded with this
         number of data points. Defaults to 3.
@@ -95,7 +83,8 @@ def custom_detrending(
     longdecay : int
         Long decay time for outlier rejection. Defaults to 6.
     maxgap : float
-        Maximum gap size in days for spline fitting. Defaults to 10 x cadence size.
+        Gaps longer than ``maxgap`` times the mean cadence split the light
+        curve into continuous windows.  Defaults to 10.
     break_tolerance: int
         If there are large gaps in time, flatten will split the flux into
         several sub-lightcurves and apply savgol_filter to each individually.
@@ -107,82 +96,24 @@ def custom_detrending(
         strongly periodic.  Defaults to 1e-3.
     periodicity_amplitude_threshold : float
         Minimum semi-amplitude (as a fraction of the median flux) for the
-        periodic signal to trigger the multi-sine path.  Defaults to 0.01
-        (1 % of the median flux).
+        light curve to count as strongly periodic, which enables the GP step.
+        Defaults to 0.01 (1 % of the median flux).
     period_min_days : float
         Shortest period searched by the Lomb-Scargle periodogram, in days.
         Defaults to 0.1 days.
-    n_sine_harmonics : int
-        Number of harmonics included in the multi-sine baseline model.
-        Harmonics 1 … n_sine_harmonics of the dominant period are fitted
-        simultaneously via least-squares, which captures non-sinusoidal
-        (but strictly periodic) shapes.  Defaults to 5.
-    refine_period_per_segment : bool
-        If True, each gap segment independently refines the global peak
-        period with a narrow Lomb-Scargle search, accommodating slightly
-        drifting rotation periods.  Defaults to True.
-    multisine_gap_fraction : float
-        When a strong periodicity is detected, gaps that are shorter than
-        this fraction of the dominant period are bridged rather than used
-        as segment breaks.  E.g. the default of 0.3 means gaps ≤ 30 % of
-        the rotation period are treated as continuous data for the multi-sine
-        fit.  The original (tight) segmentation is still used for all
-        downstream Savitzky-Golay steps.  Defaults to 0.3.
-    n_per : int
-        Maximum segment length for the multi-sine fit, expressed in units
-        of the dominant period.  Any segment longer than ``n_per`` cycles
-        is split in two at its midpoint before fitting, so that the linear
-        trend term has a shorter lever arm and the per-segment amplitude
-        is more locally representative.  Defaults to 10.
-    clip_sigma : float
-        Positive-residual clipping threshold used inside the per-segment
-        multi-sine fit (see ``fit_multisine``).  Residuals more than
-        ``clip_sigma`` × MAD above the model are treated as flare
-        contamination and excluded from subsequent iterations.  Defaults
-        to 3.0.  Raise this value to be more permissive (fewer points
-        removed); lower it to be more aggressive.
-    max_clip_iter : int
-        Maximum number of one-sided clipping iterations inside the
-        per-segment multi-sine solver.  In practice convergence is
-        reached in 2–3 passes; 5 is a safe upper bound.  Defaults to 5.
-    multisine_amp_degree : int
-        Degree of the polynomial-in-time that modulates each harmonic's
-        amplitude/phase within a multi-sine segment (see ``fit_multisine``).
-        ``0`` gives the classic fixed-amplitude model; ``1`` (the default)
-        lets the amplitude drift linearly across a segment, which is needed
-        for long multi-cycle segments where spot growth/decay or differential
-        rotation change the modulation amplitude.  Higher values allow faster
-        evolution at the cost of more free parameters.  Defaults to 1.
-    baseline_method : str
-        Which baseline model to use.  ``"auto"`` (default) keeps the built-in
-        behaviour (multi-sine for strong sub-5-day periods, spline otherwise).
-        ``"detrender"`` replaces *both* the multi-sine and the spline with the
-        external ``lightcurve_detrender`` pipeline (segmented polynomial plus
-        sinusoid corrections and its own fraction-capped flare masking);
-        requires ``lightcurve_detrender.py`` to be importable.  ``"multisine"``
-        or ``"spline"`` force that single method.  Defaults to ``"auto"``.
-    detrender_config : lightcurve_detrender.DetrendConfig or None
-        Configuration forwarded to the external pipeline when
-        ``baseline_method="detrender"``.  If None, its default config is used.
+    detrender_config : baselines.polynomial.DetrendConfig or None
+        Configuration of the baseline: cubic fits on grids of 0.4–0.8-day
+        windows (plain and shifted by half a window, blended), a 6–36 h
+        sinusoid correction, and its own fraction-capped flare mask.  If None,
+        its defaults are used.
     use_gp : bool
         If True (and ``is_periodic`` is True and celerite2 is installed),
-        follow the initial multisine fit with a Gaussian Process step.
-        Large flares are identified in the multisine residuals, masked,
-        and a celerite2 ``RotationTerm`` GP is fitted to the masked
-        *original* flux.  The GP model smoothly bridges the masked
-        windows and is then subtracted to produce the final detrended
-        flux.  The Savitzky-Golay passes are effectively bypassed because
-        the GP already removes all periodic structure.  Defaults to True.
-    gp_flare_sigma : float
-        One-sided threshold (in units of 1.4826 × MAD) above which a
-        cadence is considered a large flare and excluded from GP training.
-        Higher values mask fewer cadences (only the brightest flares).
-        The recovery rate of flares above this threshold is high in
-        typical injection-recovery experiments.  Defaults to 5.0.
-    gp_flare_expand_cadences : int
-        Number of cadences to expand each masked flare window on each
-        side so that the flare decay tail does not contaminate the GP
-        training data.  Defaults to 10 (~20 min at 2-min cadence).
+        follow the baseline fit with a Gaussian Process step.  Flares are
+        masked (the baseline stage's flare mask), and a celerite2
+        ``RotationTerm`` GP is fitted to the masked *original* flux.  The GP model smoothly bridges the masked
+        windows and is then subtracted to produce the final detrended flux,
+        so the baseline and Savitzky-Golay results only shape the flare mask.
+        Defaults to True.
     gp_optimize : bool
         If True, optimise the GP hyperparameters (sigma, period within
         ±``gp_period_tolerance``, Q0, dQ, f, jitter) by maximising the
@@ -258,9 +189,8 @@ def custom_detrending(
 
     # --- Periodicity check ------------------------------------------------
     # Run a Lomb-Scargle periodogram on the raw flux.  If a strong periodic
-    # signal is found (low FAP *and* large amplitude) use a multi-harmonic
-    # sine model as the baseline instead of the spline, because a spline
-    # will chase the periodic oscillations and corrupt flare detection.
+    # signal is found (low FAP *and* large amplitude), the GP step models the
+    # variability; its period starts from the periodogram peak.
     period_max_days = (time[-1] - time[0]) / 2.0
 
     is_periodic, dominant_period, rel_amplitude, fap = detect_strong_periodicity(
@@ -272,57 +202,15 @@ def custom_detrending(
         period_max=period_max_days,
     )
 
-    # The multi-sine baseline is only used for *short-period* strong rotators.
-    # A strong but long (>= 5 d) period is better handled by the spline, which
-    # tracks slow trends without needing many harmonics — so it falls through
-    # to the spline branch below along with the non-periodic case.
-    use_multisine = is_periodic and dominant_period < 5
-
-    if baseline_method == "detrender":
-        # Replace both the multi-sine and spline baselines with the external
-        # lightcurve_detrender pipeline.
-        m2flux, _, best_params = fit_lightcurve_detrender(
-            time, flux, lc.flux_err.value, cont_windows, config=detrender_config
-        )
-        if is_periodic:
-            best_params["dominant_period"] = dominant_period
-
-    elif baseline_method in ("auto", "multisine") and (
-        use_multisine or baseline_method == "multisine"
-    ):
-        flux_med = _find_iterative_median(flux, cont_windows, longdecay=longdecay)
-
-        # Divide each real segment into equal subsegments of at most n_per
-        # cycles.  Because the split is computed upfront for the whole segment
-        # and the pieces are equal, there are no leftover slivers at the edges.
-        multisine_windows = _split_cont_windows(cont_windows, time, dominant_period, n_per)
-
-        m2flux, _, best_params = fit_multisine(
-            time,
-            flux,
-            flux_med,
-            multisine_windows,
-            period=dominant_period,
-            n_harmonics=n_sine_harmonics,
-            refine_period=refine_period_per_segment,
-            clip_sigma=clip_sigma,
-            max_clip_iter=max_clip_iter,
-            amp_degree=multisine_amp_degree,
-        )
-        best_params["method"] = "multisine"
+    # --- Baseline: segmented polynomial ------------------------------------
+    m2flux, _, best_params = fit_lightcurve_detrender(
+        time, flux, lc.flux_err.value, cont_windows, config=detrender_config
+    )
+    if is_periodic:
         best_params["dominant_period"] = dominant_period
-        best_params["multisine_n_segments"] = len(multisine_windows)
 
-    else:
-        # Non-periodic, or strong but long-period: fit a spline to the general
-        # trends.
-        m2flux, _, best_params = fit_spline(time, flux, cont_windows, longdecay=longdecay)
-        best_params["method"] = "spline"
-
-    # Flare mask carried from the baseline stage (currently only the external
-    # lightcurve_detrender produces one).  When present it is used as the GP's
-    # initial flare mask instead of one rebuilt from a savgol residual.
-    baseline_flare_mask = best_params.pop("ld_final_flare_mask", None)
+    # The baseline stage's flare mask is the GP's initial flare mask.
+    baseline_flare_mask = best_params.pop("ld_final_flare_mask")
 
     if use_savgol:
         # choose a 6 hour window
@@ -372,10 +260,8 @@ def custom_detrending(
         lc4.find_iterative_median()
     else:
         # No Savitzky-Golay: the baseline output IS the detrended flux fed to
-        # the GP step.  Flares were already flagged by the baseline stage
-        # (``baseline_flare_mask``), so no savgol residual is needed to build a
-        # mask.  Keeping the grid untouched also means that mask stays aligned
-        # with the GP's cadences.
+        # the GP step.  Keeping the grid untouched also means the baseline's
+        # flare mask stays aligned with the GP's cadences.
         lc4 = lc
         lc4.detrended_flux = m2flux * u.electron / u.s
         lc4.flux = lc4["original_flux"] * u.electron / u.s
@@ -391,14 +277,12 @@ def custom_detrending(
         use_gp=use_gp,
         is_periodic=is_periodic,
         dominant_period=dominant_period,
-        gp_flare_sigma=gp_flare_sigma,
-        gp_flare_expand_cadences=gp_flare_expand_cadences,
+        flare_mask=baseline_flare_mask,
         gp_optimize=gp_optimize,
         gp_period_tolerance=gp_period_tolerance,
         gp_bin_factor=gp_bin_factor,
         gp_clip_sigma=gp_clip_sigma,
         gp_clip_iters=gp_clip_iters,
-        external_flare_mask=baseline_flare_mask,
         gp_anchor_edges=gp_anchor_edges,
         gp_second_rotation=gp_second_rotation,
         periodicity_fap_threshold=periodicity_fap_threshold,
@@ -471,14 +355,12 @@ def _apply_gp_step(
     use_gp,
     is_periodic,
     dominant_period,
-    gp_flare_sigma,
-    gp_flare_expand_cadences,
+    flare_mask,
     gp_optimize,
     gp_period_tolerance,
     gp_bin_factor,
     gp_clip_sigma,
     gp_clip_iters,
-    external_flare_mask=None,
     gp_anchor_edges=True,
     gp_second_rotation=True,
     periodicity_fap_threshold=1e-3,
@@ -493,22 +375,15 @@ def _apply_gp_step(
     learns the full stellar variability shape.  It predicts smoothly across
     masked windows.  Subtracting the GP model yields the final detrended flux.
 
-    The flare mask (cadences excluded from GP training) starts from one of two
-    sources:
-
-    * ``external_flare_mask`` when provided — e.g. the flare mask produced by
-      the ``lightcurve_detrender`` baseline.  This is used as-is, so the GP is
-      built directly on the baseline stage's flare flags with no intermediate
-      savgol pass.
-    * otherwise, a mask rebuilt from ``lc4.detrended_flux`` (the savgol
-      residual) via :func:`_identify_flare_mask`.
-
-    With ``matched_filter_flares``, the GP is fitted twice: first with this
-    mask, then with the detections of a matched filter run on the first fit's
+    ``flare_mask`` (cadences excluded from GP training) is the polynomial
+    baseline's flare mask, aligned with ``lc4``.  With
+    ``matched_filter_flares``, the GP is fitted twice: first with this mask,
+    then with the detections of a matched filter run on the first fit's
     residual added to it.  With ``gp_second_rotation``, a second rotation
     term at a second period from the flux's periodogram is added to all fits
-    after the first, if it lowers the residual scatter.  Either way, the post-fit residual clipping still
-    catches flares the mask missed.  Runs only when ``use_gp`` and
+    after the first, if it lowers the residual scatter.  Either way, the
+    post-fit residual clipping still catches flares the mask missed.  Runs
+    only when ``use_gp`` and
     ``is_periodic`` are True and celerite2 is installed; otherwise ``lc4`` is
     left untouched.  ``lc4`` (``detrended_flux``, ``gp_model``) and
     ``best_params`` are modified in place.
@@ -521,17 +396,7 @@ def _apply_gp_step(
     t4_gp = lc4.time.value
     f4_gp = lc4.flux.value  # original flux on lc4's filtered grid
     fe4_gp = lc4.flux_err.value  # formal errors on same grid
-    det4 = np.asarray(lc4.detrended_flux)  # baseline-subtracted residual
-
-    if external_flare_mask is not None:
-        flare_mask = np.asarray(external_flare_mask, dtype=bool)
-    else:
-        flare_mask = _identify_flare_mask(
-            det4,
-            time=t4_gp,
-            sigma_threshold=gp_flare_sigma,
-            expand_cadences=gp_flare_expand_cadences,
-        )
+    flare_mask = np.asarray(flare_mask, dtype=bool)
 
     try:
         # Fit the GP to flux normalised by its median, so that the fit (and the

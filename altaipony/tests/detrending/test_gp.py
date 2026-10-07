@@ -32,7 +32,6 @@ def two_period_star(make_lc):
 ])
 def test_second_rotation_term_fits_second_period(two_period_star, second_rotation,
                                                  max_scatter, min_scatter):
-    lc = custom_detrending(two_period_star, baseline_method="detrender",
-                           gp_second_rotation=second_rotation)
+    lc = custom_detrending(two_period_star, gp_second_rotation=second_rotation)
     scatter = np.nanstd(_values(lc.detrended_flux)) / NOISE
     assert min_scatter < scatter < max_scatter

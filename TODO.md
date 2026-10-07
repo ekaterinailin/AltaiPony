@@ -2,39 +2,27 @@
 
 ## Failing tests
 
-These tests already failed on commit `783c698`, before the
-`lightcurve_detrender` cleanup and the restructuring into
-`altaipony/detrending/`. The full suite now runs in under a minute without
-running out of memory: 245 passed, 16 failed.
+`test_customdetrend.py` has been dissolved into `altaipony/tests/detrending/`
+(`test_pipeline.py`, `test_noise.py`, `test_spline.py`). 11 of its spline and
+knot tests only failed because the spline API had changed (`_build_knot_points`
+returns the knot scatter too, `_fit_single_spline` takes `smoothing`,
+`best_params` has a `smoothing` key); they were updated and passed. Since
+then the spline baseline and its tests have been removed (see Resolved). The
+full suite now runs in about a minute: 236 passed, 4 failed.
 
-### `altaipony/tests/test_customdetrend.py`
-
-The tests import from the new locations: `altaipony.detrending`,
-`altaipony.detrending.baselines.spline` and `altaipony.altai` (for
-`measure_flare`).
+### `altaipony/tests/detrending/test_pipeline.py`
 
 - **Quantity vs plain number** (4 tests): `custom_detrending` returns
-  `detrended_flux` as an astropy Quantity in e-/s, but these tests combine it
-  with plain numbers, which raises `UnitConversionError`. Either use Quantities
-  in the tests or decide whether `detrended_flux` should be a plain array.
-  - `test_measure_flare_basic`, `test_measure_flare_has_required_columns`,
+  `detrended_flux` as an astropy Quantity labelled e-/s (but holding relative
+  flux), and these tests combine it with plain numbers, which raises
+  `UnitConversionError`. Decide what type `detrended_flux` should have (review
+  plan, step 1), then fix the tests or the code.
+  - `TestCustomDetrending::test_measure_flare_basic`,
+    `test_measure_flare_has_required_columns`,
     `test_measure_flare_calculates_duration`: add `500` to
-    `flc.detrended_flux` (around line 257).
-  - `test_custom_detrending_removes_variability`: compares
-    `np.nanstd(detrended_flux)` with the std of the plain flux.
-- **Spline and knot tests** (12 tests):
-  - `test_build_knot_points_basic`
-  - `test_build_knot_points_boundary_values`
-  - `test_build_knot_points_handles_nans`
-  - `test_build_knot_points_percentile_affects_flux`
-  - `test_build_knot_points_phase_offset`
-  - `test_build_knot_points_short_segment`
-  - `test_build_knot_points_sorted`
-  - `test_fit_single_spline_handles_multiple_gaps`
-  - `test_fit_single_spline_returns_model_and_newflux`
-  - `test_fit_single_spline_short_segment_uses_median`
-  - `test_fit_spline_best_params_keys`
-  - `test_fit_spline_removes_trend`
+    `flc.detrended_flux`.
+  - `TestCustomDetrending::test_custom_detrending_removes_variability`:
+    compares `np.nanstd(detrended_flux)` with the std of the plain flux.
 
 ## Other bugs
 
@@ -89,6 +77,15 @@ The tests import from the new locations: `altaipony.detrending`,
   period from the flux periodogram when it lowers the residual scatter
   (`gp_second_rotation=True`). See the review plan, step 9, for its
   limitation on short light curves.
+- `custom_detrending` had four baselines (`baseline_method`: `auto`,
+  `detrender`, `spline`, `multisine`). In injection-recovery all recovered
+  about the same (662–668 of 787), but only the polynomial ("detrender") kept
+  false positives low (7 vs. 60–115): the others built the GP's starting
+  flare mask from their residual with `_identify_flare_mask`, masking the
+  variability maxima they could not follow. The polynomial baseline is now
+  the only one; `baselines/spline.py`, `baselines/multisine.py`,
+  `baseline_method`, the multi-sine options and `_identify_flare_mask` were
+  removed.
 
 ## Open, related
 

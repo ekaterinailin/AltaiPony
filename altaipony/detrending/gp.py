@@ -3,7 +3,6 @@ trained on flare-masked flux."""
 
 import numpy as np
 
-from scipy.ndimage import binary_dilation
 from scipy.optimize import minimize
 
 from ..utils import upper_outlier_threshold
@@ -27,80 +26,6 @@ def _segment_bounds(t, gap_factor=10):
     breaks = np.where(dt > gap_factor * np.nanmedian(dt))[0] + 1
     bounds = np.concatenate([[0], breaks, [n]]).astype(int)
     return list(zip(bounds[:-1], bounds[1:]))
-
-
-def _identify_flare_mask(
-    detrended_residuals,
-    time=None,
-    sigma_threshold=3.0,
-    expand_cadences=10,
-    segment_gap_factor=10,
-):
-    """Flag cadences that are likely large flares in the detrended residuals.
-
-    Uses a one-sided MAD threshold to find positive outliers above
-    ``sigma_threshold``.  Each flagged run is then dilated by
-    ``expand_cadences`` on each side so that the flare decay tail does not
-    contaminate the GP training set.
-
-    Only the positive tail is clipped because flares are always upward
-    excursions; clipping the negative tail would incorrectly mask spot minima.
-
-    **The threshold is computed per real segment, not globally.**  A single
-    whole-light-curve median/MAD lets one segment that sits offset in the
-    detrended flux (e.g. a large-amplitude segment left with a small DC offset
-    by the baseline fit) read as one enormous flare, so the entire segment is
-    masked and excluded from downstream GP training.  Anchoring the median and
-    MAD to each segment makes that structurally impossible: a segment cannot be
-    an outlier relative to its own median.  Segments are split wherever the
-    time step jumps by more than ``segment_gap_factor`` × the median cadence.
-    If ``time`` is None the old single-threshold behaviour is used.
-
-    Parameters
-    ----------
-    detrended_residuals : ndarray
-        Near-zero-mean residual flux (e.g. ``m2flux − flux_med``).
-    time : ndarray or None
-        Time array used only to locate segment boundaries.  If None, a single
-        global threshold is applied (legacy behaviour).
-    sigma_threshold : float
-        Positive-side threshold in units of ``MAD_TO_STD`` × MAD.  Cadences
-        above ``median + sigma_threshold × MAD × MAD_TO_STD`` are flagged.
-        Higher values mask fewer, larger events.  Defaults to 3.0.
-    expand_cadences : int
-        Dilation half-width in cadences.  Defaults to 10.
-    segment_gap_factor : int
-        A time step larger than this multiple of the median cadence starts a
-        new segment for the per-segment threshold.  Defaults to 10.
-
-    Returns
-    -------
-    mask : bool ndarray
-        True where a cadence is considered a flare (exclude from GP training).
-    """
-    resid = np.asarray(detrended_residuals)
-    n = len(resid)
-
-    # Segment boundaries from time gaps (one segment if no time given).
-    if time is None:
-        segments = [(0, n)]
-    else:
-        segments = _segment_bounds(np.asarray(time), segment_gap_factor)
-
-    flagged = np.zeros(n, dtype=bool)
-    for a, b in segments:
-        seg = resid[a:b]
-        valid = ~np.isnan(seg)
-        if valid.sum() < 3:
-            continue
-        flagged[a:b] = seg > upper_outlier_threshold(seg, sigma_threshold)
-
-    # Dilate to capture decay tails
-    if expand_cadences > 0:
-        struct = np.ones(2 * expand_cadences + 1, dtype=bool)
-        flagged = binary_dilation(flagged, structure=struct)
-
-    return flagged
 
 
 def _segment_edge_mask(t, valid_mask=None, flux_err=None, segment_gap_factor=10):
@@ -494,8 +419,8 @@ def fit_gp_rotation(
         fitted = dict(initial, jitter=initial_jitter, converged=None, nll=None)
 
     # ── iterative one-sided residual clipping ─────────────────────────────
-    # The initial flare mask (from _identify_flare_mask) only catches the
-    # largest events.  Smaller flares and decay tails that survived the mask
+    # The initial flare mask (from the baseline stage) misses some of the
+    # smaller events.  Smaller flares and decay tails that survived the mask
     # still appear as positive residuals after the GP fit.  Iteratively
     # removing them and recomputing — with hyperparameters *frozen* at the
     # optimised values — makes the model progressively less sensitive to

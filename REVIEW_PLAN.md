@@ -5,7 +5,8 @@ flow and organised around one question per step: *is the science sound?*
 Every step ends with tests that pin down the behaviour you have convinced
 yourself of. The tests go into `altaipony/tests/detrending/`.
 
-Line numbers refer to commit `2ab3376`.
+Line numbers were last refreshed on 2026-10-07, after the spline and
+multi-sine baselines were removed (the commit after `5fc0495`).
 
 **How to use this plan**
 
@@ -62,24 +63,23 @@ Line numbers refer to commit `2ab3376`.
 
 ## Step 1: The pipeline's contract
 
-**Read:** `pipeline.py`, `custom_detrending` (34–386) top to bottom, without
-going into the helpers yet; then `_apply_gp_step` (389–502).
+**Read:** `pipeline.py`, `custom_detrending` (33–306) top to bottom, without
+going into the helpers yet; then `_apply_gp_step` (351–493).
 
 **Check:**
 - What exactly does `custom_detrending` promise to return? Write it down in
   one sentence. It should cover what `detrended_flux` means, its zero point,
   its units, and which other attributes (`it_med`, `gp_model`) are set.
-- ⚠ **Zero point depends on the path.** With the GP (periodic stars),
-  `detrended_flux = flux − gp + offset + 1.0` (492), so the baseline is at
-  **1.0**. Without the GP, it stays at the original flux level (savgol path).
-  Is this inconsistency intended?
-- ⚠ **Units and scale.** In the GP path, `detrended_flux` is
-  "1 + residual in the flux's own units", but it is labelled e-/s (493). For
-  flux in e-/s (e.g. a baseline of 3400), a 1 % flare becomes a residual of
-  34 on top of 1.0. Do relative amplitudes and equivalent durations computed
-  downstream (`it_med`, `find_flares`, `measure_flare`) then depend on the
-  absolute flux level? The injection-recovery runs never test this, because
-  their flux is normalised to ~1.
+- ✓ **Zero point depends on the path** (resolved). It used to be 1.0 with
+  the GP and the input flux level without it. Now both paths return relative
+  flux at 1.0: the GP path as `1 + (flux − model) / level` (476–484), the
+  non-GP path divided by its global iterative median (295–301).
+- ✓ **Units and scale** (resolved). The GP path used to return
+  "1 + residual in the flux's own units", so a 1 % flare in 3400 e-/s data
+  came out as 34. The residual is now divided by the quiescent level, and
+  the injection-recovery light curves are in e-/s (1000–100000) to keep this
+  tested. Still open: `detrended_flux` is relative but labelled e-/s (301,
+  484; see `TODO.md`).
 - Which steps only produce *masks*, and which produce the *output*? In the GP
   path, the baseline and Savitzky-Golay results only feed the GP's flare mask.
 
@@ -97,16 +97,16 @@ paths, GP fitted on normalised flux, `flux_err` restored before the GP.
 - [x] **Scale invariance:** the same light curve with `scale=1` and
       `scale=3400` gives the same *relative* flare amplitude and the same
       equivalent duration. I expect this to fail today if the ⚠ above is real.
-- [ ] Fold in the 4 Quantity failures from `TODO.md`
+- [ ] Fix the 4 Quantity failures in `test_pipeline.py::TestCustomDetrending`
       (`test_measure_flare_*`, `test_custom_detrending_removes_variability`)
       once you have decided what type `detrended_flux` should have.
 
 ## Step 2: Gaps and cadence
 
-**Read:** `pipeline.py` 230–240.
+**Read:** `pipeline.py` 181–188.
 
 **Check:**
-- ⚠ `dt = np.mean(np.diff(time))` (232) includes the gaps. A single 1-day
+- ⚠ `dt = np.mean(np.diff(time))` (181) includes the gaps. A single 1-day
   gap in 25 days of 2-min data raises the mean step noticeably. That inflates
   `maxgap * dt`, the gap threshold, and the Savitzky-Golay window lengths
   that are computed from `dt`. Should this be the median?
@@ -122,7 +122,7 @@ paths, GP fitted on normalised flux, `flux_err` restored before the GP.
 ## Step 3: Detecting the rotation period
 
 **Read:** `periodicity.py` (`lomb_scargle` 7–56,
-`detect_strong_periodicity` 59–160); call site `pipeline.py` 246–261.
+`detect_strong_periodicity` 59–160); call site `pipeline.py` 190–203.
 
 **Check:**
 - Search range is 0.1 d to half the light curve. What happens with periods
@@ -144,22 +144,16 @@ paths, GP fitted on normalised flux, `flux_err` restored before the GP.
 - [ ] `lomb_scargle` drops non-finite points and never searches periods
       longer than the data span.
 
-## Step 4: Choosing the baseline
+## Step 4: Choosing the baseline (removed)
 
-**Read:** `pipeline.py` 256–305 (the branch on `baseline_method` and
-`use_multisine`).
-
-**Check:**
-- The decision is: detrender if requested; else multi-sine if periodic and
-  P < 5 d; else spline. Is 5 d justified? What happens to a periodic star
-  with P = 4.9 d vs 5.1 d?
-- `flare_finder_altai` uses the polynomial baseline ("detrender") for
-  everything. Should that be the default instead of `"auto"`?
-
-**Tests** (`test_pipeline.py`):
-- [ ] `best_params["method"]` matches the expected branch for: non-periodic,
-      periodic with P = 1 d, periodic with P = 8 d, and
-      `baseline_method="detrender"`.
+The polynomial baseline is now the only one. An injection-recovery
+comparison (seed 92, 100 LCs) gave about the same recovery for all four
+choices (662–668 of 787) but very different false positives: polynomial 7,
+`auto` 68, spline 115, multi-sine 60. The other three left the GP's starting
+flare mask to `_identify_flare_mask` on the baseline residual, which masked
+the variability maxima the baseline could not follow (e.g. 15.6 % of LC 57),
+so the GP never fitted them and left hours-long bumps. The multi-sine and
+spline baselines, `baseline_method`, and `_identify_flare_mask` were removed.
 
 ## Step 5: Polynomial baseline (`baselines/polynomial.py`)
 
@@ -209,53 +203,13 @@ first-pass residual and the refit.
 - [ ] `fit_lightcurve_detrender` maps results back onto the full grid with
       NaNs where the input had them.
 
-## Step 6: Multi-sine baseline (`baselines/multisine.py`)
+## Step 6: Multi-sine baseline (removed, see step 4)
 
-**Read:** `_segment_gaps` (9–49), `fit_multisine` (52–344).
-
-**Check:**
-- 5 harmonics, each with an amplitude that drifts as a polynomial in time
-  (`amp_degree`), fitted per segment of ≤ `n_per` cycles. How many free
-  parameters per segment, and can they start fitting flares?
-- ⚠ One-sided clipping (only positive residuals) biases the fit *low* if
-  noise above the model is also clipped. How large is that bias in units of
-  σ?
-- The per-segment period refinement uses ±5 % around P on a 400-point grid.
-  Is that resolution enough?
-
-**Tests** (`test_multisine.py`):
-- [ ] A 3-harmonic spot curve (P = 1 d) is recovered; residual scatter close
-      to the noise.
-- [ ] One large flare changes the fitted model by less than 0.1σ away from
-      the flare.
-- [ ] Measure the bias from one-sided clipping on pure noise: mean residual
-      versus 0.
-
-## Step 7: Spline baseline (`baselines/spline.py`)
-
-**Read:** `fit_spline` (11–113), `_fit_single_spline` (116–187),
-`_build_knot_points` (225–297), `_sanitize_knots` (190–222),
-`_evaluate_spline_fit` (300–406).
-
-**Check:**
-- ⚠ Knots sit at the **25th percentile** of each bin
-  (`percentile_anchor=25`). On pure noise that puts the spline about
-  0.67σ_bin below the true baseline. Does the later re-centring on `it_med`
-  remove that offset completely?
-- `_evaluate_spline_fit` scores candidates by MAD × (1 + asymmetry penalty +
-  Gaussianity term + edge penalty). These are heuristics again; does the
-  choice end up stable?
-
-**Tests** (`test_spline.py`):
-- [ ] Fix or rewrite the **12 failing spline/knot tests** from `TODO.md`.
-      First decide whether each one tests outdated behaviour or a real bug.
-- [ ] Flat light curve + noise → model offset within 0.1σ of the truth after
-      the full pipeline.
-- [ ] Slow trend (P = 10 d) is followed; a 2 h flare is not absorbed.
+## Step 7: Spline baseline (removed, see step 4)
 
 ## Step 8: Savitzky-Golay passes
 
-**Read:** `pipeline.py` 307–363, `savgoldetrending.py`, and
+**Read:** `pipeline.py` 215–271, `savgoldetrending.py`, and
 `altai.detrend_savgol`.
 
 **Check:**
@@ -271,10 +225,11 @@ first-pass residual and the refit.
 
 ## Step 9: Gaussian-process model (`gp.py`, `pipeline._apply_gp_step`)
 
-**Read:** `_identify_flare_mask` (32–103), `matchedfilter.py`
-(`matched_filter_flare_mask` 250–384), `_segment_edge_mask` (106–129),
-`_bin_training_per_segment` (132–231), `fit_gp_rotation` (234–541),
-`_apply_gp_step` (389–502).
+**Read:** `matchedfilter.py`
+(`matched_filter_flare_mask` 250–384), `_segment_edge_mask` (31–54),
+`_bin_training_per_segment` (57–156), `fit_gp_rotation` (159–469);
+in `pipeline.py`, `_apply_gp_step` (351–493) with its two-pass fit
+(405–469) and `_second_period_candidates` (309–348).
 
 **Check:**
 - **Training data.** The GP trains on the *original* flux minus the flare
@@ -292,7 +247,7 @@ first-pass residual and the refit.
 - **Binning by 10.** Errors are propagated as sqrt(Σσ²)/n. Flares shorter
   than ~20 min are averaged into bins. Does that change what the clipping
   can see?
-- **Kernel and bounds** (451–458):
+- **Kernel and bounds** (`gp.py` 392–404):
   - P only within ±5 % of the Lomb-Scargle period.
   - Q0 and dQ within [1, 200].
   - Jitter within 0.05–2 × std(flux), which includes the variability.
@@ -324,7 +279,7 @@ first-pass residual and the refit.
     it works reliably. Should the exclusion width scale with 1/T?
   - Should the residual-scatter criterion be a likelihood/BIC comparison
     instead?
-- **Offset** (484): `median(flux − gp)` over unmasked points. Is the median
+- **Offset** (`pipeline.py` 478): `median(flux − gp)` over unmasked points. Is the median
   the right estimator if flare residue is present?
 
 **Tests** (`test_gp.py`):
@@ -335,8 +290,6 @@ first-pass residual and the refit.
       to ~12 % over a few days, as in seed 154 of `generate_synthetic_lc`)
       leaves residual scatter within ~2× the white noise and no spurious
       flares at the rotation maxima.
-- [ ] `_identify_flare_mask` flags an injected flare plus its dilation, and
-      does not mask a whole segment that has a constant offset.
 - [ ] `_bin_training_per_segment` keeps both segment edges at full
       resolution and loses no points (already partly verified; turn it into
       a test).
@@ -359,7 +312,8 @@ first-pass residual and the refit.
 - `find_flares` uses this σ for its detection threshold, so any bias here
   shifts the false-positive rate directly.
 
-**Tests** (`test_noise.py`):
+**Tests** (`test_noise.py`, which already checks σ = 40 within ±5, with and
+without a flare, and with NaNs):
 - [ ] White noise σ → estimate within 5 % of σ.
 - [ ] White noise + flares → estimate within 10 % of σ.
 - [ ] Quantity and plain-array input give the same result.

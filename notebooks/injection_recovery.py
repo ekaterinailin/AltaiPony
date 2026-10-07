@@ -519,9 +519,7 @@ if __name__ == "__main__":
             lc,
             periodicity_amplitude_threshold=0.001,
             periodicity_fap_threshold=0.001,
-            n_per=3,
             maxgap=50,
-            baseline_method = 'detrender',
         )
         lcd.detrended_flux = lcd.detrended_flux.value
         lcd = estimate_detrended_noise(lcd)
