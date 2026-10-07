@@ -48,10 +48,16 @@ Line numbers refer to commit `2ab3376`.
 - [x] Register a `slow` marker (done in `conftest.py`) for tests
       that run the full pipeline. Keep the other tests short: a few thousand
       cadences, a few seconds each.
-- [ ] Run command, memory-capped:
+- [x] Run command, memory-capped:
   ```bash
   MPLBACKEND=Agg systemd-run --user --scope -p MemoryMax=4G -p MemorySwapMax=0 \
-      python -m pytest altaipony/tests/detrending -m "not slow"
+      choom -n 1000 -- python -m pytest altaipony/tests/detrending -m "not slow"
+  ```
+  or, with a watchdog that also stops the job when the machine runs low on
+  memory, `scripts/guarded_run.sh` (see its header for options):
+  ```bash
+  scripts/guarded_run.sh -- python -m pytest altaipony/tests/detrending -m "not slow"
+  cd notebooks && ../scripts/guarded_run.sh -w 2000 -l injrec.log -- python -u injection_recovery.py
   ```
 
 ## Step 1: The pipeline's contract
