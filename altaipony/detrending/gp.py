@@ -248,6 +248,7 @@ def fit_gp_rotation(
     gp_clip_iters=3,
     anchor_edges=True,
     return_std=False,
+    second_period=None,
 ):
     """Fit a celerite2 quasi-periodic GP to flare-masked flux.
 
@@ -280,6 +281,13 @@ def fit_gp_rotation(
     f          Fractional energy in the secondary term (0 < f < 1).
     jitter     White-noise amplitude added in quadrature to ``flux_err``.
     =========  ============================================================
+
+    With ``second_period``, a second ``RotationTerm`` is added to the kernel,
+    for stars with a second periodic signal that the first term cannot fit
+    (a period unrelated to ``P``, e.g. from a second star).  Its parameters
+    ``sigma2``, ``period2``, ``Q0_2``, ``dQ_2`` and ``f_2`` are optimised like
+    those of the first term, with ``period2`` constrained to
+    ``second_period × [1 − tolerance, 1 + tolerance]``.
 
     Parameters
     ----------
@@ -333,6 +341,9 @@ def fit_gp_rotation(
         *through* the segment edges instead of extrapolating past them.
         Prevents the large edge residuals / spurious edge flares seen on
         low-noise, high-amplitude rotators.  Defaults to True.
+    second_period : float or None
+        Period in days of a second rotation term (see above).  Defaults to
+        None, a single rotation term.
     return_std : bool
         Also compute the GP predictive standard deviation.  celerite2 builds
         dense (training x prediction) matrices for it, which takes several GB
@@ -412,15 +423,28 @@ def fit_gp_rotation(
     # In celerite2 v2, jitter is folded into yerr in quadrature:
     #   yerr_total = sqrt(yerr² + jitter²)
     # passing both yerr= and diag= simultaneously raises a ValueError.
-    def _make_kernel(sigma, per, Q0, dQ, f):
-        return celerite2_terms.RotationTerm(sigma=sigma, period=per, Q0=Q0, dQ=dQ, f=f)
+    names = ["sigma", "period", "Q0", "dQ", "f"]
+    if second_period is not None:
+        names += ["sigma2", "period2", "Q0_2", "dQ_2", "f_2"]
+
+    def _make_kernel(sigma, period, Q0, dQ, f, sigma2=None, period2=None, Q0_2=None,
+                     dQ_2=None, f_2=None):
+        kernel = celerite2_terms.RotationTerm(sigma=sigma, period=period, Q0=Q0, dQ=dQ, f=f)
+        if second_period is not None:
+            kernel = kernel + celerite2_terms.RotationTerm(
+                sigma=sigma2, period=period2, Q0=Q0_2, dQ=dQ_2, f=f_2)
+        return kernel
 
     def _compute(jitter_sq):
         gp.compute(t_train, yerr=np.sqrt(err_train**2 + jitter_sq), quiet=True)
 
     initial_jitter = f_std * 0.1
+    initial = dict(sigma=initial_sigma, period=period, Q0=initial_Q0, dQ=initial_dQ, f=initial_f)
+    if second_period is not None:
+        initial.update(sigma2=0.3 * initial_sigma, period2=second_period, Q0_2=initial_Q0,
+                       dQ_2=initial_dQ, f_2=initial_f)
 
-    kernel = _make_kernel(initial_sigma, period, initial_Q0, initial_dQ, initial_f)
+    kernel = _make_kernel(**initial)
     gp = celerite2.GaussianProcess(kernel, mean=f_mean)
     _compute(initial_jitter**2)
 
@@ -429,33 +453,30 @@ def fit_gp_rotation(
 
     if optimize_hyperparams:
 
+        # Parameters are optimised in log space: the kernel's (``names``),
+        # then the jitter.
         def _neg_log_like(log_params):
-            ls, lp, lQ0, ldQ, lf, lj = log_params
             try:
-                gp.kernel = _make_kernel(*(np.exp(x) for x in (ls, lp, lQ0, ldQ, lf)))
-                _compute(np.exp(2 * lj))
+                gp.kernel = _make_kernel(*np.exp(log_params[:-1]))
+                _compute(np.exp(2 * log_params[-1]))
                 return -gp.log_likelihood(f_train)
             except Exception:
                 return 1e15
 
-        x0 = np.array(
-            [
-                np.log(initial_sigma),
-                log_P,
-                np.log(initial_Q0),
-                np.log(initial_dQ),
-                np.log(initial_f),
-                np.log(initial_jitter),
+        x0 = np.log([initial[k] for k in names] + [initial_jitter])
+        def _rotation_bounds(log_period):
+            return [
+                (np.log(1e-4 * f_std), np.log(1e3 * f_std)),  # sigma
+                (log_period - period_tolerance, log_period + period_tolerance),  # period
+                (np.log(1.0), np.log(200.0)),  # Q0
+                (np.log(1.0), np.log(200.0)),  # dQ
+                (np.log(0.01), np.log(0.99)),  # f
             ]
-        )
-        bounds = [
-            (np.log(1e-4 * f_std), np.log(1e3 * f_std)),  # sigma
-            (log_P - period_tolerance, log_P + period_tolerance),  # period
-            (np.log(1.0), np.log(200.0)),  # Q0
-            (np.log(1.0), np.log(200.0)),  # dQ
-            (np.log(0.01), np.log(0.99)),  # f
-            (np.log(0.05 * f_std), np.log(2.0 * f_std)),  # jitter
-        ]
+
+        bounds = _rotation_bounds(log_P)
+        if second_period is not None:
+            bounds += _rotation_bounds(np.log(second_period))
+        bounds += [(np.log(0.05 * f_std), np.log(2.0 * f_std))]  # jitter
         result = minimize(
             _neg_log_like,
             x0,
@@ -464,31 +485,13 @@ def fit_gp_rotation(
             options={"maxiter": 500, "ftol": 1e-10},
         )
 
-        ls, lp, lQ0, ldQ, lf, lj = result.x
-        fitted = dict(
-            sigma=np.exp(ls),
-            period=np.exp(lp),
-            Q0=np.exp(lQ0),
-            dQ=np.exp(ldQ),
-            f=np.exp(lf),
-            jitter=np.exp(lj),
-            converged=result.success,
-            nll=result.fun,
-        )
+        fitted = dict(zip(names + ["jitter"], np.exp(result.x)))
+        fitted.update(converged=result.success, nll=result.fun)
         # Re-apply the fitted kernel and jitter at the optimum.
-        gp.kernel = _make_kernel(*(fitted[k] for k in ("sigma", "period", "Q0", "dQ", "f")))
+        gp.kernel = _make_kernel(*(fitted[k] for k in names))
         _compute(fitted["jitter"] ** 2)
     else:
-        fitted = dict(
-            sigma=initial_sigma,
-            period=period,
-            Q0=initial_Q0,
-            dQ=initial_dQ,
-            f=initial_f,
-            jitter=initial_jitter,
-            converged=None,
-            nll=None,
-        )
+        fitted = dict(initial, jitter=initial_jitter, converged=None, nll=None)
 
     # ── iterative one-sided residual clipping ─────────────────────────────
     # The initial flare mask (from _identify_flare_mask) only catches the

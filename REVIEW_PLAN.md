@@ -272,9 +272,15 @@ first-pass residual and the refit.
 
 **Check:**
 - **Training data.** The GP trains on the *original* flux minus the flare
-  mask. The mask comes from the baseline stage plus the matched filter.
-  Which flares slip through, and what does the one-sided clipping (3 rounds)
-  then catch?
+  mask. The mask comes from the baseline stage; the matched filter then runs
+  on the residual of a first GP fit, and the GP is refitted with its
+  detections added. Which flares slip through, and what does the one-sided
+  clipping (3 rounds) then catch?
+  (Before, the matched filter ran on the baseline residual and masked every
+  rotation maximum the baseline could not follow: 13–25 % of the light curve
+  for fast, strongly modulated stars, e.g. seed 154 = LC 62, which the GP
+  then never saw. Moving it after a first GP fit took injection-recovery from
+  654/787 recovered and 74 false positives to 667/787 and 20.)
 - ⚠ **Edge anchors override the flare mask.** A flare at a segment edge is
   forced into the training set, so the GP may absorb it.
 - **Binning by 10.** Errors are propagated as sqrt(Σσ²)/n. Flares shorter
@@ -289,11 +295,40 @@ first-pass residual and the refit.
   (period, jitter, dQ, f). Which bounds are physically motivated, and which
   hide a misfit?
 - With 2–3 unrelated periods, `RotationTerm` at P and P/2 cannot fit them
-  all. Should a non-periodic SHO term be added?
+  all. Tried (seed 92, 100 LCs, two-pass GP as reference: 667/787
+  recovered, 20 false positives):
+  - a non-periodic SHO term (Q = 1/√2, timescale ≥ 0.5 d): 670 and 18. It
+    cannot follow a second *fast* mode, the actual problem (e.g. LC 21:
+    GP locks onto 2.8 d, the 0.69 d mode is left over), and made LC 62
+    worse. Removed.
+  - `gp_second_rotation=True`: a second `RotationTerm` at the best of up to
+    three candidate periods from the flux periodogram (excluding P and P/2,
+    same FAP/amplitude thresholds), kept only if it lowers the residual
+    scatter: 668 and 7, no flare lost, ~20 % more runtime. LC 21 and 70 go
+    from 869 / 1399 ppm residual scatter to 401 / 397 ppm (noise 327 / 329).
+    Candidates are needed because the strongest remaining peak can be a
+    sidelobe of the rotation signal from its changing amplitude (LC 70:
+    3.7 d). Now the default.
+  - ⚠ **Short light curves.** On 8–12-day two-period stars with changing
+    amplitudes, the candidates are often sidelobes of the first period that
+    lie just outside the ±10 % exclusion (frequency resolution 1/T is
+    coarse), so the second term misses the second mode or picks a sidelobe.
+    The scatter check prevents a worse overall fit, but in one case the
+    number of > 5σ residuals still rose (129 → 222). On 25-day light curves
+    it works reliably. Should the exclusion width scale with 1/T?
+  - Should the residual-scatter criterion be a likelihood/BIC comparison
+    instead?
 - **Offset** (484): `median(flux − gp)` over unmasked points. Is the median
   the right estimator if flare residue is present?
 
 **Tests** (`test_gp.py`):
+- [x] A 25-day star with two unrelated spot modes (3 d and 0.69 d, changing
+      amplitudes): one rotation term leaves > 3x the white noise, the second
+      term brings the residual within 1.5x.
+- [ ] A fast, strongly modulated rotator (P ≈ 6 h, amplitude rising from 0
+      to ~12 % over a few days, as in seed 154 of `generate_synthetic_lc`)
+      leaves residual scatter within ~2× the white noise and no spurious
+      flares at the rotation maxima.
 - [ ] `_identify_flare_mask` flags an injected flare plus its dilation, and
       does not mask a whole segment that has a constant offset.
 - [ ] `_bin_training_per_segment` keeps both segment edges at full

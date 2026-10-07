@@ -21,7 +21,7 @@ from .baselines.polynomial import fit_lightcurve_detrender
 from .baselines.spline import fit_spline
 from .gp import _CELERITE2_AVAILABLE, _identify_flare_mask, fit_gp_rotation
 from .matchedfilter import matched_filter_flare_mask as _matched_filter_mask
-from .periodicity import detect_strong_periodicity
+from .periodicity import detect_strong_periodicity, lomb_scargle
 
 #: Common baseline that every detrended light curve is normalised to, so that
 #: light curves from different stars / sectors share the same flux zero-point
@@ -61,6 +61,7 @@ def custom_detrending(
     gp_clip_sigma=3.0,
     gp_clip_iters=3,
     gp_anchor_edges=True,
+    gp_second_rotation=True,
     matched_filter_flares=True,
     matched_filter_snr=5.0,
     matched_filter_fwhm_grid=(0.02, 0.05, 0.1, 0.15),
@@ -213,12 +214,23 @@ def custom_detrending(
         forced through the segment edges rather than extrapolating past them.
         Fixes large edge residuals / spurious edge flares on low-noise,
         high-amplitude rotators.  Defaults to True.
-    matched_filter_flares : bool
-        If True (default), run a matched-filter pass (``matchedfilter`` module)
-        on the baseline-subtracted residual and union its detections into the
-        GP's initial flare mask.  This catches wide, moderate-SNR flares that
-        per-cadence masks miss, so the GP does not train on and remove them.
+    gp_second_rotation : bool
+        If True, search the flux's periodogram for up to three candidate
+        second periods, ignoring the GP's rotation period and its first
+        harmonic, with the same FAP and amplitude thresholds as the initial
+        periodicity check.  The GP is refitted with a second rotation term at
+        each, and the fit with the lowest residual scatter is kept if it beats
+        the single term.  For stars with two unrelated periodic signals.
         Defaults to True.
+    matched_filter_flares : bool
+        If True (default), fit the GP twice: run a matched-filter pass
+        (``matchedfilter`` module) on the residual of the first GP fit, union
+        its detections into the flare mask, and refit.  This catches wide,
+        moderate-SNR flares that per-cadence masks miss, so the GP does not
+        train on and remove them.  The filter runs on the GP residual rather
+        than the baseline residual, because rotational modulation the
+        baseline could not follow would otherwise be masked as flares and
+        hidden from the GP.  Defaults to True.
     matched_filter_snr : float
         Matched-filter detection threshold, in filter sigma.  Defaults to 5.0.
     matched_filter_fwhm_grid : sequence of float
@@ -388,6 +400,9 @@ def custom_detrending(
         gp_clip_iters=gp_clip_iters,
         external_flare_mask=baseline_flare_mask,
         gp_anchor_edges=gp_anchor_edges,
+        gp_second_rotation=gp_second_rotation,
+        periodicity_fap_threshold=periodicity_fap_threshold,
+        periodicity_amplitude_threshold=periodicity_amplitude_threshold,
         matched_filter_flares=matched_filter_flares,
         matched_filter_snr=matched_filter_snr,
         matched_filter_fwhm_grid=matched_filter_fwhm_grid,
@@ -407,6 +422,48 @@ def custom_detrending(
     return lc4
 
 
+def _second_period_candidates(time, flux, periods, fap_threshold, amplitude_threshold,
+                              n_candidates=3, period_min=0.1, harmonic_tolerance=0.1):
+    """Candidate periods for a second periodic signal in ``flux``, strongest
+    first.
+
+    ``flux`` is relative flux (median ~1).  The Lomb-Scargle periodogram is
+    searched from ``period_min`` to half the time span, ignoring frequencies
+    within ``harmonic_tolerance`` of ``1 / P`` and ``2 / P`` for each ``P`` in
+    ``periods`` (the rotation period from the periodogram and as fitted by the
+    GP): a rotation term at ``P`` already covers both.  Up to ``n_candidates``
+    peaks are returned, each more than ``harmonic_tolerance`` away in
+    frequency from the stronger ones and passing the same FAP and
+    semi-amplitude thresholds as the initial periodicity check
+    (``detect_strong_periodicity``).  Several candidates are needed because a
+    strong peak can be a sidelobe of the rotation signal (e.g. from its
+    changing amplitude) rather than a second signal.
+    """
+    finite = np.isfinite(time) & np.isfinite(flux)
+    t, f = time[finite], flux[finite]
+    if len(t) < 20:
+        return []
+    ls, frequency, power = lomb_scargle(
+        t, f - np.median(f), min_frequency=2.0 / (t[-1] - t[0]), max_frequency=1.0 / period_min
+    )
+    excluded = np.zeros(len(frequency), dtype=bool)
+    for period in periods:
+        for harmonic in (1.0 / period, 2.0 / period):
+            excluded |= np.abs(frequency / harmonic - 1) < harmonic_tolerance
+
+    candidates = []
+    while len(candidates) < n_candidates and not excluded.all():
+        peak = np.argmax(np.where(excluded, -np.inf, power))
+        fap = ls.false_alarm_probability(power[peak], method="baluev")
+        if not fap < fap_threshold:
+            break  # all remaining peaks are weaker
+        theta = ls.model_parameters(frequency[peak])
+        if np.hypot(theta[1], theta[2]) / abs(np.median(f)) > amplitude_threshold:
+            candidates.append(1.0 / frequency[peak])
+        excluded |= np.abs(frequency / frequency[peak] - 1) < harmonic_tolerance
+    return candidates
+
+
 def _apply_gp_step(
     lc4,
     best_params,
@@ -423,6 +480,9 @@ def _apply_gp_step(
     gp_clip_iters,
     external_flare_mask=None,
     gp_anchor_edges=True,
+    gp_second_rotation=True,
+    periodicity_fap_threshold=1e-3,
+    periodicity_amplitude_threshold=0.01,
     matched_filter_flares=True,
     matched_filter_snr=5.0,
     matched_filter_fwhm_grid=(0.02, 0.05, 0.1, 0.15),
@@ -433,8 +493,8 @@ def _apply_gp_step(
     learns the full stellar variability shape.  It predicts smoothly across
     masked windows.  Subtracting the GP model yields the final detrended flux.
 
-    The initial flare mask (cadences excluded from GP training) comes from one
-    of two sources:
+    The flare mask (cadences excluded from GP training) starts from one of two
+    sources:
 
     * ``external_flare_mask`` when provided — e.g. the flare mask produced by
       the ``lightcurve_detrender`` baseline.  This is used as-is, so the GP is
@@ -443,11 +503,15 @@ def _apply_gp_step(
     * otherwise, a mask rebuilt from ``lc4.detrended_flux`` (the savgol
       residual) via :func:`_identify_flare_mask`.
 
-    Either way, the post-fit residual clipping still catches flares the initial
-    mask missed.  Runs only when ``use_gp`` and ``is_periodic`` are True and
-    celerite2 is installed; otherwise ``lc4`` is left untouched.  ``lc4``
-    (``detrended_flux``, ``gp_model``) and ``best_params`` are modified in
-    place.
+    With ``matched_filter_flares``, the GP is fitted twice: first with this
+    mask, then with the detections of a matched filter run on the first fit's
+    residual added to it.  With ``gp_second_rotation``, a second rotation
+    term at a second period from the flux's periodogram is added to all fits
+    after the first, if it lowers the residual scatter.  Either way, the post-fit residual clipping still
+    catches flares the mask missed.  Runs only when ``use_gp`` and
+    ``is_periodic`` are True and celerite2 is installed; otherwise ``lc4`` is
+    left untouched.  ``lc4`` (``detrended_flux``, ``gp_model``) and
+    ``best_params`` are modified in place.
     """
     if not (use_gp and is_periodic and _CELERITE2_AVAILABLE):
         if use_gp and not _CELERITE2_AVAILABLE:
@@ -469,41 +533,77 @@ def _apply_gp_step(
             expand_cadences=gp_flare_expand_cadences,
         )
 
-    # Augment the per-cadence mask with a matched-filter pass on the
-    # baseline-subtracted residual.  Per-cadence masks catch narrow flares but
-    # miss wide, moderate-SNR ones (each cadence sits under the cut while the
-    # integrated flux is large); the matched filter's coherent sum recovers
-    # them, so the GP does not train on and absorb them.
-    if matched_filter_flares:
-        mf_mask = _matched_filter_mask(
-            t4_gp,
-            det4,
-            noise=None,
-            snr_threshold=matched_filter_snr,
-            fwhm_grid=matched_filter_fwhm_grid,
-        )
-        flare_mask = flare_mask | mf_mask
-
-    n_masked = int(flare_mask.sum())
-
     try:
         # Fit the GP to flux normalised by its median, so that the fit (and the
         # optimiser's convergence) does not depend on the units of the flux.
         # The fitted sigma and jitter are therefore relative to the median.
         norm = np.nanmedian(f4_gp)
-        gp_model, _, gp_params = fit_gp_rotation(
-            t4_gp,
-            f4_gp / norm,
-            fe4_gp / norm,
-            period=dominant_period,
-            flare_mask=flare_mask,
-            optimize_hyperparams=gp_optimize,
-            period_tolerance=gp_period_tolerance,
-            bin_factor=gp_bin_factor,
-            gp_clip_sigma=gp_clip_sigma,
-            gp_clip_iters=gp_clip_iters,
-            anchor_edges=gp_anchor_edges,
-        )
+
+        def _fit(mask, second_period=None):
+            model, _, params = fit_gp_rotation(
+                t4_gp,
+                f4_gp / norm,
+                fe4_gp / norm,
+                period=dominant_period,
+                flare_mask=mask,
+                optimize_hyperparams=gp_optimize,
+                period_tolerance=gp_period_tolerance,
+                bin_factor=gp_bin_factor,
+                gp_clip_sigma=gp_clip_sigma,
+                gp_clip_iters=gp_clip_iters,
+                anchor_edges=gp_anchor_edges,
+                second_period=second_period,
+            )
+            return model, params
+
+        gp_model, gp_params = _fit(flare_mask)
+
+        # A second periodic signal at a period unrelated to the first (e.g.
+        # from a second star) cannot be fitted by the rotation term.  Its
+        # residual after the first fit is small and non-sinusoidal (the GP
+        # follows most of it), so search for it in the periodogram of the
+        # flux instead, refit with a second rotation term at each candidate
+        # period, and keep the fit with the lowest scatter of the unmasked
+        # residuals, if it is lower than with one term: a candidate can be a
+        # sidelobe, and two terms can also compete and fit worse than one.
+        second_period = None
+        if gp_second_rotation:
+            def _scatter(model):
+                return np.nanstd((f4_gp / norm - model)[~flare_mask])
+
+            best = _scatter(gp_model)
+            for candidate in _second_period_candidates(
+                t4_gp[~flare_mask],
+                (f4_gp / norm)[~flare_mask],
+                (dominant_period, gp_params["period"]),
+                fap_threshold=periodicity_fap_threshold,
+                amplitude_threshold=periodicity_amplitude_threshold,
+            ):
+                model2, params2 = _fit(flare_mask, candidate)
+                if _scatter(model2) < best:
+                    best = _scatter(model2)
+                    gp_model, gp_params, second_period = model2, params2, candidate
+
+        # Second pass: per-cadence masks catch narrow flares but miss wide,
+        # moderate-SNR ones (each cadence sits under the cut while the
+        # integrated flux is large); the matched filter's coherent sum
+        # recovers them, so the GP does not train on and absorb them.  It
+        # runs on the first GP's residual, not on the baseline residual:
+        # there, rotation the baseline could not follow would be masked as
+        # flares, and the GP would never see the maxima it has to fit.
+        if matched_filter_flares:
+            mf_mask = _matched_filter_mask(
+                t4_gp,
+                f4_gp / norm - gp_model,
+                noise=None,
+                snr_threshold=matched_filter_snr,
+                fwhm_grid=matched_filter_fwhm_grid,
+            )
+            if (mf_mask & ~flare_mask).any():
+                flare_mask = flare_mask | mf_mask
+                gp_model, gp_params = _fit(flare_mask, second_period)
+
+        n_masked = int(flare_mask.sum())
         gp_model = gp_model * norm
 
         # Baseline model in input flux units: the GP shifted so that the

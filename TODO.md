@@ -78,6 +78,17 @@ The tests import from the new locations: `altaipony.detrending`,
 - After the Savitzky-Golay passes, `lc4.flux_err` was not restored, so the GP
   got flux in input units but errors divided by the Savitzky-Golay trend
   (3400x too small for e-/s data). Fixed.
+- The matched-filter flare mask ran on the baseline residual, so rotation
+  the baseline could not follow (fast rotators with large, changing
+  amplitudes) was masked at every maximum and hidden from the GP, leaving
+  periodic false positives. It now runs on the residual of a first GP fit,
+  and the GP is refitted with its detections (`_apply_gp_step`).
+- A second, unrelated periodic signal (e.g. a 0.69 d mode next to a 3 d
+  one) was left unmodelled by the single rotation term and produced periodic
+  false positives. `custom_detrending` now adds a second rotation term at a
+  period from the flux periodogram when it lowers the residual scatter
+  (`gp_second_rotation=True`). See the review plan, step 9, for its
+  limitation on short light curves.
 
 ## Open, related
 
