@@ -1087,3 +1087,35 @@ class TestReadFromFits:
         # Should throw ValueError due to missing TARGETID
         with pytest.raises(ValueError, match="TARGETID not found in FITS header"):
             FlareLightCurve.read_from_fits(str(path))
+
+
+def _two_level_flc():
+    """Two continuous windows (separated by a 1-day gap) at baselines 1.0
+    and 1.1, with small white noise."""
+    rng = np.random.default_rng(7)
+    time = np.r_[np.arange(0, 5, 2 / 1440.), np.arange(6, 8, 2 / 1440.)]
+    flux = np.where(time < 5.5, 1.0, 1.1) + rng.normal(0, 1e-4, time.size)
+    return FlareLightCurve(time=time, flux=flux, flux_err=np.full(time.size, 1e-4))
+
+
+def test_find_iterative_median_is_global_by_default():
+    """One median for the whole light curve, whether or not the continuous
+    windows were computed first."""
+    flc = _two_level_flc()
+    it_med = np.asarray(flc.find_iterative_median(detrended=False).it_med)
+    it_med_after_windows = np.asarray(
+        flc.find_cont_windows().find_iterative_median(detrended=False).it_med)
+    assert np.unique(it_med).size == 1
+    assert np.array_equal(it_med, it_med_after_windows)
+    # 5 days at 1.0 and 2 days at 1.1: the global median is the lower level
+    assert np.isclose(it_med[0], 1.0, atol=1e-3)
+
+
+def test_find_iterative_median_per_window():
+    """per_window=True gives each continuous window its own median."""
+    flc = _two_level_flc()
+    it_med = np.asarray(flc.find_iterative_median(detrended=False, per_window=True).it_med)
+    time = flc.time.value
+    assert np.allclose(it_med[time < 5.5], 1.0, atol=1e-3)
+    assert np.allclose(it_med[time > 5.5], 1.1, atol=1e-3)
+    assert flc.cont_windows is not None

@@ -403,15 +403,25 @@ class FlareLightCurve(LightCurve):
         
         return flc
     
-    def find_iterative_median(self, n=10, detrended=True, **kwargs):
+    def find_iterative_median(self, n=10, detrended=True, per_window=False, **kwargs):
         """
-        Find the iterative median value for a continuous observation period using
-        sigma clipping to identify outliers.
+        Find the iterative median of the (detrended) flux, using sigma
+        clipping to exclude outliers such as flares.
+
+        By default a single median is computed for the whole light curve:
+        the baseline rarely shifts between continuous observing windows,
+        while stellar variability can bias the median of a short window.
 
         Parameters
         ----------
         n : int, optional
-            Maximum number of iterations. Default is 30.
+            Maximum number of sigma-clipping iterations. Default is 10.
+        detrended : bool, optional
+            Use ``detrended_flux`` (default) or ``flux``.
+        per_window : bool, optional
+            If True, compute one median per continuous window (see
+            ``find_cont_windows``; the windows are found first if needed),
+            e.g. when the baseline jumps between windows. Default False.
         **kwargs : dict
             Keyword arguments to pass to sigma_clip
 
@@ -423,21 +433,22 @@ class FlareLightCurve(LightCurve):
         Examples
         --------
         >>> flc.find_iterative_median()
-        >>> # Or chain methods:
-        >>> flc.find_cont_windows().find_iterative_median()
+        >>> # One median per continuous window:
+        >>> flc.find_iterative_median(per_window=True)
         """
         # Extract arrays from self
         if detrended == True:
             detrended_flux = self.detrended_flux
         else:
             detrended_flux = self.flux
-        
-        # Get continuous windows (find them if not already computed)
-        cont_windows = self.cont_windows
-        if cont_windows is None:
-            self.find_cont_windows()
+
+        # None makes _find_iterative_median use the whole light curve
+        cont_windows = None
+        if per_window:
+            if self.cont_windows is None:
+                self.cont_windows = self.find_cont_windows().cont_windows
             cont_windows = self.cont_windows
-        
+
         # Call internal function
         it_med = _find_iterative_median(detrended_flux, cont_windows, n, **kwargs)
         
