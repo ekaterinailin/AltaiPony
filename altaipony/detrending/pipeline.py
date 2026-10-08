@@ -7,7 +7,7 @@ AltaiPony
 
 Ekaterina Ilin, 2023, MIT License
 
-The detrending pipeline: polynomial baseline, Savitzky-Golay passes, and GP
+The detrending pipeline: polynomial baseline and, for periodic stars, a GP
 model.
 """
 
@@ -32,14 +32,7 @@ logger = logging.getLogger(__name__)
 
 def custom_detrending(
     lc,
-    savgol1=6.0,
-    savgol2=3.0,
-    use_savgol=True,
-    pad=3,
-    max_sigma=2.5,
-    longdecay=6,
     maxgap=10,
-    break_tolerance=10,
     periodicity_fap_threshold=1e-3,
     periodicity_amplitude_threshold=0.01,
     period_min_days=0.1,
@@ -64,32 +57,9 @@ def custom_detrending(
     ------------
     lc : FlareLightCurve
         light curve that has at least time, flux and flux_err
-    savgol1 : float
-        Window size for first Savitzky-Golay filter application.
-        Unit is hours, defaults to 6 hours.
-    savgol2 : float
-        Window size for second Savitzky-Golay filter application.
-        Unit is hours, defaults to 3 hours.
-    use_savgol : bool
-        If True (default), run the two Savitzky-Golay passes between the
-        baseline fit and the GP step.  If False, skip them entirely: the
-        baseline output is fed straight to the GP.  Either way, the baseline
-        stage's flare mask is the GP's initial mask.  Defaults to True.
-    pad : 3
-        Outliers in Savitzky-Golay filter are padded with this
-        number of data points. Defaults to 3.
-    max_sigma : float
-        Outlier rejection threshold in sigma. Defaults to 2.5.
-    longdecay : int
-        Long decay time for outlier rejection. Defaults to 6.
     maxgap : float
         Gaps longer than ``maxgap`` times the mean cadence split the light
         curve into continuous windows.  Defaults to 10.
-    break_tolerance: int
-        If there are large gaps in time, flatten will split the flux into
-        several sub-lightcurves and apply savgol_filter to each individually.
-        A gap is defined as a period in time larger than break_tolerance times
-        the median gap. To disable this feature, set break_tolerance to None.
     periodicity_fap_threshold : float
         False-alarm probability threshold for the Lomb-Scargle test.
         If the peak FAP is below this value the light curve is considered
@@ -112,7 +82,7 @@ def custom_detrending(
         masked (the baseline stage's flare mask), and a celerite2
         ``RotationTerm`` GP is fitted to the masked *original* flux.  The GP model smoothly bridges the masked
         windows and is then subtracted to produce the final detrended flux,
-        so the baseline and Savitzky-Golay results only shape the flare mask.
+        so the baseline result only shapes the flare mask.
         Defaults to True.
     gp_optimize : bool
         If True, optimise the GP hyperparameters (sigma, period within
@@ -212,63 +182,14 @@ def custom_detrending(
     # The baseline stage's flare mask is the GP's initial flare mask.
     baseline_flare_mask = best_params.pop("ld_final_flare_mask")
 
-    if use_savgol:
-        # choose a 6 hour window
-        w1 = int((np.rint(savgol1 / 24.0 / dt) // 2) * 2 + 1)
-
-        lc.flux = m2flux * u.electron / u.s
-        lc.flux_err = lc.flux_err * u.electron / u.s
-
-        # use Savitzy-Golay to iron out the rest
-        lc3 = lc.detrend(
-            "savgol",
-            w=w1,
-            pad=pad,
-            max_sigma=max_sigma,
-            longdecay=longdecay,
-            break_tolerance=break_tolerance,
-        )
-
-        lc3.flux = lc3.detrended_flux
-
-        # choose a uneven window size
-        w2 = int((np.rint(savgol2 / 24.0 / dt) // 2) * 2 + 1)
-
-        # use Savitzy-Golay to iron out the rest
-        lc4 = lc3.detrend(
-            "savgol",
-            w=w2,
-            pad=pad,
-            max_sigma=max_sigma,
-            longdecay=longdecay,
-            break_tolerance=break_tolerance,
-        )
-
-        # Restore original flux and errors from the columns (now filtered to
-        # lc4's length).  The Savitzky-Golay passes divide flux_err by their
-        # trend, so the GP would otherwise get flux in input units but errors
-        # in relative units.
-        lc4.flux = lc4["original_flux"] * u.electron / u.s
-        lc4.flux_err = lc4["original_flux_err"] * u.electron / u.s
-
-        # Clean up the temporary column
-        lc4.remove_column("original_flux")
-        lc.flux = lc["original_flux"] * u.electron / u.s
-        lc.flux_err = lc["original_flux_err"] * u.electron / u.s
-
-        # find median value
-        lc4.find_iterative_median()
-    else:
-        # No Savitzky-Golay: the baseline output IS the detrended flux fed to
-        # the GP step.  Keeping the grid untouched also means the baseline's
-        # flare mask stays aligned with the GP's cadences.
-        lc4 = lc
-        lc4.detrended_flux = m2flux * u.electron / u.s
-        lc4.flux = lc4["original_flux"] * u.electron / u.s
-        lc4.flux_err = lc4["original_flux_err"] * u.electron / u.s
-        lc4.remove_column("original_flux")
-        lc4.find_iterative_median()
-        best_params["savgol_skipped"] = True
+    # The baseline output is the detrended flux, at the input flux level; the
+    # GP step (for periodic stars) replaces it.  ``flux`` and ``flux_err``
+    # stay the original ones, which the GP is trained on.
+    lc4 = lc
+    lc4.detrended_flux = m2flux * u.electron / u.s
+    lc4.flux = lc4["original_flux"] * u.electron / u.s
+    lc4.flux_err = lc4["original_flux_err"] * u.electron / u.s
+    lc4.remove_column("original_flux")
 
     # Optional final Gaussian-Process refinement (in place on lc4/best_params).
     _apply_gp_step(
@@ -299,6 +220,11 @@ def custom_detrending(
         det = np.asarray(getattr(lc4.detrended_flux, "value", lc4.detrended_flux), dtype=float)
         level = _find_iterative_median(det, None)[0]
         lc4.detrended_flux = (NORMALIZED_BASELINE * det / level) * u.electron / u.s
+
+    # Drop the cadences that interpolate_missing_cadences filled in: they
+    # only served to give the fits a regular grid.
+    if "interpolated" in lc4.colnames:
+        lc4 = lc4[np.asarray(lc4["interpolated"]) == 0]
 
     # Iterative median of the final detrended flux.
     lc4.find_iterative_median()

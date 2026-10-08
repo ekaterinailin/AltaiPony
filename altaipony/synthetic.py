@@ -52,16 +52,36 @@ def make_time_grid(duration_days=25.0, cadence_min=2.0, gaps=()):
 # ---------------------------------------------------------------------------
 
 def draw_variability_modes(n_modes, rng, period_range=(0.25, 10.0),
-                           amplitude_range=(0.001, 0.05), harmonic_ratio=0.3,
+                           amplitude_range=(1e-4, 0.05), harmonic_ratio=0.3,
                            time_variable_amplitude=True):
     """Draw random sinusoidal variability modes.
 
     Periods are uniform in 0.25–10 d (6 h to 10 d), relative amplitudes
-    uniform in 0.1–5 %, and each mode has a constant offset of up to ±0.5 %
+    log-uniform in 0.01–5 % (so weakly or not detectably variable stars, with
+    amplitudes below the noise, are as common as strongly variable ones), and
+    each mode has a constant offset of up to ±0.5 %
     and a first harmonic at P/2 with ``harmonic_ratio`` times its amplitude
     and a random phase, so that the modulation is not a pure sinusoid, as for
     a spotted star.  With ``time_variable_amplitude``, each amplitude is
     modulated on a 10-day timescale (see ``sinusoidal_variability``).
+
+    Parameters
+    ----------
+    n_modes : int
+        Number of modes to draw.
+    rng : numpy Generator
+        Random number generator for all draws.
+    period_range : tuple of float
+        Range of the periods in days, drawn uniformly.  Default (0.25, 10).
+    amplitude_range : tuple of float
+        Range of the relative amplitudes, drawn log-uniformly.
+        Default (1e-4, 0.05), i.e. 0.01–5 %.
+    harmonic_ratio : float
+        Amplitude of the P/2 harmonic as a fraction of the mode's amplitude;
+        0 gives pure sinusoids.  Default 0.3.
+    time_variable_amplitude : bool
+        If True (default), modulate each mode's amplitude on a 10-day
+        timescale (``amp_mod_phase``).
 
     Returns
     -------
@@ -72,7 +92,7 @@ def draw_variability_modes(n_modes, rng, period_range=(0.25, 10.0),
     for _ in range(n_modes):
         mode = dict(
             period=rng.uniform(*period_range),
-            amplitude=rng.uniform(*amplitude_range),
+            amplitude=np.exp(rng.uniform(*np.log(amplitude_range))),
             phase=rng.uniform(0.0, 2 * np.pi),
             offset=rng.uniform(-0.005, 0.005),
             harmonic_ratio=harmonic_ratio,
@@ -136,7 +156,8 @@ def generate_synthetic_lc(
         from [200, 2000].
     n_modes : int or None
         Number of variability modes (see ``draw_variability_modes``: periods
-        6 h–10 d, amplitudes 0.1–5 %, each with a P/2 harmonic).  If None,
+        6 h–10 d, amplitudes log-uniform in 0.01–5 %, each with a P/2
+        harmonic).  If None,
         drawn from {1, 2, 3} with equal probability.
     seed : int or None
         Random seed for reproducibility.

@@ -569,7 +569,7 @@ if __name__ == "__main__":
 
     results, fp_table = run_injection_recovery(
         flare_finder=flare_finder_altai,
-        n_lcs=100,
+        n_lcs=200,
         seed=92,
         plot_fp=True,
         fp_plot_dir='diag_plots',
