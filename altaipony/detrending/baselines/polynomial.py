@@ -185,7 +185,6 @@ def preliminary_flare_mask(
         Polynomial degree used in each rough segment.
     rolling_pts : int, optional
         Rolling window length, in cadences, for the local sigma estimate.
-
     Returns
     -------
     numpy.ndarray
@@ -682,7 +681,6 @@ def build_safe_final_flare_mask(
     max_mask_fraction : float, optional
         Maximum allowed fraction of finite cadences in the candidate final mask.
         If the candidate exceeds this fraction, ``previous_mask`` is returned.
-
     Returns
     -------
     final_mask : numpy.ndarray

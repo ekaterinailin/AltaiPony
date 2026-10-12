@@ -43,6 +43,7 @@ def custom_detrending(
     gp_clip_iters=3,
     gp_anchor_edges=True,
     gp_second_rotation=True,
+    gp_residual_term=True,
     matched_filter_flares=True,
     matched_filter_snr=5.0,
     matched_filter_fwhm_grid=(0.02, 0.05, 0.1, 0.2),
@@ -91,10 +92,13 @@ def custom_detrending(
         the LS peak value.  Defaults to 0.05.
     gp_bin_factor : int
         Bin the GP training data by this factor before fitting.  A value
-        of 5 reduces a typical 18 000-point TESS segment to ~3 600 points,
-        cutting ``gp.compute()`` and each log-likelihood evaluation to ~1/5
-        of their unbinned cost.  Prediction still runs at full cadence.
-        Defaults to 5.
+        of 10 reduces a typical 18 000-point TESS segment to ~1 800 points
+        (20-min bins at 2-min cadence), cutting ``gp.compute()`` and each
+        log-likelihood evaluation to ~1/10 of their unbinned cost.
+        Prediction still runs at full cadence.  Binning also makes the GP
+        less flexible on short timescales: with a factor of 2, injection-
+        recovery lost 31 of 658 recovered flares (weak ones, S/N 2.6–6.5).
+        Defaults to 10.
     gp_clip_sigma : float
         One-sided residual clipping threshold applied after the GP
         optimisation.  Training points whose residual exceeds
@@ -119,6 +123,13 @@ def custom_detrending(
         each, and the fit with the lowest residual scatter is kept if it beats
         the single term.  For stars with two unrelated periodic signals.
         Defaults to True.
+    gp_residual_term : bool
+        If True (default), search the residual of the GP fit for a
+        significant periodic signal (FAP below ``periodicity_fap_threshold``)
+        and, if there is one, refit with an extra rotation term at its period,
+        kept if it lowers the residual scatter.  This covers variability the
+        kernel cannot follow, e.g. a fast, large modulation that changes faster
+        than the terms' minimum damping time allows.
     matched_filter_flares : bool
         If True (default), fit the GP twice: run a matched-filter pass
         (``matchedfilter`` module) on the residual of the first GP fit, union
@@ -202,6 +213,7 @@ def custom_detrending(
         gp_clip_iters=gp_clip_iters,
         gp_anchor_edges=gp_anchor_edges,
         gp_second_rotation=gp_second_rotation,
+        gp_residual_term=gp_residual_term,
         periodicity_fap_threshold=periodicity_fap_threshold,
         matched_filter_flares=matched_filter_flares,
         matched_filter_snr=matched_filter_snr,
@@ -267,6 +279,25 @@ def _second_period_candidates(time, flux, periods, fap_threshold,
     return candidates
 
 
+def _residual_period(time, residual, fap_threshold, period_min=0.1):
+    """Period of the highest Lomb-Scargle peak of a GP residual if it is
+    significant (FAP below ``fap_threshold``), else None.  The periodogram is
+    searched from ``period_min`` to half the time span."""
+    finite = np.isfinite(time) & np.isfinite(residual)
+    t, r = time[finite], residual[finite]
+    if len(t) < 20:
+        return None
+    ls, frequency, power = lomb_scargle(
+        t, r - np.median(r), min_frequency=2.0 / (t[-1] - t[0]), max_frequency=1.0 / period_min
+    )
+    if len(power) == 0:
+        return None
+    peak = np.argmax(power)
+    if ls.false_alarm_probability(power[peak], method="baluev") < fap_threshold:
+        return 1.0 / frequency[peak]
+    return None
+
+
 def _apply_gp_step(
     lc4,
     best_params,
@@ -281,6 +312,7 @@ def _apply_gp_step(
     gp_clip_iters,
     gp_anchor_edges=True,
     gp_second_rotation=True,
+    gp_residual_term=True,
     periodicity_fap_threshold=1e-3,
     matched_filter_flares=True,
     matched_filter_snr=5.0,
@@ -320,7 +352,7 @@ def _apply_gp_step(
         # The fitted sigma and jitter are therefore relative to the median.
         norm = np.nanmedian(f4_gp)
 
-        def _fit(mask, second_period=None):
+        def _fit(mask, extra_periods=()):
             model, _, params = fit_gp_rotation(
                 t4_gp,
                 f4_gp / norm,
@@ -333,7 +365,7 @@ def _apply_gp_step(
                 gp_clip_sigma=gp_clip_sigma,
                 gp_clip_iters=gp_clip_iters,
                 anchor_edges=gp_anchor_edges,
-                second_period=second_period,
+                extra_periods=extra_periods,
             )
             return model, params
 
@@ -347,11 +379,11 @@ def _apply_gp_step(
         # period, and keep the fit with the lowest scatter of the unmasked
         # residuals, if it is lower than with one term: a candidate can be a
         # sidelobe, and two terms can also compete and fit worse than one.
-        second_period = None
-        if gp_second_rotation:
-            def _scatter(model):
-                return np.nanstd((f4_gp / norm - model)[~flare_mask])
+        def _scatter(model):
+            return np.nanstd((f4_gp / norm - model)[~flare_mask])
 
+        extra = []
+        if gp_second_rotation:
             best = _scatter(gp_model)
             for candidate in _second_period_candidates(
                 t4_gp[~flare_mask],
@@ -359,10 +391,27 @@ def _apply_gp_step(
                 (dominant_period, gp_params["period"]),
                 fap_threshold=periodicity_fap_threshold,
             ):
-                model2, params2 = _fit(flare_mask, candidate)
+                model2, params2 = _fit(flare_mask, [candidate])
                 if _scatter(model2) < best:
                     best = _scatter(model2)
-                    gp_model, gp_params, second_period = model2, params2, candidate
+                    gp_model, gp_params, extra = model2, params2, [candidate]
+
+        # What the kernel still cannot follow (e.g. a fast, large modulation
+        # that changes faster than the terms' damping time allows) stays in
+        # the residual as a periodic signal.  If the residual periodogram has
+        # a significant peak, add a rotation term at its period, and keep it
+        # if it lowers the residual scatter.
+        if gp_residual_term:
+            residual_period = _residual_period(
+                t4_gp[~flare_mask],
+                (f4_gp / norm - gp_model)[~flare_mask],
+                fap_threshold=periodicity_fap_threshold,
+            )
+            if residual_period is not None:
+                model2, params2 = _fit(flare_mask, extra + [residual_period])
+                if _scatter(model2) < _scatter(gp_model):
+                    gp_model, gp_params = model2, params2
+                    extra = extra + [residual_period]
 
         # Second pass: per-cadence masks catch narrow flares but miss wide,
         # moderate-SNR ones (each cadence sits under the cut while the
@@ -381,7 +430,7 @@ def _apply_gp_step(
             )
             if (mf_mask & ~flare_mask).any():
                 flare_mask = flare_mask | mf_mask
-                gp_model, gp_params = _fit(flare_mask, second_period)
+                gp_model, gp_params = _fit(flare_mask, extra)
 
         n_masked = int(flare_mask.sum())
         gp_model = gp_model * norm

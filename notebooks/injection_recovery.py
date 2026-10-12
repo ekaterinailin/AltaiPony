@@ -26,7 +26,6 @@ a plain list of detections still works and produces a single-panel plot.
 """
 
 import os
-import time as time_module
 
 import numpy as np
 import pandas as pd
@@ -251,6 +250,24 @@ def _plot_false_positives(
 # Main injection-recovery runner
 # ---------------------------------------------------------------------------
 
+def detect_flares(lc):
+    """Flare detection on a detrended light curve, as used by both
+    benchmarks (``injection_recovery.py`` and
+    ``flare_finding_only_injection_recovery.py``): noise estimate,
+    continuous windows, global iterative median, ``find_flares`` with
+    fragments merged at 1 sigma.
+
+    ``lc.detrended_flux`` must be relative flux (quiet level ~1) as a plain
+    array.  Returns the light curve after detection and the list of
+    detections as ``(tstart, tstop)``.
+    """
+    lc = estimate_detrended_noise(lc)
+    lc = lc.find_cont_windows()
+    lc = lc.find_iterative_median()
+    flares = lc.find_flares(merge_sigma=1.0).flares
+    return lc, flares[["tstart", "tstop"]].values.tolist()
+
+
 def rotation_period(meta):
     """Rotation period of a synthetic star in days: the period of its
     strongest variability mode (NaN for a spotless star)."""
@@ -443,8 +460,6 @@ def run_injection_recovery(
             f"FP={n_fp}"
         )
 
-        time_module.sleep(5)  # slight delay to avoid overwhelming the output
-
     if not all_rows:
         return pd.DataFrame(), pd.DataFrame()
 
@@ -564,16 +579,12 @@ if __name__ == "__main__":
             maxgap=50,
         )
         lcd.detrended_flux = lcd.detrended_flux.value
-        lcd = estimate_detrended_noise(lcd)
+        lcd, flares = detect_flares(lcd)
         print(
             f"Estimated detrended noise: "
             f"{np.median(lcd.detrended_flux_err)*1e6:.0f} ppm "
             f"vs. true {meta['noise_ppm']:.0f} ppm"
         )
-        lcd = lcd.find_cont_windows()
-        lcd = lcd.find_iterative_median()
-        flares = lcd.find_flares(merge_sigma=1.0).flares
-        flares = flares[["tstart", "tstop"]].values.tolist()
 
         # Overview plot (raw + detrended + annotations)
         plt.figure(figsize=(10, 5))

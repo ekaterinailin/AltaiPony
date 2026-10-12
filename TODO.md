@@ -108,6 +108,16 @@ full suite now runs in about a minute: 240 passed, 4 failed.
   every star; the periodogram (computed without the baseline's flare mask)
   only provides its starting period, and the S/N code was removed.
 
+- Fast rotators with large, changing modulation left periodic leftovers in
+  the GP residual, often at a harmonic the kernel's terms did not cover
+  (e.g. 0.346 d, half of a 0.69 d mode), which produced false positives.
+  The GP now checks its residual periodogram (without the flare mask) and,
+  if the highest peak is significant, refits with an extra rotation term
+  at that period, kept if it lowers the residual scatter
+  (`gp_residual_term=True`; `fit_gp_rotation` takes a list of
+  `extra_periods`). Injection-recovery (100 LCs): 661 of 787 recovered
+  (+1), 0 false positives (from 1); only 4 light curves change.
+
 ## Tried and dropped
 
 Experiments evaluated with injection-recovery (100 LCs, seed 92) that gave no
@@ -123,6 +133,21 @@ clear net gain, and were removed to keep the code focused:
   together, the polynomial dipped under the flares and they were
   over-subtracted (strong flares lost, more false positives); with a fixed
   baseline the fit under-fitted the tails (+7 / −7 flares).
+- GP training data binned by 2 instead of 10: −31 flares (weak, S/N
+  2.6–6.5, mostly longer), 0 instead of 2 false positives, 2.4x slower.
+  The less binned GP follows shorter timescales and absorbs weak flares.
+- Minimum damping time for the GP's rotation terms (lower bound on Q0, so
+  that the modulation keeps its shape for 1, 2 or 5 days; Q0 sat at its
+  lower bound of 1 for 49 of 100 stars): at most +2 flares, so the GP's
+  flexibility is not what limits long flares. Kept at 2 days anyway
+  (`fit_gp_rotation(min_damping_days=2)`): 660 flares, 1 false positive,
+  the best false-positive result so far.
+- Extending the polynomial baseline's flare masks over each flare down to
+  2σ (hysteresis thresholding), also capped at 10x the flagged length:
+  +4 long flares, but 8 false positives instead of 1. On fast rotators with
+  large modulation (LC 21), the baseline's mask flags rotation leftovers
+  rather than flares, over tens of cadences, and the extension merges them
+  into blocks of 100+ cadences that the GP never sees.
 - Doubling the polynomial windows to 0.8–1.6 d (200 LCs): +14 of 1550
   flares, mostly long ones, but 4 false positives instead of 2. The midpoint,
   0.6–1.2 d, is the default now; it was not compared with 0.4–0.8 d on its
@@ -130,10 +155,37 @@ clear net gain, and were removed to keep the code focused:
 
 ## Remaining limitation
 
+`notebooks/flare_finding_only_injection_recovery.py` runs the same benchmark
+with perfect detrending (the known variability subtracted) to separate the
+detrending's losses from the flare finding's. With the current defaults:
+695 of 787 recovered with perfect detrending vs. 661 with the pipeline, 0
+false positives in both. The gap (34 flares) is almost all long flares (20
+with FWHM > 2 h, 11 with 1–2 h) and weak ones (31 at S/N 2–5); even
+spotless stars lose 7. The other 92 misses are the flare finding's: at
+S/N 2–5 it reaches only 52 % with perfect detrending.
+
 - Long flares (FWHM > 2 h) are recovered least often (~75 %). The polynomial
   baseline absorbs most of their decay tail (often >80 % of the flux) before
   the GP, because its windows bend into a decay that lasts several hours, and
   its 3σ mask covers only the core.
+
+## Not yet tested (robustness rather than tuning)
+
+The injection-recovery sample has 25-day, 2-min light curves with spot
+modulation, white noise and flares only. Not covered yet:
+
+- **Light-curve length.** The second-rotation term is known to be weaker on
+  8–12-day light curves (review plan, step 9); test e.g. single TESS orbits
+  (~13 d) and longer Kepler/K2 stretches.
+- **Other cadences.** 20-s (TESS) and 30-min (Kepler long cadence) data:
+  the polynomial windows, GP binning (20-min bins at 2-min cadence) and
+  matched-filter templates are all set in days or cadences tuned on 2 min.
+- **Flares at segment edges.** The GP's edge anchors override the flare
+  mask there (review plan, step 9), so the GP may absorb a flare at the
+  start or end of a segment.
+- **Real-data systematics.** Scattered light, momentum dumps and other
+  short-timescale trends are not in the synthetic data; test on real TESS
+  light curves of quiet stars.
 
 ## Open, related
 
@@ -149,5 +201,3 @@ clear net gain, and were removed to keep the code focused:
 - The `find_cont_windows` unit error (see Other bugs) may come from
   `flux_err` being multiplied by e-/s twice somewhere, as
   `custom_detrending` did before the Savitzky-Golay passes (removed).
-- `notebooks/injection_recovery.py` sleeps 5 s after every light curve, which
-  adds ~8 min to a 100-LC run.
