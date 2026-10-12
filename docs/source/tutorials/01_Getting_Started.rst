@@ -118,7 +118,7 @@ variability. Let’s remove it with the ``custom_detrending`` function:
 .. image:: 01_Getting_Started_files/01_Getting_Started_14_1.png
 
 
-``custom_detrending`` runs a spline fit and two rounds of Savitzky-Golay filtering with decreasing windows, while iteratively masking outliers that could be flare candidates to find a model light curve, and subtract it from the observed one. 
+``custom_detrending`` fits a smooth polynomial baseline and then a Gaussian process with a rotation kernel, while iteratively masking outliers that could be flare candidates, to find a model light curve, and subtracts it from the observed one (see the De-trending tutorial). 
 
 .. code:: ipython3
 

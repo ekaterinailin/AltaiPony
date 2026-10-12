@@ -36,7 +36,6 @@ from .fakeflares import (merge_fake_and_recovered_events,
 from .injrecanalysis import wrap_characterization_of_flares, _heatmap
 from .utils import split_cont_windows
 from .utils import get_response_curve
-from .savgoldetrending import detrend_savgol
 
 LOG = logging.getLogger(__name__)
 
@@ -524,9 +523,8 @@ class FlareLightCurve(LightCurve):
         Parameters:
         ----------
         mode : str
-            "savgol" or "custom"
-        max_sigma: int
-            Default is 3, value is passed to iterative sigma clipping
+            "custom": detrend with the function passed to ``func``, e.g.
+            ``altaipony.detrending.custom_detrending``.
         save : False or bool
             If True, the light curve is saved as a fits file to a
             given folder.
@@ -537,28 +535,13 @@ class FlareLightCurve(LightCurve):
         func : function
             custom detrending function
         kwargs : dict
-            Keyword arguments to pass to detrend_savgol, or custom
-            method
+            Keyword arguments to pass to ``func``.
 
         Returns
         --------
         FlareLightCurve
         """
-        if mode == "savgol":
-            new_lc = copy.deepcopy(self)
-                # fill missing cadences
-            new_lc = new_lc.remove_nans().find_iterative_median()
-            og_flux = new_lc.flux.copy()
-            og_flux_err = new_lc.flux_err.copy()
-            new_lc = new_lc.interpolate_missing_cadences()
-            new_lc =  detrend_savgol(new_lc, og_flux, og_flux_err, **kwargs)
-            
-            if save == True:
-                new_lc.to_fits(path)
-            return new_lc
-        
-
-        elif mode=="custom":
+        if mode == "custom":
             
             if func is None:
                 LOG.error('If you wish to use a custom detrending function you'
@@ -581,8 +564,9 @@ class FlareLightCurve(LightCurve):
             return new_lc
         
         else:
-            err_str = (f'\nDe-trending mode {mode} does not exist. Pass "savgol" (for a Savitzky-Golay filter based detrending)'
-                       ' or "custom" (to pass a custom detrending function to func=).')
+            err_str = (f'\nDe-trending mode {mode} does not exist. Pass "custom" and a '
+                       'detrending function to func=, e.g. '
+                       'altaipony.detrending.custom_detrending.')
             LOG.exception(err_str)
             raise ValueError(err_str)
 
@@ -795,7 +779,9 @@ class FlareLightCurve(LightCurve):
         inject_before_detrending : False or bool
             If True, fake flare are injected directly into raw data.
         mode : str
-            "savgol" or "k2sc". Required if ``inject_before_detrending`` is True.
+            De-trending mode passed to ``FlareLightCurve.detrend``, i.e.
+            "custom" (with ``func``). Required if ``inject_before_detrending``
+            is True.
         fakefreq : 0.05 or float
             number of flares per day, but at least one per continuous observation period will be injected
         detrend_kwargs : dict

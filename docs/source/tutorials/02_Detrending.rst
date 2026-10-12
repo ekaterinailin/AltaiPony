@@ -10,10 +10,9 @@ star-spot induced variability, even if the latter has a higher
 amplitude.
 
 In this tutorial, we will go through the de-trending pipeline in
-AltaiPony, including a Savitzky-Golay filter-based de-trending and a
-more involved custom detrening method tailored toward removing heavy
-spot variability from very active stars while preserving the flare
-signal. In the end, you will also learn how to use your own detrending
+AltaiPony, ``custom_detrending``, which is tailored toward removing
+spot variability, from weak to heavy, while preserving the flare signal.
+In the end, you will also learn how to use your own detrending
 function within AltaiPony.
 
 .. code:: ipython3
@@ -68,129 +67,52 @@ Let download the lightcurve:
 
 
 Just like in the Quickstart tutorial, this light curve also shows
-flares. Now let’s make ``lc`` a FlareLightCurve object, and apply
-detrending:
+flares. Now let’s make ``lc`` a FlareLightCurve object, de-trend it, and
+search for flares:
 
 .. code:: ipython3
 
-    def plot_detrending(flcd_savgol, offset=200):
+    def plot_detrending(flcd, offset=200):
         plt.figure(figsize=(10, 5))
-        plt.plot(flcd_savgol.time.value, flcd_savgol.flux, label='Flux', alpha=0.5)
-        plt.plot(flcd_savgol.time.value, flcd_savgol.detrended_flux+offset, label='Detrended flux', color='orange')
+        plt.plot(flcd.time.value, flcd.flux, label='Flux', alpha=0.5)
+        plt.plot(flcd.time.value, flcd.detrended_flux+offset, label='Detrended flux', color='orange')
         plt.xlabel('Time')
         plt.ylabel('Flux')
-        plt.title('Sav-Gol Detrending of Flare Light Curve')
         plt.legend()
-        
+
     flc = to_flare_lightcurve(lc)
-    flcd_savgol = flc.detrend("savgol")
-    
+    flcd = flc.detrend("custom", func=custom_detrending)
+    flares = flcd.find_flares().flares
 
+How the de-trending works
+-------------------------
 
-.. code:: ipython3
+``custom_detrending`` separates the fast flare signal from the slower
+rotational modulation in two stages:
 
-    savgol_flares = flcd_savgol.find_flares().flares
+1. A polynomial baseline: degree-4 polynomials fitted on overlapping
+   windows of 0.6, 0.9 and 1.2 days, blended into one smooth curve.
+   Flares are sigma-clipped iteratively, so they do not pull the
+   baseline up.
+2. A Gaussian process with a rotation kernel (``celerite2``). A
+   Lomb-Scargle periodogram of the flux, with the flares from stage 1
+   masked, sets the starting period. If the periodogram or the GP
+   residual shows a significant second period, the kernel gets a second
+   rotation term. A matched filter flags remaining flare candidates in the
+   GP residual, and the GP is refitted without them.
 
+The de-trended flux is the residual from the GP model, normalised
+by the flux level and centred on 1. If
+``celerite2`` is not installed, or ``use_gp=False`` is passed, the
+polynomial baseline alone is used.
 
-.. parsed-literal::
+Heavy spot modulation
+---------------------
 
-    Found 0 candidate(s) in the (0,9226) gap.
-    Found 4 candidate(s) in the (9226,18300) gap.
-
-
-There are three main parameters to play with: ``w`` (default=121),
-``max_sigma``\ (defaul=2.5), and ``longdecay``\ (default=6).
-
-``w`` is the length of the Sav-Gol filter. Larger window means lower
-frequency pass, filtering out modulation on lower timescales.
-
-.. code:: ipython3
-
-    flcd_savgol2 = flc.detrend("savgol", w=10001)
-    plot_detrending(flcd_savgol2)
-
-
-
-.. image:: 02_Detrending_files/02_Detrending_10_0.png
-
-
-Too small ``w`` can approach the timescales of the flares themselves,
-distorting them, especially if the flare is not fully masked, which can
-happen if ``max_sigma`` is set too high:
-
-Larger ``max_sigma`` filters out fewer flare points before applying the
-filter, leading to a worse detrending around long-duration flares. On
-the other hand, too low ``max_sigma`` preserved more noise in the
-detrended data:
-
-.. code:: ipython3
-
-    from altaipony.fakeflares import flare_model_mendoza2022
-    import astropy.units as u
-    flcl = flc.copy()
-    t = flcl.time.value
-    long_duration_flare = flare_model_mendoza2022(t, tpeak=1357.0, ampl=50, fwhm=.04)
-    flcl.flux += long_duration_flare * u.electron / u.second
-    
-    
-    # too low max_sigma preserves noise
-    flcd_savgol3 = flcl.detrend("savgol", max_sigma=1.5)
-    plot_detrending(flcd_savgol3, offset=200)
-    
-    # too high max_sigma exposes long-duration flares to filtering
-    flcd_savgol4 = flcl.detrend("savgol", max_sigma=30)
-    plot_detrending(flcd_savgol4, offset=0)
-    plt.xlim(1356.7, 1357.7);
-
-
-.. image:: 02_Detrending_files/02_Detrending_12_1.png
-
-
-
-.. image:: 02_Detrending_files/02_Detrending_12_2.png
-
-
-Finally, the ``longdecay`` parameter. The sigma-clipping pipeline
-running under the hood of the Sav-Gol de-trender will expand the
-filtering mask around the outliers by
-:math:`\sqrt{\text{length of the outliers series}}`. If longdecay=1,
-this completes the mask expansion. If longdecay=2, the tail of the
-series of outliers is expanded twice, thrice for longdecay=3, and so on.
-
-Below, we can see how keeping the longdecay parameter too short exposes
-the flare tail to the Sav-Gol filter. Making it too long on the other
-hand, prevents the filter from de-trending accurately in the area (not
-shown).
-
-.. code:: ipython3
-
-    flcd_savgol5 = flcl.detrend("savgol", longdecay=1)
-    plot_detrending(flcd_savgol5, offset=0)
-    plt.xlim(1375, 1377.5)
-    
-    flcd_savgol6 = flcl.detrend("savgol", longdecay=6)
-    plot_detrending(flcd_savgol6, offset=0)
-    plt.xlim(1375, 1377.5);
-
-
-
-.. image:: 02_Detrending_files/02_Detrending_14_0.png
-
-
-
-.. image:: 02_Detrending_files/02_Detrending_14_1.png
-
-
-The Savitzky-Golay filter works well on light curves like the one above,
-where there is low-amplitude variability on a time scale much shorter
-than the light curve, but longer than the flare. However, oftentimes
-spot variability occurs on timescale close to the light curve length
-(especially for the shorter TESS light curves). For this, the ``custom``
-detrending add a spline fit with an variable time step between 5h and
-15h, as a first step in the analysis, and follows it up by two Sav-Gol
-detrending iterations to remove variability on 6h and 3h timescales.
-
-To see what that means, let’s try a different light curve:
+Spot variability often occurs with large amplitudes and on timescales
+close to the light curve length (especially for the shorter TESS light
+curves). To see how the pipeline handles this, let’s try a different
+light curve:
 
 .. code:: ipython3
 
@@ -213,40 +135,14 @@ To see what that means, let’s try a different light curve:
 .. code:: ipython3
 
     flc = to_flare_lightcurve(lc)
-    flcd_savgol_aumic = flc.detrend("savgol")
-    plot_detrending(flcd_savgol_aumic)
-
-
-
-.. image:: 02_Detrending_files/02_Detrending_17_0.png
-
-
-The filter clearly missed the longer-duration arc of the spot
-modulation. This calls for an additional step to remove the
-large-amplitude variability, cue the custom detrending method:
-
-Custom De-trending with AltaiPony
----------------------------------
-
-The custom de-trending method implemented in AltaiPony combines a
-flexible spline fit with two Savitzky-Golay iterations, which
-successively separate fast flare signal from slow(er) rotational
-modulation. The parameters from the Savitzky-Golay detrender can be
-passed to those two iterations. The spline fit iterates over different
-coarseness parameters, and spline orders, and penalizes the lack of
-positive outliers to avoid splining away flares by accident:
-
-.. code:: ipython3
-
-    flcd_custom_aumic = flc.detrend("custom", func=custom_detrending)
-    plot_detrending(flcd_custom_aumic)
+    flcd_aumic = flc.detrend("custom", func=custom_detrending)
+    plot_detrending(flcd_aumic)
 
 
 
 .. image:: 02_Detrending_files/02_Detrending_19_2.png
 
 
-Much better than just Sav-Gol!
 
 Note how the de-trending can still distort large or long-duration flares
 (e.g., around t=2053.5d). This does not prevent them from being

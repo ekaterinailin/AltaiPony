@@ -230,9 +230,9 @@ sample with amplitudes down to 0.01 %. For the 10 stars without a GP, no
 filter recovered 44 of 57 flares vs. 42 with both, and no setting had false
 positives. Not covered by that test: short-timescale systematics in real
 data (scattered light, momentum dumps), which the polynomial windows
-(0.4–0.8 d) may not follow. `FlareLightCurve.detrend("savgol")` and its two
-`detrend_savgol` implementations (`altai.py`, `savgoldetrending.py`) still
-exist outside the detrending package.
+(0.4–0.8 d) may not follow. The Savitzky-Golay mode of
+`FlareLightCurve.detrend` and both `detrend_savgol` implementations were
+removed as well (2026-10-12).
 
 ## Step 9: Gaussian-process model (`gp.py`, `pipeline._apply_gp_step`)
 

@@ -966,9 +966,8 @@ def fit_lightcurve_detrender(time, flux, flux_err, cont_windows, config=None):
     * ``flux_err`` is forced strictly positive and finite (non-finite or
       non-positive values are replaced by the median positive error).
     * The pipeline's ``final_residual`` is centred near zero; it is rebased to
-      the flux level (``+ median(flux)``) so the downstream Savitzky-Golay
-      passes see a signal at the original level, matching the convention of the
-      other baseline fitters.
+      the flux level (``+ median(flux)``), so the trend is at the level of the
+      input flux.
     * ``cont_windows`` is accepted for signature compatibility but not used directly —
       ``run_detrending`` detects its own continuous blocks from ``time``.
 

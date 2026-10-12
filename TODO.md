@@ -117,6 +117,11 @@ full suite now runs in about a minute: 240 passed, 4 failed.
   (`gp_residual_term=True`; `fit_gp_rotation` takes a list of
   `extra_periods`). Injection-recovery (100 LCs): 661 of 787 recovered
   (+1), 0 false positives (from 1); only 4 light curves change.
+- The Savitzky-Golay detrending mode outside the pipeline is gone too:
+  `savgoldetrending.py`, `altai.detrend_savgol` and
+  `FlareLightCurve.detrend("savgol")` were removed; `detrend` takes only
+  `"custom"` with a `func`. The tutorials (`02_Detrending.rst`,
+  `fakeflares.rst`) now use `custom_detrending`.
 
 ## Tried and dropped
 

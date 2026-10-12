@@ -221,39 +221,7 @@ def test_gaps_and_find_gaps_are_deprecated_aliases():
     assert flc_old.cont_windows == [(0, 500), (500, 1000)]
 
 def test_detrend():
-    # Test SAVGOL detrending
-    
-    ampls = [100, 10., 1, .1, .01]
-    durs = [1, 2, 3]
-    lcs = []
-    for ampl in ampls:
-        for dur in durs:
-            aplc = mock_flc(ampl=ampl, dur=dur)
-            daplc = aplc.detrend("savgol")
-            lcs.append(daplc)
-
-    for i, daplc in enumerate(lcs):
-        # print(i)
-        # plt.figure()
-        # plt.plot(daplc.time.value, daplc.flux, label="Original flux")
-        # plt.plot(daplc.time.value, daplc.detrended_flux, label="Detrended flux")
-        # plt.yscale("log")
-        # plt.ylim(450,550)
-        # plt.xlim(0,3)
-        # plt.legend()
-        # plt.savefig(f"savgol_detrend_test_{i}.png")
-        fff = daplc.find_iterative_median()
-        shape = fff.flux.value.shape
-        assert fff.it_med.value == pytest.approx(500., rel=0.01) #median stays the same roughly
-        assert aplc.flux.value.shape[0] == daplc.detrended_flux.value.shape[0] #no NaNs to throw out
-        assert (aplc.flux_err.value == daplc.detrended_flux_err.value).all() # uncertainties are simply kept
-        # Test that shapes of arrays are kept
-
-        for att in ["detrended_flux", "detrended_flux_err",
-            "flux_err", "flux", "time", "quality"]:
-            assert getattr(fff, att).value.shape == shape
-        
-    # TEST CUSTOM DETRENDING
+    """Custom detrending via FlareLightCurve.detrend(mode="custom")."""
     
     # --- create a very minimalistic light curve
     N = int(1e4)
@@ -304,8 +272,9 @@ def test_detrend_fails():
     # De-trending fails in general when an invalid mode is passed.
     # But also a helpful message is thrown out.
     flc =  mock_flc()
-    err_string = ('\nDe-trending mode blaaaah does not exist. Pass "savgol" (for a Savitzky-Golay filter based detrending)'
-                       ' or "custom" (to pass a custom detrending function to func=).')
+    err_string = ('\nDe-trending mode blaaaah does not exist. Pass "custom" and a '
+                  'detrending function to func=, e.g. '
+                  'altaipony.detrending.custom_detrending.')
     with pytest.raises(ValueError) as err:
         flc.detrend("blaaaah")
     assert err_string == err.value.args[0]
