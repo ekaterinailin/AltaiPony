@@ -142,6 +142,7 @@ def generate_synthetic_lc(
     n_modes=None,
     seed=None,
     baseline_range=(1000.0, 100000.0),
+    spotless_fraction=0.2,
 ):
     """Generate one random synthetic light curve in e-/s.
 
@@ -164,6 +165,11 @@ def generate_synthetic_lc(
     baseline_range : tuple of float or None
         Range of the quiescent baseline in e-/s, drawn uniformly.  Default
         1000–100000.  None gives a light curve normalised to ~1.
+    spotless_fraction : float
+        Probability that the star has no variability at all (white noise
+        only).  Decided from a separate random stream, and the modes are still
+        drawn, so every other light curve is the same as with
+        ``spotless_fraction=0``.  Default 0.2.
 
     Returns
     -------
@@ -171,8 +177,9 @@ def generate_synthetic_lc(
     flux : ndarray
     meta : dict
         ``noise_ppm``, ``n_modes``, ``seed``, ``baseline`` (e-/s, or 1),
-        ``modes`` (the drawn modes) and ``min_period_hr`` (period of the
-        fastest mode, in hours).
+        ``modes`` (the modes in the light curve, empty for a spotless star),
+        ``spotless`` and ``min_period_hr`` (period of the fastest mode, in
+        hours; inf for a spotless star).
     """
     rng = np.random.default_rng(seed)
 
@@ -183,6 +190,12 @@ def generate_synthetic_lc(
 
     time = make_time_grid(duration_days, cadence_min, draw_gaps(duration_days, rng))
     modes = draw_variability_modes(n_modes, rng)
+    # Spotless star: drop the modes, but only after drawing them, so that the
+    # noise and everything drawn later is the same as for the spotted star.
+    spotless_rng = np.random.default_rng(None if seed is None else [seed, 3])
+    spotless = bool(spotless_rng.random() < spotless_fraction)
+    if spotless:
+        modes, n_modes = [], 0
     flux = 1.0 + sinusoidal_variability(time, modes)
 
     flux += rng.normal(0.0, noise_ppm * 1e-6, size=len(time))
@@ -196,7 +209,7 @@ def generate_synthetic_lc(
         flux = flux * baseline
 
     meta = dict(noise_ppm=noise_ppm, n_modes=n_modes, seed=seed, baseline=baseline,
-                modes=modes, min_period_hr=24.0 * min((m["period"] for m in modes), default=np.inf))
+                modes=modes, spotless=spotless, min_period_hr=24.0 * min((m["period"] for m in modes), default=np.inf))
     return time, flux, meta
 
 

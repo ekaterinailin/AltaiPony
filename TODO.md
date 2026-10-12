@@ -8,7 +8,7 @@ knot tests only failed because the spline API had changed (`_build_knot_points`
 returns the knot scatter too, `_fit_single_spline` takes `smoothing`,
 `best_params` has a `smoothing` key); they were updated and passed. Since
 then the spline baseline and its tests have been removed (see Resolved). The
-full suite now runs in about a minute: 236 passed, 4 failed.
+full suite now runs in about a minute: 240 passed, 4 failed.
 
 ### `altaipony/tests/detrending/test_pipeline.py`
 
@@ -31,6 +31,10 @@ full suite now runs in about a minute: 236 passed, 4 failed.
   `test_flarelc.py::test_detrend` (around line 245). Since
   `find_iterative_median` no longer calls it by default, that test passes;
   `find_iterative_median(per_window=True)` would still hit the error there.
+- `fit_flares.py` passes its fitted "fwhm" to `flare_model_davenport2014`,
+  whose third argument is a duration (FWHM = duration / 2). The FWHMs it
+  reports are therefore twice the actual FWHM (a 160-min flare came out as
+  ~260 min).
 - `fakeflares.flare_model_mendoza2022(..., upsample=True)` raises
   `ValueError: The smallest edge difference is numerically 0.` whenever
   `tpeak` coincides with a cadence (the bin edges are built from
@@ -86,11 +90,64 @@ full suite now runs in about a minute: 236 passed, 4 failed.
   the only one; `baselines/spline.py`, `baselines/multisine.py`,
   `baseline_method`, the multi-sine options and `_identify_flare_mask` were
   removed.
+- The two Savitzky-Golay passes (6 h, 3 h) in `custom_detrending` changed
+  nothing for GP stars and slightly lowered recovery for the others (42 vs.
+  44 of 57 flares without them, no false positives either way). Removed,
+  with `savgol1`, `savgol2`, `use_savgol`, `pad`, `max_sigma`, `longdecay`
+  and `break_tolerance`; cadences filled by `interpolate_missing_cadences`
+  are now dropped from the output explicitly (the passes used to do that).
+- The 6–36 h sinusoid correction in the polynomial baseline changed nothing
+  once the GP runs for every star (injection-recovery identical cadence for
+  cadence). Removed (`multi_sinusoid_correction` and its settings).
+- The periodicity gate: the semi-amplitude threshold was replaced by an S/N
+  threshold (S/N > 3 lost 11 flares on the stars it excluded from the GP),
+  then by the false-alarm test alone (+5 flares). Flares alone make a
+  spotless star "periodic" (FAP ~1e-60, at roughly their spacing), even after
+  masking them, but a test with 22 spotless stars showed the GP helps there
+  too (133 vs. 119 of 164 flares, no false positives). So the GP now runs for
+  every star; the periodogram (computed without the baseline's flare mask)
+  only provides its starting period, and the S/N code was removed.
+
+## Tried and dropped
+
+Experiments evaluated with injection-recovery (100 LCs, seed 92) that gave no
+clear net gain, and were removed to keep the code focused:
+
+- Matched-filter FWHM grid: starting at 0.01 d, or ending at 0.2 d instead of
+  0.15 d, changed at most one flare (0.2 d kept as the long end).
+- Tail extension of the polynomial baseline's flare masks (extending each
+  flagged stretch while the residual stays above 1σ): +2 flares but 12 false
+  positives instead of 4, from leftover rotation on fast rotators.
+- Fitting and subtracting flares before the GP (`fit_flares` MCMC: 1–6 min
+  per light curve; least squares: fast). With baseline and flares fitted
+  together, the polynomial dipped under the flares and they were
+  over-subtracted (strong flares lost, more false positives); with a fixed
+  baseline the fit under-fitted the tails (+7 / −7 flares).
+- Doubling the polynomial windows to 0.8–1.6 d (200 LCs): +14 of 1550
+  flares, mostly long ones, but 4 false positives instead of 2. The midpoint,
+  0.6–1.2 d, is the default now; it was not compared with 0.4–0.8 d on its
+  own.
+
+## Remaining limitation
+
+- Long flares (FWHM > 2 h) are recovered least often (~75 %). The polynomial
+  baseline absorbs most of their decay tail (often >80 % of the flux) before
+  the GP, because its windows bend into a decay that lasts several hours, and
+  its 3σ mask covers only the core.
 
 ## Open, related
 
+- `fit_flares.py` fits flares with the Davenport et al. (2014) template
+  (`flare_model_davenport2014`). Switch it to the Tovar Mendoza et al. (2022)
+  template (`fakeflares.flare_model_mendoza2022`), which the synthetic light
+  curves and injection-recovery use (and fix the FWHM convention, see Other
+  bugs). The matched filter (`matchedfilter.py`) also still uses Davenport
+  (2014).
+
 - `detrended_flux` is relative flux but still labelled e-/s (see review plan
   step 1 and the 4 Quantity test failures).
-- `custom_detrending` multiplies `lc.flux_err` (already a Quantity) by e-/s
-  again before the Savitzky-Golay passes, giving units (e-/s)^2. Harmless so
-  far, but the same pattern may be behind the `find_cont_windows` unit error.
+- The `find_cont_windows` unit error (see Other bugs) may come from
+  `flux_err` being multiplied by e-/s twice somewhere, as
+  `custom_detrending` did before the Savitzky-Golay passes (removed).
+- `notebooks/injection_recovery.py` sleeps 5 s after every light curve, which
+  adds ~8 min to a 100-LC run.

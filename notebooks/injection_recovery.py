@@ -251,6 +251,46 @@ def _plot_false_positives(
 # Main injection-recovery runner
 # ---------------------------------------------------------------------------
 
+def rotation_period(meta):
+    """Rotation period of a synthetic star in days: the period of its
+    strongest variability mode (NaN for a spotless star)."""
+    if not meta['modes']:
+        return np.nan
+    return max(meta['modes'], key=lambda m: m['amplitude'])['period']
+
+
+def plot_recovery_scatter(results, path):
+    """FWHM vs. S/N of every injected flare: recovered flares as open
+    circles, missed ones filled, coloured by the rotation period of their
+    star (``rot_period_d``, log scale)."""
+    from matplotlib.colors import LogNorm
+    from matplotlib.lines import Line2D
+
+    norm = LogNorm(vmin=0.25, vmax=10.0)
+    cmap = plt.get_cmap('viridis')
+    fig, ax = plt.subplots(figsize=(7, 5))
+    rec = results['recovered'].astype(bool)
+    missed = results[~rec]
+    found = results[rec]
+    ax.scatter(missed['fwhm'], missed['snr'], c=missed['rot_period_d'], cmap=cmap, norm=norm,
+               s=18, alpha=0.8, linewidths=0)
+    ax.scatter(found['fwhm'], found['snr'], facecolors='none',
+               edgecolors=cmap(norm(found['rot_period_d'].to_numpy())), s=18, alpha=0.8,
+               linewidths=0.8)
+    sm = plt.cm.ScalarMappable(norm=norm, cmap=cmap)
+    fig.colorbar(sm, ax=ax, label='rotation period of the star (d)')
+    ax.set_xscale('log')
+    ax.set_yscale('log')
+    ax.set_xlabel('FWHM (days)')
+    ax.set_ylabel('S/N')
+    ax.legend(handles=[
+        Line2D([], [], marker='o', ls='', mfc='none', mec='0.3', label=f'recovered ({len(found)})'),
+        Line2D([], [], marker='o', ls='', mfc='0.3', mec='0.3', label=f'missed ({len(missed)})'),
+    ], loc='lower left', bbox_to_anchor=(0, 1.0), ncol=2, frameon=False)
+    fig.savefig(path, dpi=150, bbox_inches='tight')
+    plt.close(fig)
+
+
 def run_injection_recovery(
     flare_finder,
     n_lcs=50,
@@ -367,6 +407,7 @@ def run_injection_recovery(
         matched['noise_ppm']       = meta['noise_ppm']
         matched['n_modes']         = meta['n_modes']
         matched['min_period_hr'] = meta['min_period_hr']
+        matched['rot_period_d']    = rotation_period(meta)
         matched['false_positives'] = n_fp
         all_rows.append(matched)
 
@@ -375,6 +416,7 @@ def run_injection_recovery(
             fp['noise_ppm'] = meta['noise_ppm']
             fp['n_modes']   = meta['n_modes']
             fp['min_period_hr'] = meta['min_period_hr']
+            fp['rot_period_d'] = rotation_period(meta)
             fp_rows.append(fp)
 
         # --- false-positive diagnostic plots
@@ -410,14 +452,15 @@ def run_injection_recovery(
     results['snr'] = results['ampl'] / (results['noise_ppm'] * 1e-6)
 
     col_order = [
-        'lc_id', 'noise_ppm', 'n_modes', 'min_period_hr',
+        'lc_id', 'noise_ppm', 'n_modes', 'min_period_hr', 'rot_period_d',
         'tpeak', 'fwhm', 'ampl', 'snr', 't_start', 't_end',
         'recovered', 'rec_t_start', 'rec_t_end',
         'false_positives',
     ]
     results = results[[c for c in col_order if c in results.columns]]
 
-    fp_col_order = ['lc_id', 'noise_ppm', 'n_modes', 'min_period_hr', 'rec_t_start', 'rec_t_end']
+    fp_col_order = ['lc_id', 'noise_ppm', 'n_modes', 'min_period_hr', 'rot_period_d',
+                    'rec_t_start', 'rec_t_end']
     if fp_rows:
         fp_results = pd.concat(fp_rows, ignore_index=True)
         fp_results = fp_results[[c for c in fp_col_order if c in fp_results.columns]]
@@ -517,7 +560,6 @@ if __name__ == "__main__":
         )
         lcd = custom_detrending(
             lc,
-            periodicity_amplitude_threshold=0.001,
             periodicity_fap_threshold=0.001,
             maxgap=50,
         )
@@ -569,7 +611,7 @@ if __name__ == "__main__":
 
     results, fp_table = run_injection_recovery(
         flare_finder=flare_finder_altai,
-        n_lcs=200,
+        n_lcs=100,
         seed=92,
         plot_fp=True,
         fp_plot_dir='diag_plots',
@@ -585,14 +627,6 @@ if __name__ == "__main__":
     print("\n--- False-positive table (first 120 rows) ---")
     print(fp_table.head(120).to_string(index=False))
 
-    # Recovery scatter: FWHM vs S/N, coloured by recovered/missed
-    plt.figure(figsize=(6, 5))
-    for group, df in results.groupby('recovered'):
-        plt.scatter(df['fwhm'], df['snr'], label=f'recovered={group}', alpha=0.5)
-    plt.xscale('log')
-    plt.yscale('log')
-    plt.xlabel('FWHM (days)')
-    plt.ylabel('S/N')
-    plt.legend()
-    plt.savefig("diag_plots/recovery_scatter.png", dpi=150)
-    plt.close()
+    # Recovery scatter: FWHM vs S/N, open = recovered, filled = missed,
+    # coloured by the star's rotation period
+    plot_recovery_scatter(results, "diag_plots/recovery_scatter.png")

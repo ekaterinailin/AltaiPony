@@ -7,8 +7,7 @@ AltaiPony
 
 Ekaterina Ilin, 2023, MIT License
 
-The detrending pipeline: polynomial baseline and, for periodic stars, a GP
-model.
+The detrending pipeline: polynomial baseline and GP model.
 """
 
 import logging
@@ -34,7 +33,6 @@ def custom_detrending(
     lc,
     maxgap=10,
     periodicity_fap_threshold=1e-3,
-    periodicity_amplitude_threshold=0.01,
     period_min_days=0.1,
     detrender_config=None,
     use_gp=True,
@@ -47,7 +45,7 @@ def custom_detrending(
     gp_second_rotation=True,
     matched_filter_flares=True,
     matched_filter_snr=5.0,
-    matched_filter_fwhm_grid=(0.02, 0.05, 0.1, 0.15),
+    matched_filter_fwhm_grid=(0.02, 0.05, 0.1, 0.2),
 ):
     """Custom de-trending for TESS and Kepler
     short cadence light curves, including TESS Cycle 3 20s
@@ -61,29 +59,27 @@ def custom_detrending(
         Gaps longer than ``maxgap`` times the mean cadence split the light
         curve into continuous windows.  Defaults to 10.
     periodicity_fap_threshold : float
-        False-alarm probability threshold for the Lomb-Scargle test.
-        If the peak FAP is below this value the light curve is considered
-        strongly periodic.  Defaults to 1e-3.
-    periodicity_amplitude_threshold : float
-        Minimum semi-amplitude (as a fraction of the median flux) for the
-        light curve to count as strongly periodic, which enables the GP step.
-        Defaults to 0.01 (1 % of the median flux).
+        False-alarm probability threshold for the periodograms.  The GP always
+        starts from the highest peak of the periodogram of the flux without
+        the baseline's flare mask, significant or not; the threshold applies
+        to the candidates of the second-period search
+        (``gp_second_rotation``).  Defaults to 1e-3.
     period_min_days : float
         Shortest period searched by the Lomb-Scargle periodogram, in days.
         Defaults to 0.1 days.
     detrender_config : baselines.polynomial.DetrendConfig or None
-        Configuration of the baseline: cubic fits on grids of 0.4–0.8-day
-        windows (plain and shifted by half a window, blended), a 6–36 h
-        sinusoid correction, and its own fraction-capped flare mask.  If None,
-        its defaults are used.
+        Configuration of the baseline: degree-4 polynomial fits on grids of
+        0.6–1.2-day windows (plain and shifted by half a window, blended) and
+        its own fraction-capped flare mask.  If None, its defaults are used.
     use_gp : bool
-        If True (and ``is_periodic`` is True and celerite2 is installed),
-        follow the baseline fit with a Gaussian Process step.  Flares are
-        masked (the baseline stage's flare mask), and a celerite2
-        ``RotationTerm`` GP is fitted to the masked *original* flux.  The GP model smoothly bridges the masked
-        windows and is then subtracted to produce the final detrended flux,
-        so the baseline result only shapes the flare mask.
-        Defaults to True.
+        If True (and celerite2 is installed), follow the baseline fit with a
+        Gaussian Process step, for every star: in injection-recovery tests it
+        recovered more flares than the polynomial baseline alone even on stars
+        without spots.  Flares are masked (the baseline stage's flare mask),
+        and a celerite2 ``RotationTerm`` GP is fitted to the masked *original*
+        flux.  The GP model smoothly bridges the masked windows and is then
+        subtracted to produce the final detrended flux, so the baseline
+        result only shapes the flare mask.  Defaults to True.
     gp_optimize : bool
         If True, optimise the GP hyperparameters (sigma, period within
         ±``gp_period_tolerance``, Q0, dQ, f, jitter) by maximising the
@@ -118,8 +114,8 @@ def custom_detrending(
     gp_second_rotation : bool
         If True, search the flux's periodogram for up to three candidate
         second periods, ignoring the GP's rotation period and its first
-        harmonic, with the same FAP and amplitude thresholds as the initial
-        periodicity check.  The GP is refitted with a second rotation term at
+        harmonic, with the same FAP threshold as the initial periodicity
+        check.  The GP is refitted with a second rotation term at
         each, and the fit with the lowest residual scatter is kept if it beats
         the single term.  For stars with two unrelated periodic signals.
         Defaults to True.
@@ -136,7 +132,7 @@ def custom_detrending(
         Matched-filter detection threshold, in filter sigma.  Defaults to 5.0.
     matched_filter_fwhm_grid : sequence of float
         Flare FWHMs (days) the matched filter templates against.  Defaults to
-        ``(0.02, 0.05, 0.1, 0.15)``.
+        ``(0.02, 0.05, 0.1, 0.2)``.
 
     Return:
     -------
@@ -157,33 +153,34 @@ def custom_detrending(
     lc = lc.interpolate_missing_cadences()
     time, flux = lc.time.value, lc.flux.value
 
-    # --- Periodicity check ------------------------------------------------
-    # Run a Lomb-Scargle periodogram on the raw flux.  If a strong periodic
-    # signal is found (low FAP *and* large amplitude), the GP step models the
-    # variability; its period starts from the periodogram peak.
-    period_max_days = (time[-1] - time[0]) / 2.0
-
-    is_periodic, dominant_period, rel_amplitude, fap = detect_strong_periodicity(
-        time,
-        flux,
-        fap_threshold=periodicity_fap_threshold,
-        amplitude_threshold=periodicity_amplitude_threshold,
-        period_min=period_min_days,
-        period_max=period_max_days,
-    )
-
     # --- Baseline: segmented polynomial ------------------------------------
     m2flux, _, best_params = fit_lightcurve_detrender(
         time, flux, lc.flux_err.value, cont_windows, config=detrender_config
     )
-    if is_periodic:
-        best_params["dominant_period"] = dominant_period
 
     # The baseline stage's flare mask is the GP's initial flare mask.
     baseline_flare_mask = best_params.pop("ld_final_flare_mask")
 
+    # --- Periodicity check ------------------------------------------------
+    # Lomb-Scargle periodogram of the raw flux without the cadences in the
+    # baseline's flare mask (flares alone can produce a highly significant
+    # peak, at roughly their spacing).  The GP's rotation period starts from
+    # the highest peak, whether it is significant or not.
+    period_max_days = (time[-1] - time[0]) / 2.0
+    quiet = ~baseline_flare_mask
+    is_periodic, dominant_period, fap = detect_strong_periodicity(
+        time[quiet],
+        flux[quiet],
+        fap_threshold=periodicity_fap_threshold,
+        period_min=period_min_days,
+        period_max=period_max_days,
+    )
+    best_params["dominant_period"] = dominant_period
+    best_params["periodogram_fap"] = fap
+    best_params["periodic"] = is_periodic
+
     # The baseline output is the detrended flux, at the input flux level; the
-    # GP step (for periodic stars) replaces it.  ``flux`` and ``flux_err``
+    # GP step replaces it.  ``flux`` and ``flux_err``
     # stay the original ones, which the GP is trained on.
     lc4 = lc
     lc4.detrended_flux = m2flux * u.electron / u.s
@@ -196,7 +193,6 @@ def custom_detrending(
         lc4,
         best_params,
         use_gp=use_gp,
-        is_periodic=is_periodic,
         dominant_period=dominant_period,
         flare_mask=baseline_flare_mask,
         gp_optimize=gp_optimize,
@@ -207,14 +203,13 @@ def custom_detrending(
         gp_anchor_edges=gp_anchor_edges,
         gp_second_rotation=gp_second_rotation,
         periodicity_fap_threshold=periodicity_fap_threshold,
-        periodicity_amplitude_threshold=periodicity_amplitude_threshold,
         matched_filter_flares=matched_filter_flares,
         matched_filter_snr=matched_filter_snr,
         matched_filter_fwhm_grid=matched_filter_fwhm_grid,
     )
 
     if "gp" not in best_params:
-        # No GP model (non-periodic star, GP disabled, or GP fit failed): the
+        # No GP model (GP disabled, no usable period, or GP fit failed): the
         # detrended flux is still at the input flux level.  Express it as
         # relative flux too, scaled by its global iterative median.
         det = np.asarray(getattr(lc4.detrended_flux, "value", lc4.detrended_flux), dtype=float)
@@ -232,7 +227,7 @@ def custom_detrending(
     return lc4
 
 
-def _second_period_candidates(time, flux, periods, fap_threshold, amplitude_threshold,
+def _second_period_candidates(time, flux, periods, fap_threshold,
                               n_candidates=3, period_min=0.1, harmonic_tolerance=0.1):
     """Candidate periods for a second periodic signal in ``flux``, strongest
     first.
@@ -243,8 +238,8 @@ def _second_period_candidates(time, flux, periods, fap_threshold, amplitude_thre
     ``periods`` (the rotation period from the periodogram and as fitted by the
     GP): a rotation term at ``P`` already covers both.  Up to ``n_candidates``
     peaks are returned, each more than ``harmonic_tolerance`` away in
-    frequency from the stronger ones and passing the same FAP and
-    semi-amplitude thresholds as the initial periodicity check
+    frequency from the stronger ones and passing the same FAP threshold as
+    the initial periodicity check
     (``detect_strong_periodicity``).  Several candidates are needed because a
     strong peak can be a sidelobe of the rotation signal (e.g. from its
     changing amplitude) rather than a second signal.
@@ -267,9 +262,7 @@ def _second_period_candidates(time, flux, periods, fap_threshold, amplitude_thre
         fap = ls.false_alarm_probability(power[peak], method="baluev")
         if not fap < fap_threshold:
             break  # all remaining peaks are weaker
-        theta = ls.model_parameters(frequency[peak])
-        if np.hypot(theta[1], theta[2]) / abs(np.median(f)) > amplitude_threshold:
-            candidates.append(1.0 / frequency[peak])
+        candidates.append(1.0 / frequency[peak])
         excluded |= np.abs(frequency / frequency[peak] - 1) < harmonic_tolerance
     return candidates
 
@@ -279,7 +272,6 @@ def _apply_gp_step(
     best_params,
     *,
     use_gp,
-    is_periodic,
     dominant_period,
     flare_mask,
     gp_optimize,
@@ -290,10 +282,9 @@ def _apply_gp_step(
     gp_anchor_edges=True,
     gp_second_rotation=True,
     periodicity_fap_threshold=1e-3,
-    periodicity_amplitude_threshold=0.01,
     matched_filter_flares=True,
     matched_filter_snr=5.0,
-    matched_filter_fwhm_grid=(0.02, 0.05, 0.1, 0.15),
+    matched_filter_fwhm_grid=(0.02, 0.05, 0.1, 0.2),
 ):
     """Apply the final Gaussian-Process detrending step, in place.
 
@@ -309,12 +300,11 @@ def _apply_gp_step(
     term at a second period from the flux's periodogram is added to all fits
     after the first, if it lowers the residual scatter.  Either way, the
     post-fit residual clipping still catches flares the mask missed.  Runs
-    only when ``use_gp`` and
-    ``is_periodic`` are True and celerite2 is installed; otherwise ``lc4`` is
-    left untouched.  ``lc4`` (``detrended_flux``, ``gp_model``) and
+    when ``use_gp`` is True, ``dominant_period`` is finite and celerite2 is
+    installed; otherwise ``lc4`` is left untouched.  ``lc4`` (``detrended_flux``, ``gp_model``) and
     ``best_params`` are modified in place.
     """
-    if not (use_gp and is_periodic and _CELERITE2_AVAILABLE):
+    if not (use_gp and np.isfinite(dominant_period) and _CELERITE2_AVAILABLE):
         if use_gp and not _CELERITE2_AVAILABLE:
             logger.warning("GP requested but celerite2 is not installed (pip install celerite2) — skipping.")
         return
@@ -368,7 +358,6 @@ def _apply_gp_step(
                 (f4_gp / norm)[~flare_mask],
                 (dominant_period, gp_params["period"]),
                 fap_threshold=periodicity_fap_threshold,
-                amplitude_threshold=periodicity_amplitude_threshold,
             ):
                 model2, params2 = _fit(flare_mask, candidate)
                 if _scatter(model2) < best:

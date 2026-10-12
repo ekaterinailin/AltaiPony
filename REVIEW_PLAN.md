@@ -5,8 +5,9 @@ flow and organised around one question per step: *is the science sound?*
 Every step ends with tests that pin down the behaviour you have convinced
 yourself of. The tests go into `altaipony/tests/detrending/`.
 
-Line numbers were last refreshed on 2026-10-07, after the spline and
-multi-sine baselines were removed (the commit after `5fc0495`).
+Line numbers were last refreshed on 2026-10-12, after the sinusoid
+correction and the S/N periodicity criterion were removed and the GP was
+made unconditional (the commit after `f7a0351`).
 
 **How to use this plan**
 
@@ -38,7 +39,9 @@ multi-sine baselines were removed (the commit after `5fc0495`).
     `make_lc` itself. (`generate_synthetic_lc` already returns e-/s flux,
     with a quiescent baseline drawn uniformly from 1000–100000 e-/s,
     `baseline_range=None` for normalised flux; `inject_flares` takes
-    `baseline=` and keeps amplitudes relative.)
+    `baseline=` and keeps amplitudes relative. Mode amplitudes are
+    log-uniform in 0.01–5 %, and 20 % of stars are spotless
+    (`spotless_fraction`), so weakly and non-variable stars are covered.)
   - Also provide a `FlareLightCurve` fixture built from it.
 
   Done: `make_lc(duration, cadence_min, gaps, modes, flares, noise, scale,
@@ -63,8 +66,8 @@ multi-sine baselines were removed (the commit after `5fc0495`).
 
 ## Step 1: The pipeline's contract
 
-**Read:** `pipeline.py`, `custom_detrending` (33–306) top to bottom, without
-going into the helpers yet; then `_apply_gp_step` (351–493).
+**Read:** `pipeline.py`, `custom_detrending` (32–227) top to bottom, without
+going into the helpers yet; then `_apply_gp_step` (270–408).
 
 **Check:**
 - What exactly does `custom_detrending` promise to return? Write it down in
@@ -72,16 +75,16 @@ going into the helpers yet; then `_apply_gp_step` (351–493).
   its units, and which other attributes (`it_med`, `gp_model`) are set.
 - ✓ **Zero point depends on the path** (resolved). It used to be 1.0 with
   the GP and the input flux level without it. Now both paths return relative
-  flux at 1.0: the GP path as `1 + (flux − model) / level` (476–484), the
-  non-GP path divided by its global iterative median (295–301).
+  flux at 1.0: the GP path as `1 + (flux − model) / level` (391–399), the
+  non-GP path divided by its global iterative median (211–217).
 - ✓ **Units and scale** (resolved). The GP path used to return
   "1 + residual in the flux's own units", so a 1 % flare in 3400 e-/s data
   came out as 34. The residual is now divided by the quiescent level, and
   the injection-recovery light curves are in e-/s (1000–100000) to keep this
-  tested. Still open: `detrended_flux` is relative but labelled e-/s (301,
-  484; see `TODO.md`).
+  tested. Still open: `detrended_flux` is relative but labelled e-/s (217,
+  399; see `TODO.md`).
 - Which steps only produce *masks*, and which produce the *output*? In the GP
-  path, the baseline and Savitzky-Golay results only feed the GP's flare mask.
+  path, the baseline result only feeds the GP's flare mask.
 
 **Done so far** (`tests/detrending/test_pipeline.py`): baseline at exactly
 1 and scale invariance for both the GP and the non-GP path; relative
@@ -92,8 +95,8 @@ paths, GP fitted on normalised flux, `flux_err` restored before the GP.
 - [ ] Output has the same length and time stamps as the input, keeps NaNs
       where the input had them, and sets `it_med` and `gp_model`.
 - [x] Zero point: a flat, flare-free stretch of `detrended_flux` sits at the
-      documented level, **for both** the GP path (periodic star) and the
-      non-GP path (`use_gp=False` or a non-periodic star).
+      documented level, **for both** the GP path (every star by default,
+      with or without spots) and the non-GP path (`use_gp=False`).
 - [x] **Scale invariance:** the same light curve with `scale=1` and
       `scale=3400` gives the same *relative* flare amplitude and the same
       equivalent duration. I expect this to fail today if the ⚠ above is real.
@@ -103,43 +106,52 @@ paths, GP fitted on normalised flux, `flux_err` restored before the GP.
 
 ## Step 2: Gaps and cadence
 
-**Read:** `pipeline.py` 181–188.
+**Read:** `pipeline.py` 147–154.
 
 **Check:**
-- ⚠ `dt = np.mean(np.diff(time))` (181) includes the gaps. A single 1-day
+- ⚠ `dt = np.mean(np.diff(time))` (147) includes the gaps. A single 1-day
   gap in 25 days of 2-min data raises the mean step noticeably. That inflates
-  `maxgap * dt`, the gap threshold, and the Savitzky-Golay window lengths
-  that are computed from `dt`. Should this be the median?
-- What does `interpolate_missing_cadences` fill in, and is every
-  interpolated cadence excluded from fits and from flare detection?
+  `maxgap * dt`, the gap threshold. Should this be the median?
+- `interpolate_missing_cadences` fills missing cadences inside continuous
+  windows (flagged `interpolated`). They are part of the baseline and GP
+  fits and dropped from the output at the end. Should the fits ignore them
+  too?
 
 **Tests** (`test_pipeline.py`):
-- [ ] A light curve with one long gap is split into exactly two segments, and
-      the Savitzky-Golay window lengths equal those of the same light curve
-      without the gap.
-- [ ] No cadence that was interpolated into a gap ends up in a detected flare.
+- [ ] A light curve with one long gap is split into exactly two segments.
+- [ ] Cadences removed from inside a window are filled for the fits but are
+      not in the output, and no interpolated cadence ends up in a flare.
 
 ## Step 3: Detecting the rotation period
 
-**Read:** `periodicity.py` (`lomb_scargle` 7–56,
-`detect_strong_periodicity` 59–160); call site `pipeline.py` 190–203.
+**Read:** `periodicity.py` (`lomb_scargle` 8–57,
+`detect_strong_periodicity` 60–124); call site `pipeline.py` 164–180.
+
+**Settled by injection-recovery (2026-10-09 to 10-12):**
+- The periodogram no longer decides whether the GP runs: the GP runs for
+  every star and only takes its starting period from the highest peak.
+  Gating on a semi-amplitude (> 0.1 %) or S/N (> 3) threshold excluded stars
+  the GP helps (S/N > 3: 11 flares lost); even on spotless stars the GP
+  recovers more flares than the polynomial baseline alone (133 vs. 119 of
+  164, no false positives).
+- The Baluev FAP is tiny for almost everything: all 100 synthetic stars,
+  including spots of 0.01 % far below the per-cadence noise, and flares
+  alone on a spotless star (FAP ~1e-60, at roughly the spacing of the
+  flares). The periodogram is therefore computed without the baseline's
+  flare mask, which lowers that to ~1e-33 but does not remove it (the
+  decay tails are not masked). The FAP threshold now only gates the
+  second-period search.
 
 **Check:**
 - Search range is 0.1 d to half the light curve. What happens with periods
   near the ends of that range?
-- ⚠ The Baluev false-alarm probability assumes white noise. With red noise,
-  flares or spot evolution it will be tiny almost always: all 100 synthetic
-  light curves came out "periodic". Is the FAP doing any work, or does the
-  amplitude threshold decide everything?
-- The amplitude comes from the single best-fit sine, relative to the median
-  flux. For non-sinusoidal spot curves, does that under- or overestimate?
-- Can a large flare create a significant peak?
+- On a spotless star the starting period comes from flares or noise. The GP
+  then settles at a small amplitude; is its period bound (±5 %) ever a
+  problem there?
 
 **Tests** (`test_periodicity.py`):
-- [ ] A pure sine with P ∈ {0.3, 2, 8} d is recovered to within 1 %, and its
-      relative amplitude to within 5 %.
-- [ ] White noise only → not periodic.
-- [ ] Flares on white noise, no modulation → not periodic.
+- [ ] A pure sine with P ∈ {0.3, 2, 8} d is recovered to within 1 %.
+- [ ] White noise only → not significant (FAP > 1e-3).
 - [ ] Light curve shorter than 2 × `period_min` → not periodic, no error.
 - [ ] `lomb_scargle` drops non-finite points and never searches periods
       longer than the data span.
@@ -159,14 +171,14 @@ spline baselines, `baseline_method`, and `_identify_flare_mask` were removed.
 
 The largest module. Review it in five parts.
 
-**5a Preliminary flare mask:** `preliminary_flare_mask` (342–397),
-`compute_rolling_local_sigma` (169–207).
+**5a Preliminary flare mask:** `preliminary_flare_mask` (166–221),
+`compute_rolling_local_sigma` (126–164).
 - Is a 5σ cut on a rough 2-day polynomial residual conservative enough that
   real variability is never masked as flares?
 
-**5b Window fits and blending:** `fit_window_grid` (400–516),
-`run_all_windows` (519–578), `score_segment` (617–660),
-`assemble_combined_trend` (663–757).
+**5b Window fits and blending:** `fit_window_grid` (224–340),
+`run_all_windows` (343–402), `score_segment` (441–484),
+`assemble_combined_trend` (487–581).
 - Degree-4 polynomials in 0.4/0.6/0.8 d windows, on normal and half-shifted
   grids. Which variability timescales can they follow, and which flare
   durations would they eat into? A flare with FWHM ~1 h is a sizeable
@@ -177,16 +189,17 @@ The largest module. Review it in five parts.
   softmax over scores then decides how sharply one fit wins. Is that
   sensible?
 
-**5c Second pass:** in `run_detrending` (944–1165), the 3σ mask from the
+**5c Second pass:** in `run_detrending` (768–951), the 3σ mask from the
 first-pass residual and the refit.
 
-**5d Rotation correction (6–36 h):** `multi_sinusoid_correction` (209–339).
-- The greedy selection, the 2 % improvement threshold and the amplitude cap
-  at 3σ. It matters for fast rotators: injection-recovery showed 48 false
-  positives without it.
+**5d Rotation correction (6–36 h): removed.** It mattered when the polynomial
+baseline's output was the final detrended flux (48 false positives without
+it then). Since the GP runs for every star, the baseline only supplies the
+GP's starting flare mask, and injection-recovery (100 LCs) was identical
+cadence for cadence with and without the correction.
 
 **5e Centring and final mask:** `center_residual_by_moving_average`
-(786–833), `build_safe_final_flare_mask` (836–942).
+(610–657), `build_safe_final_flare_mask` (660–766).
 - The final mask falls back to the previous one if more than 5 % of
   cadences get flagged. Is 5 % right for very active stars?
 
@@ -207,29 +220,27 @@ first-pass residual and the refit.
 
 ## Step 7: Spline baseline (removed, see step 4)
 
-## Step 8: Savitzky-Golay passes
+## Step 8: Savitzky-Golay passes (removed)
 
-**Read:** `pipeline.py` 215–271, `savgoldetrending.py`, and
-`altai.detrend_savgol`.
-
-**Check:**
-- Windows of 6 h and 3 h, applied after the baseline. In the synthetic runs
-  they changed nothing in ~97 % of light curves. When do they matter, and
-  can they clip long flares (FWHM of hours)?
-- There are two `detrend_savgol` implementations (`altai.py` and
-  `savgoldetrending.py`). Which one is used, and can the other one go?
-
-**Tests** (`test_pipeline.py`):
-- [ ] A flare with FWHM of 1 h keeps ≥ 90 % of its equivalent duration
-      through the two Savitzky-Golay passes.
+The two passes (6 h, then 3 h) were removed from `custom_detrending`. On
+the GP path they no longer affected anything (the GP is trained on the
+original flux with the baseline's flare mask); injection-recovery with both,
+either or neither pass gave identical results for all 90 GP stars of a
+sample with amplitudes down to 0.01 %. For the 10 stars without a GP, no
+filter recovered 44 of 57 flares vs. 42 with both, and no setting had false
+positives. Not covered by that test: short-timescale systematics in real
+data (scattered light, momentum dumps), which the polynomial windows
+(0.4–0.8 d) may not follow. `FlareLightCurve.detrend("savgol")` and its two
+`detrend_savgol` implementations (`altai.py`, `savgoldetrending.py`) still
+exist outside the detrending package.
 
 ## Step 9: Gaussian-process model (`gp.py`, `pipeline._apply_gp_step`)
 
 **Read:** `matchedfilter.py`
 (`matched_filter_flare_mask` 250–384), `_segment_edge_mask` (31–54),
 `_bin_training_per_segment` (57–156), `fit_gp_rotation` (159–469);
-in `pipeline.py`, `_apply_gp_step` (351–493) with its two-pass fit
-(405–469) and `_second_period_candidates` (309–348).
+in `pipeline.py`, `_apply_gp_step` (270–408) with its two-pass fit
+(321–384) and `_second_period_candidates` (230–267).
 
 **Check:**
 - **Training data.** The GP trains on the *original* flux minus the flare
@@ -264,7 +275,7 @@ in `pipeline.py`, `_apply_gp_step` (351–493) with its two-pass fit
     worse. Removed.
   - `gp_second_rotation=True`: a second `RotationTerm` at the best of up to
     three candidate periods from the flux periodogram (excluding P and P/2,
-    same FAP/amplitude thresholds), kept only if it lowers the residual
+    same FAP threshold), kept only if it lowers the residual
     scatter: 668 and 7, no flare lost, ~20 % more runtime. LC 21 and 70 go
     from 869 / 1399 ppm residual scatter to 401 / 397 ppm (noise 327 / 329).
     Candidates are needed because the strongest remaining peak can be a
@@ -279,7 +290,7 @@ in `pipeline.py`, `_apply_gp_step` (351–493) with its two-pass fit
     it works reliably. Should the exclusion width scale with 1/T?
   - Should the residual-scatter criterion be a likelihood/BIC comparison
     instead?
-- **Offset** (`pipeline.py` 478): `median(flux − gp)` over unmasked points. Is the median
+- **Offset** (`pipeline.py` 393): `median(flux − gp)` over unmasked points. Is the median
   the right estimator if flare residue is present?
 
 **Tests** (`test_gp.py`):

@@ -1,7 +1,7 @@
 """Segmented-polynomial baseline.
 
-The functions in this module fit segmented polynomial baselines, optionally
-remove sinusoidal residuals, and build flare masks and noise estimates.
+The functions in this module fit segmented polynomial baselines and build
+flare masks and noise estimates.
 ``fit_lightcurve_detrender`` adapts ``run_detrending`` to the baseline
 interface of ``custom_detrending``.
 """
@@ -16,12 +16,6 @@ import pandas as pd
 from scipy.ndimage import gaussian_filter1d
 
 from ...utils import MAD_TO_STD, robust_sigma
-
-try:
-    from ..periodicity import lomb_scargle
-    _ASTROPY_LS = True
-except ImportError:
-    _ASTROPY_LS = False
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +57,7 @@ class DetrendConfig:
         Optional absolute clipping limit applied when estimating the centering offset.
         The default is None, so no pre-centering clipping is performed.
     """
-    window_sizes: tuple[float, ...] = (0.4, 0.6, 0.8)
+    window_sizes: tuple[float, ...] = (0.6, 0.9, 1.2)
     poly_deg: int = 4
     n_edge: int = 4
     edge_weight: float = 8.0
@@ -77,15 +71,6 @@ class DetrendConfig:
     center_final_residual: bool = True
     centering_ma_window: int = 10
     centering_clip_abs: float | None = None
-
-    # Optional long-period correction applied to the second-pass residuals,
-    # removing rotation-like residual modulation.
-    apply_rotation_sinusoid_correction: bool = True
-    rotation_sinusoid_min_period_hr: float = 6.0
-    rotation_sinusoid_max_period_hr: float = 36.0
-    rotation_sinusoid_n_components: int = 3
-    rotation_sinusoid_min_improvement: float = 0.02
-    rotation_amp_limit_fraction: float = 3.0
 
 @dataclass
 class DetrendResult:
@@ -138,34 +123,6 @@ def sigma_clipped_std(arr: np.ndarray, n_sigma: float = 3.0, max_iter: int = 20)
         r = r[keep]
     return float(np.std(r))
 
-def _weighted_lstsq(X: np.ndarray, y: np.ndarray, flux_err=None) -> np.ndarray:
-    """Solve a linear least-squares problem, weighted by ``1 / flux_err**2``.
-
-    Falls back to an unweighted fit when ``flux_err`` is None or contains
-    non-finite or non-positive values.
-    """
-    if flux_err is not None:
-        fe = np.asarray(flux_err, dtype=float)
-        if np.all(np.isfinite(fe)) and np.all(fe > 0):
-            w = 1.0 / fe**2
-            return np.linalg.lstsq((X.T * w) @ X, (X.T * w) @ y, rcond=None)[0]
-    return np.linalg.lstsq(X, y, rcond=None)[0]
-
-def _empty_sinusoid_stats(**extra) -> dict:
-    """Return the stats dict of a periodic correction that was not applied."""
-    stats = {
-        "applied": False,
-        "n_components": 0,
-        "periods_hr": [],
-        "improvement": 0.0,
-        "std_before": np.nan,
-        "std_after": np.nan,
-        "boundary_hit": False,
-        "reject_reason": "",
-    }
-    stats.update(extra)
-    return stats
-
 def compute_rolling_local_sigma(
     residuals: np.ndarray,
     window_pts: int = 100,
@@ -205,139 +162,6 @@ def compute_rolling_local_sigma(
     finite = sigma_local[np.isfinite(sigma_local)]
     fallback = float(np.nanmedian(finite)) if len(finite) else sigma_clipped_std(residuals)
     return np.where(np.isfinite(sigma_local), sigma_local, fallback)
-
-def multi_sinusoid_correction(
-    times,
-    residuals,
-    flux_err=None,
-    flare_mask=None,
-    sigma_local=None,
-    n_components=3,
-    min_period_hr=6.0,
-    max_period_hr=36.0,
-    amp_limit_frac=3.0,
-    min_improvement=0.02,
-    label="Sinusoidal correction",
-):
-    """Remove dominant sinusoidal components from residuals.
-
-    Components are accepted greedily and only kept when they produce a minimum
-    additional scatter improvement. This prevents the function from always
-    removing exactly ``n_components`` weak or alias-like sinusoids.
-
-    Returns
-    -------
-    corrected : numpy.ndarray
-        Residuals minus the accepted sinusoids (the input if none is accepted).
-    stats : dict
-        See ``_empty_sinusoid_stats``; ``reject_reason`` says why nothing was
-        applied.
-    """
-    times = np.asarray(times, dtype=float)
-    residuals = np.asarray(residuals, dtype=float)
-
-    def reject(reason, **extra):
-        return residuals, _empty_sinusoid_stats(reject_reason=reason, **extra)
-
-    if flare_mask is None:
-        flare_mask = np.zeros(len(times), dtype=bool)
-    q_mask = ~np.asarray(flare_mask, dtype=bool) & np.isfinite(times) & np.isfinite(residuals)
-    t_q, r_q = times[q_mask], residuals[q_mask]
-    if len(t_q) < 30:
-        return reject("too few points")
-
-    if sigma_local is not None:
-        sigma_arr = np.asarray(sigma_local, dtype=float)
-        sigma_med = float(np.nanmedian(sigma_arr[np.isfinite(sigma_arr)]))
-    else:
-        sigma_med = robust_sigma(r_q)
-    if not np.isfinite(sigma_med) or sigma_med <= 0:
-        sigma_med = float(np.nanstd(r_q))
-    amp_cap = amp_limit_frac * sigma_med if np.isfinite(sigma_med) else np.inf
-
-    try:
-        _, freqs, power = lomb_scargle(
-            t_q, r_q, min_frequency=24.0 / max_period_hr, max_frequency=24.0 / min_period_hr
-        )
-    except Exception as exc:
-        warnings.warn(f"{label} skipped: Lomb-Scargle fitting failed ({exc}).", RuntimeWarning)
-        return reject("Lomb-Scargle failed")
-    if len(freqs) == 0:
-        return reject("period range invalid for duration")
-
-    std_before = float(np.nanstd(residuals[q_mask]))
-    if not np.isfinite(std_before) or std_before <= 0:
-        return reject("invalid initial scatter")
-
-    fe_q = None if flux_err is None else np.asarray(flux_err, dtype=float)[q_mask]
-
-    def corrected_for(selected_freqs):
-        """Fit offset + sinusoids at ``selected_freqs`` and subtract them, with
-        each amplitude capped at ``amp_cap``. Returns None if the fit fails."""
-        cols = [np.ones(len(t_q))]
-        for f in selected_freqs:
-            cols += [np.sin(2 * np.pi * f * t_q), np.cos(2 * np.pi * f * t_q)]
-        try:
-            coeffs = _weighted_lstsq(np.column_stack(cols), r_q, fe_q)
-        except np.linalg.LinAlgError:
-            return None
-        model = np.full(len(times), float(coeffs[0]))
-        for k, f in enumerate(selected_freqs):
-            A, B = float(coeffs[1 + 2*k]), float(coeffs[2 + 2*k])
-            amp = np.sqrt(A**2 + B**2)
-            if amp > amp_cap > 0:
-                A *= amp_cap / amp
-                B *= amp_cap / amp
-            model += A * np.sin(2 * np.pi * f * times) + B * np.cos(2 * np.pi * f * times)
-        return residuals - model
-
-    selected = []
-    best_corrected = residuals.copy()
-    best_std = std_before
-    max_candidates = min(len(freqs), max(50, 25 * int(max(n_components, 1))))
-
-    for idx in np.argsort(power)[::-1][:max_candidates]:
-        f = float(freqs[idx])
-        # Avoid selecting nearly duplicate frequencies.
-        if any(abs(f - sf) < 0.10 * max(f, sf) for sf in selected):
-            continue
-        if len(selected) >= n_components:
-            break
-        trial_corrected = corrected_for(selected + [f])
-        if trial_corrected is None:
-            continue
-        trial_std = float(np.nanstd(trial_corrected[q_mask]))
-        if not np.isfinite(trial_std):
-            continue
-        # Each component must lower the scatter by at least min_improvement
-        # (relative to the initial scatter), so weak or alias-like peaks are
-        # not removed just because n_components allows it.
-        if (best_std - trial_std) / std_before >= min_improvement and trial_std < best_std:
-            selected.append(f)
-            best_corrected, best_std = trial_corrected, trial_std
-
-    improvement = (std_before - best_std) / std_before
-    if not selected or improvement < min_improvement:
-        logger.debug(f"  {label} discarded (improvement too small: {100 * max(improvement, 0.0):.2f}%).")
-        return reject("improvement too small", std_before=std_before, std_after=best_std,
-                      improvement=float(max(improvement, 0.0)))
-
-    periods = [24.0 / f for f in selected]
-    boundary_hit = any(p <= min_period_hr * 1.02 or p >= max_period_hr * 0.98 for p in periods)
-    logger.debug(
-        f"  {label}: removed {len(selected)} component(s) at {[round(p, 3) for p in periods]} hr; "
-        f"scatter improvement {100 * improvement:.2f}%{' [boundary hit]' if boundary_hit else ''}"
-    )
-    return best_corrected, _empty_sinusoid_stats(
-        applied=True,
-        n_components=len(selected),
-        periods_hr=[float(p) for p in periods],
-        improvement=float(improvement),
-        std_before=float(std_before),
-        std_after=float(best_std),
-        boundary_hit=bool(boundary_hit),
-    )
-
 
 def preliminary_flare_mask(
     time, flux, flux_err,
@@ -1002,11 +826,6 @@ def run_detrending(
             "min_fit_pts is small for the polynomial degree; some fits may be unstable.",
             RuntimeWarning,
         )
-    if not _ASTROPY_LS and cfg.apply_rotation_sinusoid_correction:
-        warnings.warn(
-            "Astropy LombScargle is unavailable, so the rotation sinusoid correction will be skipped.",
-            RuntimeWarning,
-        )
 
     if external_flare_mask is None:
         external_flare_mask_arr = np.zeros(len(time), dtype=bool)
@@ -1052,30 +871,7 @@ def run_detrending(
     )
     sp_residuals = flux - sp_trend
 
-    if cfg.apply_rotation_sinusoid_correction and _ASTROPY_LS:
-        sigma_rotation = compute_rolling_local_sigma(
-            sp_residuals, window_pts=cfg.rolling_window_pts, flare_mask=flare_mask_p2
-        )
-
-        rotation_residuals_corr, rotation_sinusoid_stats = multi_sinusoid_correction(
-            time, sp_residuals, flux_err=flux_err, flare_mask=flare_mask_p2,
-            sigma_local=sigma_rotation, n_components=cfg.rotation_sinusoid_n_components,
-            min_period_hr=cfg.rotation_sinusoid_min_period_hr,
-            max_period_hr=cfg.rotation_sinusoid_max_period_hr,
-            amp_limit_frac=cfg.rotation_amp_limit_fraction,
-            min_improvement=cfg.rotation_sinusoid_min_improvement,
-            label="Long-period residual sinusoid correction",
-        )
-        rotation_sinusoid_stats["method"] = "generic_periodogram"
-        rotation_sinusoid_model = sp_residuals - rotation_residuals_corr
-        rotation_sinusoid_applied = bool(rotation_sinusoid_stats.get("applied", False))
-    else:
-        rotation_residuals_corr = sp_residuals.copy()
-        rotation_sinusoid_model = np.zeros(len(time), dtype=float)
-        rotation_sinusoid_stats = _empty_sinusoid_stats(method="disabled", reject_reason="disabled")
-        rotation_sinusoid_applied = False
-
-    final_residual = rotation_residuals_corr.copy()
+    final_residual = sp_residuals.copy()
 
     if cfg.center_final_residual:
         final_residual, centering_diagnostics = center_residual_by_moving_average(
@@ -1086,10 +882,9 @@ def run_detrending(
     else:
         centering_diagnostics = {"centering_applied": False, "residual_offset_subtracted": 0.0}
 
-    # Rebuild the final flare mask after the final periodic correction and
-    # centering. This releases points that were provisionally flagged only
-    # because they sat on broad sinusoid crests, while true sharp positive
-    # outliers should remain. The helper guards against final-mask explosions
+    # Rebuild the final flare mask after centering. This releases points that
+    # were provisionally flagged only because they sat on broad crests of the
+    # variability, while true sharp positive outliers should remain. The helper guards against final-mask explosions
     # that would otherwise mark nearly the full light curve and corrupt the
     # downstream noise estimate.
     final_flare_mask, final_mask_diagnostics = build_safe_final_flare_mask(
@@ -1116,8 +911,6 @@ def run_detrending(
         "first_pass_residual": fp_residuals[sort_idx],
         "second_pass_trend": sp_trend[sort_idx],
         "second_pass_residual": sp_residuals[sort_idx],
-        "rotation_sinusoid_model": rotation_sinusoid_model[sort_idx],
-        "rotation_residual_corr": rotation_residuals_corr[sort_idx],
         "final_residual": final_residual[sort_idx],
         "local_sigma": sp_sigma_local[sort_idx],
         "total_sigma": sp_sigma_total[sort_idx],
@@ -1139,13 +932,6 @@ def run_detrending(
         "cadence_min": cadence_days * 24 * 60,
         "window_sizes": tuple(cfg.window_sizes),
         "poly_deg": cfg.poly_deg,
-        "rotation_sinusoid_applied": rotation_sinusoid_applied,
-        "rotation_sinusoid_n_components": int(rotation_sinusoid_stats.get("n_components", 0)),
-        "rotation_sinusoid_improvement": float(rotation_sinusoid_stats.get("improvement", 0.0)),
-        "rotation_sinusoid_periods_hr": tuple(rotation_sinusoid_stats.get("periods_hr", [])),
-        "rotation_sinusoid_boundary_hit": bool(rotation_sinusoid_stats.get("boundary_hit", False)),
-        "rotation_sinusoid_reject_reason": str(rotation_sinusoid_stats.get("reject_reason", "")),
-        "rotation_correction_method": str(rotation_sinusoid_stats.get("method", "")),
         "n_external_flare_masked": int(external_flare_mask_arr.sum()),
         "n_prelim_internal_masked": int(preliminary_flare_mask_internal.sum()),
         "n_prelim_masked": int(flare_mask_prelim.sum()),
@@ -1171,9 +957,8 @@ def fit_lightcurve_detrender(time, flux, flux_err, cont_windows, config=None):
     Adapter that runs :func:`run_detrending` on the finite cadences and
     returns ``(newflux, model, best_params)`` on the full grid, as
     ``custom_detrending`` expects.
-    ``run_detrending`` fits a segmented-polynomial baseline plus an optional
-    6–36 h sinusoid correction and carries its own robust, fraction-capped
-    flare masking.
+    ``run_detrending`` fits a segmented-polynomial baseline and carries its
+    own robust, fraction-capped flare masking.
 
     Notes
     -----
@@ -1253,6 +1038,5 @@ def fit_lightcurve_detrender(time, flux, flux_err, cont_windows, config=None):
         ),
         "ld_window_sizes": result.summary.get("window_sizes"),
         "ld_poly_deg": result.summary.get("poly_deg"),
-        "ld_rotation_sinusoid_applied": result.summary.get("rotation_sinusoid_applied"),
     }
     return newflux, model, best_params

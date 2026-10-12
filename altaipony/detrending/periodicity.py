@@ -1,7 +1,8 @@
-"""Lomb-Scargle periodogram helper and detection of a strong periodic signal."""
+"""Lomb-Scargle periodogram helper and detection of a significant periodic signal."""
 
 import numpy as np
 from astropy.timeseries import LombScargle
+
 
 
 def lomb_scargle(t, y, min_frequency=None, max_frequency=None, frequency=None,
@@ -60,21 +61,16 @@ def detect_strong_periodicity(
     time,
     flux,
     fap_threshold=1e-3,
-    amplitude_threshold=0.01,
     period_min=0.1,
     period_max=None,
-    flux_median=None,
 ):
-    """Test whether the light curve contains a strong, high-amplitude periodic
-    signal using the Lomb-Scargle periodogram.
+    """Test whether the light curve contains a significant periodic signal
+    using the Lomb-Scargle periodogram: the false-alarm probability of the
+    highest peak must be below ``fap_threshold``.
 
-    Both conditions must be satisfied simultaneously for the function to return
-    ``True``:
-
-    * The false-alarm probability of the highest peak is below
-      ``fap_threshold``.
-    * The semi-amplitude of a single-frequency sine fitted at the peak
-      frequency exceeds ``amplitude_threshold`` × (median flux).
+    No amplitude criterion is applied: in injection-recovery tests, the GP
+    step that follows a detection also helps stars whose variability is far
+    below the per-cadence noise.
 
     Parameters
     ----------
@@ -85,29 +81,17 @@ def detect_strong_periodicity(
     fap_threshold : float
         FAP threshold below which the signal is considered significant.
         Defaults to 1e-3.
-    amplitude_threshold : float
-        Minimum fractional semi-amplitude (relative to median flux) for the
-        signal to be considered high-amplitude.  Defaults to 0.01.
     period_min : float
         Minimum period to search, in days.  Defaults to 0.1.
     period_max : float or None
         Maximum period to search, in days.  Defaults to half the time-span.
 
-    flux_median : float or None
-        Reference median used to express the semi-amplitude as a fraction.
-        If None, the median of ``flux`` itself is used.  Pass the original
-        raw-flux median when calling on residuals (which are centred near
-        zero) to avoid division by a near-zero value.
-
     Returns
     -------
     is_periodic : bool
-        True when both the FAP and amplitude criteria are met.
+        True when the FAP criterion is met.
     peak_period : float
         Period of the highest LS peak in days.
-    rel_amplitude : float
-        Fractional semi-amplitude of the best-fit sine at the peak period
-        relative to the reference median flux.
     fap : float
         False-alarm probability of the peak power under the
         Baluev (2008) analytic approximation.
@@ -117,20 +101,10 @@ def detect_strong_periodicity(
     f = flux[valid]
 
     if len(t) < 20:
-        return False, np.nan, np.nan, np.nan
-
-    f_median = np.nanmedian(f)
-
-    # Use caller-supplied reference median for amplitude normalisation if given.
-    # This is essential when `flux` is a residual centred near zero, where the
-    # local median would be ~0 and cause division-by-zero.
-    ref_median = flux_median if flux_median is not None else f_median
-
-    if ref_median == 0:
-        return False, np.nan, np.nan, np.nan
+        return False, np.nan, np.nan
 
     # Centre flux so LS is not confused by a DC offset
-    f_centred = f - f_median
+    f_centred = f - np.nanmedian(f)
 
     if period_max is None:
         period_max = (t[-1] - t[0]) / 2.0
@@ -139,22 +113,12 @@ def detect_strong_periodicity(
         t, f_centred, min_frequency=1.0 / period_max, max_frequency=1.0 / period_min
     )
     if len(power) == 0:
-        return False, np.nan, np.nan, np.nan
+        return False, np.nan, np.nan
 
     peak_idx = np.argmax(power)
-    peak_freq = frequency[peak_idx]
-    peak_period = 1.0 / peak_freq
-    peak_power = power[peak_idx]
+    peak_period = 1.0 / frequency[peak_idx]
 
     # False-alarm probability (Baluev 2008 analytic approximation)
-    fap = ls.false_alarm_probability(peak_power, method="baluev")
+    fap = ls.false_alarm_probability(power[peak_idx], method="baluev")
 
-    # Semi-amplitude from LS model coefficients at the peak frequency:
-    # model = offset + a*cos(2π f t) + b*sin(2π f t)
-    # semi-amplitude = sqrt(a² + b²)
-    theta = ls.model_parameters(peak_freq)  # [offset, a_cos, b_sin]
-    rel_amplitude = np.sqrt(theta[1] ** 2 + theta[2] ** 2) / abs(ref_median)
-
-    is_periodic = bool((fap < fap_threshold) and (rel_amplitude > amplitude_threshold))
-
-    return is_periodic, peak_period, rel_amplitude, fap
+    return bool(fap < fap_threshold), peak_period, fap

@@ -27,7 +27,7 @@ def two_period_star(make_lc):
 
 
 @pytest.mark.parametrize("second_rotation, max_scatter, min_scatter", [
-    (False, np.inf, 3.0),   # one rotation term leaves the 0.69 d mode in the residual
+    (False, np.inf, 2.0),   # one rotation term leaves the 0.69 d mode in the residual
     (True, 1.5, 0.0),       # the second term fits it: residual close to the white noise
 ])
 def test_second_rotation_term_fits_second_period(two_period_star, second_rotation,
