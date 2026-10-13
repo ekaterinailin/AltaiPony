@@ -5,9 +5,19 @@ Changelog (starting 04-2023)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 * ``find_flares`` uses a new default detection rule. Instead of requiring 3 consecutive points above 3 sigma, it flags windows of 3 to 10 consecutive points whose combined probability of being noise is below that of 3 points at 3 sigma, corrected for residuals that are correlated over minutes to hours. Fragments of one flare are merged (``merge_sigma=0.25``) and detections are extended over adjacent points above 1 sigma (``extend_sigma=1.0``). Pass ``max_window=None, merge_sigma=None, extend_sigma=None`` for the previous behaviour.
-* ``custom_detrending`` is a new pipeline: a polynomial baseline, then a Gaussian process with a rotation kernel, iteratively masking flares with a matched filter.
-* Removed the Savitzky-Golay de-trending mode (``detrend("savgol")``); use ``detrend("custom", func=custom_detrending)``.
+* ``custom_detrending`` is a new pipeline: a polynomial baseline, then a Gaussian process with a rotation kernel, iteratively masking flares with a matched filter. It works on the actual time stamps (missing cadences are not interpolated) and leaves its input light curve unchanged.
+* ``FlareLightCurve.detrend()`` uses ``custom_detrending`` by default and passes keyword arguments on to it (``flc.detrend(use_gp=False)``); pass ``func=`` for your own function. The ``mode`` argument is deprecated: ``detrend("custom", func=...)`` still works with a warning, and ``sample_flare_recovery(mode=...)`` is ignored.
+* Removed the Savitzky-Golay de-trending mode (``detrend("savgol")``).
+* Removed ``FlareLightCurve.get_saturation`` and the remaining K2SC dependencies (``k2sc``, ``george``). ``celerite2`` (for the GP de-trending) and ``tqdm`` are now dependencies.
+* ``sample_flare_recovery`` shows a ``tqdm`` progress bar with the number of fake flares injected and recovered so far (``progress=False`` turns it off), replacing ``progressbar2``.
 * ``sample_flare_recovery`` counts an injected flare as recovered if its peak lies inside a detection (``fakeflares.match_flares``), and its results have a ``recovered`` column.
+* ``FlareLightCurve`` methods that analyse the light curve now change it in place and return it: ``find_flares`` fills ``flc.flares``, ``detrend`` adds ``detrended_flux`` and the other columns of the detrending function, and ``find_cont_windows``, ``mark_flagged_flares``, ``characterize_flares``, ``sample_flare_recovery`` and ``fit_flares`` update the light curve's attributes. ``flc = flc.find_flares()`` keeps working. ``inject_fake_flares`` still returns a new light curve.
+* Removed ``FlareLightCurve.interpolate_missing_cadences``; missing cadences are no longer filled in.
+* ``FlareLightCurve.find_flares`` always searches anew and replaces the flare table; before, it silently returned the previous result when flares had already been found. New options ``maxgap`` and ``median_iterations``.
+* ``to_flare_lightcurve`` returns a converted copy and leaves the input light curve unchanged. It no longer adds empty ``detrended_flux`` columns.
+* Reading ``detrended_flux``, ``detrended_flux_err``, ``gp_model`` or ``it_med`` before they are computed returns ``None`` instead of creating a column of NaNs; ``find_flares`` and ``find_iterative_median`` then say to call ``detrend()`` first. ``flares``, ``fake_flares`` and ``cont_windows`` are empty or ``None`` until filled, without changing the light curve.
+* ``read_from_fits`` reads BTJD and BKJD time columns correctly (they were read as JD), and only warns if ``TARGETID`` is missing.
+* Fixed: ``repr`` of a ``FlareLightCurve`` without a known cadence, and the file names used by ``sample_flare_recovery(save=True, save_lc_to_file=True)``.
 
 25-08-2023
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

@@ -124,15 +124,15 @@ class TestToFlareLightCurve:
         with pytest.raises(ValueError, match="No valid data points"):
             to_flare_lightcurve(lc)
     
-    def test_detrended_flux_columns_added(self, mock_lightcurve):
-        """Test that detrended_flux columns are added with NaN values"""
+    def test_detrended_flux_columns_not_added(self, mock_lightcurve):
+        """The conversion adds no detrended columns; they are None until
+        detrend() computes them"""
         flc = to_flare_lightcurve(mock_lightcurve)
-        
-        assert 'detrended_flux' in flc.colnames
-        assert 'detrended_flux_err' in flc.colnames
-        assert np.all(np.isnan(flc['detrended_flux']))
-        assert np.all(np.isnan(flc['detrended_flux_err']))
-        assert len(flc['detrended_flux']) == len(flc.time)
+        assert 'detrended_flux' not in flc.colnames
+        assert 'detrended_flux_err' not in flc.colnames
+        assert flc.detrended_flux is None
+        assert flc.detrended_flux_err is None
+        assert flc.it_med is None and flc.gp_model is None
     
     def test_flare_tables_initialized(self, mock_lightcurve):
         """Test that flare tables are initialized"""
@@ -255,9 +255,9 @@ class TestToFlareLightCurve:
         assert np.all(np.isfinite(flc.time.value))
         assert np.all(np.isfinite(flc.flux.value))
         
-        # Check columns
-        assert 'detrended_flux' in flc.colnames
-        assert 'detrended_flux_err' in flc.colnames
+        # No detrended columns until detrend() runs
+        assert flc.detrended_flux is None
+        assert flc.detrended_flux_err is None
         
         # Check metadata
         assert flc.meta['qcs'] == 5
@@ -291,4 +291,14 @@ class TestToFlareLightCurve:
         assert isinstance(flc.cadenceno, np.ndarray)
 
 
+def test_to_flare_lightcurve_leaves_input_unchanged():
+    """The conversion returns a FlareLightCurve copy; the input stays a
+    plain LightCurve with its own meta."""
+    lc = LightCurve(time=np.arange(100) / 48., flux=np.ones(100),
+                    flux_err=np.full(100, 0.01), meta={"SECTOR": 2})
+    flc = to_flare_lightcurve(lc)
+    assert isinstance(flc, FlareLightCurve)
+    assert type(lc) is LightCurve
+    assert "detrended_flux" not in lc.colnames
+    assert "SECTOR" in lc.meta
 

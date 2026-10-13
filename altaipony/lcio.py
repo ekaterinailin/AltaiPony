@@ -14,6 +14,8 @@ def to_flare_lightcurve(lc):
     """
     Convert a Lightkurve LightCurve to an AltaiPony FlareLightCurve.
 
+    Returns a converted copy; the input light curve is left unchanged.
+
     Parameters
     ----------
     lc : lightkurve.LightCurve
@@ -36,7 +38,8 @@ def to_flare_lightcurve(lc):
     if not isinstance(lc, LightCurve):
         raise TypeError(f"Expected LightCurve, got {type(lc).__name__}")
     
-    # Change class
+    # Change class of a copy, so that the caller's light curve stays as it is
+    lc = lc.copy()
     lc.__class__ = FlareLightCurve
     
     # Remove nans and infs
@@ -50,15 +53,10 @@ def to_flare_lightcurve(lc):
     if len(lc) == 0:
         raise ValueError("No valid data points after removing NaNs and infs")
     
-    # Add columns for detrended flux and error
-    lc["detrended_flux"] = np.full_like(lc.flux.value, np.nan)
-    lc["detrended_flux_err"] = np.full_like(lc.flux_err.value, np.nan)
-    
     # Setup flare table
     lc._init_flare_table()
     
     # Set qcs to either quarter, campaign, or sector
-    # Fixed typo: CAMPIGN -> CAMPAIGN
     lc.meta["qcs"] = lc.meta.get("QUARTER", 
                                  lc.meta.get("CAMPAIGN", 
                                             lc.meta.get("SECTOR", None)))

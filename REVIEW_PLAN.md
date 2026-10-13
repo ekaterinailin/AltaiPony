@@ -79,14 +79,17 @@ going into the helpers yet; then `_apply_gp_step` (309–470).
 **Check:**
 - ⚠ `dt = np.mean(np.diff(time))` (165) includes the gaps, which inflates
   `maxgap * dt`, the gap threshold. Should this be the median?
-- `interpolate_missing_cadences` fills missing cadences inside continuous
-  windows; they are part of the fits and dropped from the output. Should the
-  fits ignore them too?
+- Missing cadences are no longer interpolated (2026-10-13): the fill-in was
+  needed by the removed Savitzky-Golay passes. The polynomial baseline and the
+  GP work on irregular sampling; the matched filter correlates sample by
+  sample, so its templates are slightly misaligned next to missing cadences.
+  ⚠ Not yet tested with a benchmark that has missing cadences (the synthetic
+  light curves have none).
 
 **Tests** (`test_pipeline.py`):
 - [ ] A light curve with one long gap is split into exactly two segments.
-- [ ] Interpolated cadences are not in the output, and none ends up in a
-      flare.
+- [ ] Injection-recovery with randomly missing cadences (1–2 %, plus short
+      dropouts) is not worse than without.
 
 ## Step 3: Detecting the rotation period
 

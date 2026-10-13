@@ -26,11 +26,37 @@ Settings behind these numbers:
   if its peak lies inside a detection; a detection containing no injected
   peak is a false positive, even if it lies on a flare's tail.
 
+**1000 light curves** (seeds 92–1091, 7542 flares, same settings,
+2026-10-13; scratch runs, not in `notebooks/`):
+
+| | Recovered | S/N < 3 | 3–5 | 5–10 | > 10 | False positives outside injected flares |
+|---|---|---|---|---|---|---|
+| Pipeline | 7158 (94.9 %) | 54 % | 86 % | 99.1 % | 100 % | 62 (60 without flare flux, in 31 LCs) |
+| Perfect detrending | 7254 (96.2 %) | 64 % | 90 % | 99.9 % | 100 % | 10 (9 tails of bright flares, 1 on noise) |
+
+- 46 of the pipeline's 60 false positives without flare flux are on fast
+  rotators (P_min < 24 h), mostly with low noise (< 500 ppm); four light
+  curves (779, 811, 272, 880) have 27. Spotless stars have none. They last a
+  median of 60 min: detrending residuals that the local beta does not
+  suppress when they repeat every few hours.
+- The detector itself gives 1 false positive on noise in 1000 light curves.
+- Tails of bright flares (S/N 20–50), 5–13 FWHM after the peak, are
+  sometimes detected separately from the flare (9 with perfect detrending, 2
+  with the pipeline); for real data this would count one flare twice.
+
 Before the window detector (classic 3 x 3 sigma rule): 662 (pipeline) and
 692 (perfect detrending), 0 false positives outside injected flares.
 
 ## Open
 
+- **Missing cadences.** `custom_detrending` no longer interpolates missing
+  cadences (2026-10-13). Test with a benchmark variant that drops 1–2 % of
+  the cadences at random plus a few short dropouts; if recovery worsens,
+  bring back an interpolation (with the pipeline's own windows, filled from
+  the time stamps, quality 0 on filled cadences).
+  `FlareLightCurve.interpolate_missing_cadences` was removed: it replaced the
+  caller's `cont_windows`, dropped all but four columns, interpolated quality
+  flags as numbers and did nothing without a `cadenceno` column.
 - **LC 21, t = 18.64 d** is the one false positive outside injected flares:
   a 20-min, 1–2 sigma bump at a turning point of the fastest, strongest
   modulation in the sample (P_min 17 h). The GP (2-day minimum damping
@@ -118,6 +144,49 @@ and flares only.
   heatmap functions can be used on it.
 
 ## Resolved
+
+`FlareLightCurve` and `lcio` (2026-10-13):
+
+- `find_flares` returned the previous result unchanged when flares had already
+  been found, ignoring new settings; it now always searches anew. Its
+  continuous-window gap and median iterations are options (`maxgap`,
+  `median_iterations`).
+- `to_flare_lightcurve` changed the class of the caller's light curve; it now
+  converts a copy.
+- `read_from_fits` read BTJD/BKJD times as JD (dates in 4708 BC) and refused
+  files without TARGETID.
+- `repr` (and `save_to_fits`' default name) crashed without a numeric cadence.
+- `sample_flare_recovery(save_lc_to_file=True)` wrote to a literal
+  `{folder}before.fits` and referenced `self.targetit`; `detrend_kwargs` had a
+  mutable default.
+- The fake-flare tutorial imported a non-existent `lcio.from_mast`; it now
+  uses lightkurve's search and `to_flare_lightcurve`.
+
+- Copy semantics: methods that analyse the light curve work in place and
+  return it (`find_flares`, `detrend`, `find_cont_windows`,
+  `mark_flagged_flares`, `get_saturation`, `characterize_flares`,
+  `sample_flare_recovery`, `fit_flares`, `load_injrec_data`); only
+  `inject_fake_flares` returns a new light curve. Before, some copied, some changed the light curve, and `fit_flares`
+  returned None.
+
+- `flc.detrend()` uses `custom_detrending` by default (keyword arguments
+  passed on, `func=` for other functions); `mode` is deprecated. The
+  tutorials use the short form (the Getting Started one also passed
+  `spline_coarseness=8`, an option of the removed spline baseline).
+
+- Removed `get_saturation` (it needed K2 pixel data the class no longer
+  carries), the K2SC and `george` dependencies and the K2SC citations;
+  `progressbar2` replaced by a `tqdm` bar showing injected and recovered fake
+  flares. `celerite2` was missing from the dependencies and is now listed.
+
+- Reading an uncomputed column (`detrended_flux`, `detrended_flux_err`,
+  `gp_model`, `it_med`) returns None instead of creating a NaN column; the
+  steps that need them give a clear error. `inject_fake_flares` before
+  detrending used the iterative median of the (then all-NaN) detrended flux;
+  it now uses the raw flux's.
+
+Still open from the same review (API, not bugs): plots of the detrended flux
+that accept an `ax`.
 
 Detection and injection-recovery (2026-10-12/13):
 

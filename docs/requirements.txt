@@ -3,7 +3,7 @@ sphinx-automodapi
 sphinx==6.2.1
 matplotlib
 lightkurve
-progressbar2
+tqdm
 emcee
 corner
 altaipony

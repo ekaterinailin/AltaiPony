@@ -19,7 +19,6 @@ function within AltaiPony.
 
     import lightkurve as lk
     
-    from altaipony.detrending import custom_detrending
     from altaipony.lcio import to_flare_lightcurve
     
     import matplotlib.pyplot as plt
@@ -81,7 +80,7 @@ search for flares:
         plt.legend()
 
     flc = to_flare_lightcurve(lc)
-    flcd = flc.detrend("custom", func=custom_detrending)
+    flcd = flc.detrend()
     flares = flcd.find_flares().flares
 
 How the de-trending works
@@ -135,7 +134,7 @@ light curve:
 .. code:: ipython3
 
     flc = to_flare_lightcurve(lc)
-    flcd_aumic = flc.detrend("custom", func=custom_detrending)
+    flcd_aumic = flc.detrend()
     plot_detrending(flcd_aumic)
 
 
@@ -153,13 +152,14 @@ catches additional smaller flares by fitting several flare templates and
 finding the best-fit result, and calculates a polynomial baseline around
 the already detected event (see Getting Started tutorial).
 
-You own de-trending function
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Your own de-trending function
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Note also the syntax of the de-trending call above. You can pass *any*
-detrending function if you use the keyword “custom”. Make sure that the
-function returns a ``FlareLightCurve`` object, and that the output is
-stored as ``detrended_flux``, ``detrended_flux_err`` keywords to pass
-the result to the flare finder.
+``flc.detrend()`` uses ``custom_detrending`` and passes any keyword
+arguments on to it, e.g. ``flc.detrend(use_gp=False)``. You can also pass
+*any* other de-trending function as ``flc.detrend(func=my_function)``. Make
+sure that the function returns a ``FlareLightCurve`` with the same time
+stamps, and that the output is stored as ``detrended_flux`` and
+``detrended_flux_err`` to pass the result to the flare finder.
 
 

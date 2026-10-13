@@ -6,7 +6,8 @@ lightkurve>=2.4
 astropy
 emcee
 corner
-progressbar2>=3.51.4
+tqdm
+celerite2
 gatspy
 seaborn
 

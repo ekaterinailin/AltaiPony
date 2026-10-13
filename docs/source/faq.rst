@@ -31,7 +31,7 @@ How does **AltaiPony** handle the ramp ups at the end of TESS orbits?
 
 ::
 
-    FlareLightCurve.detrend("custom", func=<your custom function>) 
+    FlareLightCurve.detrend(func=<your custom function>) 
 
 
 ``func`` should *take* a ``FlareLightCurve`` as an argument, and can have arbitrary numbers of keyword arguments. It should also *return* a ``FlareLightCurve``.

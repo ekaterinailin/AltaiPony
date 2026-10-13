@@ -550,7 +550,8 @@ if __name__ == "__main__":
         # Overview plot (raw + detrended + annotations)
         plt.figure(figsize=(10, 5))
         plt.plot(time, flux, 'k.', markersize=1)
-        plt.plot(lcd.time.value, lcd.gp_model, c="c", linestyle="--")
+        if lcd.gp_model is not None:
+            plt.plot(lcd.time.value, lcd.gp_model, c="c", linestyle="--")
         plt.plot(lcd.time.value, lcd.detrended_flux, 'r.', markersize=1)
         plt.plot(lcd.time.value, lcd.it_med, 'b-', linewidth=1)
         for t_start, t_stop in flare_table[["t_start", "t_end"]].values:

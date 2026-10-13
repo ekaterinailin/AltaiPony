@@ -3,19 +3,18 @@ import pandas as pd
 import os
 import copy
 import logging
-import progressbar
 import datetime
 import warnings
 
 import matplotlib.pyplot as plt
 
 from astropy.io import fits
-from astropy.table import Table
+from astropy.table import Column, Table
 from astropy.time import Time
 import astropy.units as u
 from astropy.utils.exceptions import AstropyWarning
+from tqdm.auto import tqdm
         
-from scipy.interpolate import interp1d
 
 from .flares import flare_factor
 from .fit_flares import fit_flares as fit_flares_func
@@ -68,9 +67,9 @@ class FlareLightCurve(LightCurve):
     meta["qcs"] : integer
         Quarter, Campaign, or Sector number.
     detrended_flux : array-like
-        K2SC detrend flux, same units as flux.
+        De-trended flux, relative to the quiescent level (see ``detrend``).
     detrended_flux_err : array-like
-        K2SC detrend flux error, same units as flux.
+        Uncertainty of the de-trended flux.
     cont_windows : list of tuples of ints
         Continuous observing windows as (start, stop) index pairs, with stop
         exclusive. See ``find_cont_windows``.
@@ -82,17 +81,20 @@ class FlareLightCurve(LightCurve):
     it_med : array-like
         Iterative median, see the ``find_iterative_median`` method.
 
-
+    Methods that analyse the light curve change it in place: they fill the
+    ``flares`` table or add columns (``detrended_flux``, ``gp_model``,
+    ``it_med``) and attributes (``cont_windows``, ``fake_flares``), and
+    return the light curve itself, so that calls can be chained.  Only
+    ``inject_fake_flares``, whose result is a different light curve
+    (synthetic flares in the flux), returns a new object and leaves this one
+    unchanged.
     """
 
 
     @property
-    def detrended_flux_err(self) -> np.array:
-        try:
-            return self["detrended_flux_err"]
-        except KeyError:
-            self["detrended_flux_err"] = np.full_like(self.time.value, np.nan)
-            return self["detrended_flux_err"]
+    def detrended_flux_err(self):
+        """Uncertainty of the de-trended flux (``detrend``). None until computed."""
+        return self["detrended_flux_err"] if "detrended_flux_err" in self.colnames else None
 
     @detrended_flux_err.setter
     def detrended_flux_err(self, detrended_flux_err):
@@ -100,24 +102,18 @@ class FlareLightCurve(LightCurve):
 
 
     @property
-    def detrended_flux(self) -> np.array:
-        try:
-            return self["detrended_flux"]
-        except KeyError:
-            self["detrended_flux"] = np.full_like(self.time.value, np.nan)
-            return self["detrended_flux"]
+    def detrended_flux(self):
+        """De-trended flux (``detrend``). None until computed."""
+        return self["detrended_flux"] if "detrended_flux" in self.colnames else None
 
     @detrended_flux.setter
     def detrended_flux(self, detrended_flux):
         self["detrended_flux"] = detrended_flux 
 
     @property
-    def gp_model(self) -> np.array:
-        try:
-            return self["gp_model"]
-        except KeyError:
-            self["gp_model"] = np.full_like(self.time.value, np.nan)
-            return self["gp_model"]
+    def gp_model(self):
+        """Gaussian-process model of the variability (``detrend``). None until computed."""
+        return self["gp_model"] if "gp_model" in self.colnames else None
 
     @gp_model.setter
     def gp_model(self, gp_model):
@@ -126,11 +122,8 @@ class FlareLightCurve(LightCurve):
 
     @property
     def it_med(self):
-        try:
-            return self["it_med"]
-        except KeyError:
-            self["it_med"] = np.full_like(self.time.value, np.nan)
-            return self["it_med"]
+        """Iterative median of the de-trended flux (``find_iterative_median``). None until computed."""
+        return self["it_med"] if "it_med" in self.colnames else None
 
     @it_med.setter
     def it_med(self, it_med):
@@ -138,11 +131,7 @@ class FlareLightCurve(LightCurve):
 
     @property
     def origin(self):
-        try:
-            return self.meta["origin"]
-        except KeyError:
-            self.meta["origin"] = "FLC"
-            return self.meta["origin"]
+        return self.meta.get("origin", "FLC")
 
     @origin.setter
     def origin(self, origin):
@@ -152,11 +141,10 @@ class FlareLightCurve(LightCurve):
 
     @property
     def flares(self) -> pd.DataFrame:
-        try:
+        """Flare table (``find_flares``); empty until flares are searched."""
+        if "flares" in self.meta:
             return self.meta["flares"]
-        except KeyError:
-            self.meta["flares"] = pd.DataFrame(columns=FLARE_COLUMNS)
-            return self.meta["flares"]
+        return pd.DataFrame(columns=FLARE_COLUMNS)
 
     @flares.setter
     def flares(self, flares):
@@ -165,12 +153,11 @@ class FlareLightCurve(LightCurve):
 
     @property
     def fake_flares(self) -> pd.DataFrame:
-        
-        try:
+        """Injection-recovery table (``sample_flare_recovery``); empty until
+        filled."""
+        if "fake_flares" in self.meta:
             return self.meta["fake_flares"]
-        except KeyError:
-            self.meta["fake_flares"] = pd.DataFrame(columns=FAKE_FLARE_COLUMNS)
-            return self.meta["fake_flares"]
+        return pd.DataFrame(columns=FAKE_FLARE_COLUMNS)
 
     @fake_flares.setter
     def fake_flares(self, fake_flares):
@@ -179,11 +166,9 @@ class FlareLightCurve(LightCurve):
 
     @property
     def cont_windows(self):
-        try:
-            return self.meta["cont_windows"]
-        except KeyError:
-            self.meta["cont_windows"] = None
-            return self.meta["cont_windows"]
+        """Continuous observing windows (``find_cont_windows``); None until
+        computed."""
+        return self.meta.get("cont_windows")
 
     @cont_windows.setter
     def cont_windows(self, cont_windows):
@@ -203,14 +188,12 @@ class FlareLightCurve(LightCurve):
         self.cont_windows = cont_windows
 
     @property
-    def cadenceno(self) -> np.array:
-        """Cadence number for each observation."""
-        try:
+    def cadenceno(self):
+        """Cadence number for each observation; 0, 1, 2, ... (not stored)
+        if the light curve has no cadence numbers."""
+        if "cadenceno" in self.colnames:
             return self["cadenceno"]
-        except KeyError:
-            # Initialize with sequential integers if not present
-            self["cadenceno"] = np.arange(len(self.time), dtype=int)
-            return self["cadenceno"]
+        return Column(np.arange(len(self.time), dtype=int), name="cadenceno")
 
     @cadenceno.setter
     def cadenceno(self, cadenceno):
@@ -240,9 +223,29 @@ class FlareLightCurve(LightCurve):
             targetid = "Unknown"
         
         return(f'FlareLightCurve(ID: {targetid!s:<9} |' \
-            f' Mission: {mission:<6} |' \
+            f' Mission: {mission!s:<6} |' \
             f' QCS: {qcs!s:>3} |' \
-            f' Cadence: {self.meta.get("cadence", "Unknown"):.0f} s')
+            f' Cadence: {self._cadence_str()})')
+
+    def _qcs(self):
+        """Quarter, campaign or sector number from the metadata, in any
+        capitalisation, or "Unknown"."""
+        for key in ("qcs", "campaign", "sector", "quarter"):
+            for k in (key, key.upper()):
+                if self.meta.get(k) is not None:
+                    return self.meta[k]
+        return "Unknown"
+
+    def _cadence_str(self):
+        """Cadence in seconds as a string: from ``meta["cadence"]`` if it is
+        a number, else the median time step, else "Unknown"."""
+        cadence = self.meta.get("cadence")
+        if not isinstance(cadence, (int, float, np.integer, np.floating)) or not np.isfinite(cadence):
+            if len(self.time) > 1:
+                cadence = float(np.nanmedian(np.diff(self.time.value))) * 86400.
+            else:
+                return "Unknown"
+        return f"{cadence:.0f} s"
 
     
     def __str__(self):
@@ -268,7 +271,7 @@ class FlareLightCurve(LightCurve):
             name = f"flc_{self.targetid}_" \
                 f"{self.meta.get('mission','Unknown')}_" \
                 f"{self.meta.get('qcs','Unknown')}_" \
-                f"{self.meta.get('cadence','Unknown'):.0f}.fits"
+                f"{self._cadence_str().replace(' s', '')}.fits"
         
         path = os.path.join(loc, name)
         
@@ -364,19 +367,16 @@ class FlareLightCurve(LightCurve):
         flux_data = table[flux_col]
         flux_err_data = table[flux_err_col] if flux_err_col else None
         
-        # Convert time to Time object with proper format
-        # Check what format/unit the time has
-        if hasattr(time_array, 'unit'):
-            time_unit_str = str(time_array.unit)
-            if time_unit_str in ['bkjd', 'd', 'day']:
-                # Time in days - convert to Time object with JD format
-                time_data = Time(time_array.value, format='jd')
-            else:
-                # Try to create Time object directly
-                time_data = Time(time_array.value, format='jd')
+        # Convert time to a Time object.  save_to_fits stores the time format
+        # as the column's unit: "btjd" (TESS) or "bkjd" (Kepler/K2), which
+        # lightkurve registers as astropy Time formats.  Anything else is
+        # read as JD.
+        time_unit_str = str(getattr(time_array, 'unit', '')).lower()
+        time_values = np.asarray(getattr(time_array, 'value', time_array))
+        if time_unit_str in ('btjd', 'bkjd'):
+            time_data = Time(time_values, format=time_unit_str)
         else:
-            # No unit, assume JD
-            time_data = Time(time_array, format='jd')
+            time_data = Time(time_values, format='jd')
         
         # Handle non-standard flux units
         if hasattr(flux_data, 'unit') and str(flux_data.unit) == 'electron / s':
@@ -399,7 +399,7 @@ class FlareLightCurve(LightCurve):
         if 'targetid' in meta:
             flc.targetid = meta['targetid']
         else:
-            raise ValueError("TARGETID not found in FITS header.")
+            warnings.warn("TARGETID not found in FITS header.", UserWarning)
         
         return flc
     
@@ -439,6 +439,9 @@ class FlareLightCurve(LightCurve):
         # Extract arrays from self
         if detrended == True:
             detrended_flux = self.detrended_flux
+            if detrended_flux is None:
+                raise ValueError("No detrended flux: call detrend() first, or use "
+                                 "find_iterative_median(detrended=False).")
         else:
             detrended_flux = self.flux
 
@@ -484,9 +487,9 @@ class FlareLightCurve(LightCurve):
         Returns
         --------
         FlareLightCurve
-
+            The light curve itself, with ``cont_windows`` set.
         '''
-        lc = copy.copy(self)
+        lc = self
         dt = np.diff(lc.time.value)
         gap = np.where(np.append(0, dt) >= maxgap)[0]
 
@@ -514,62 +517,77 @@ class FlareLightCurve(LightCurve):
                       DeprecationWarning, stacklevel=2)
         return self.find_cont_windows(*args, **kwargs)
 
-    def detrend(self, mode, save=False,
-                path='detrended_lc.fits',
-                func=None,
-                **kwargs):
+    def detrend(self, mode=None, func=None, save=False,
+                path='detrended_lc.fits', **kwargs):
         """
-        De-trends a FlareLightCurve.
+        De-trend the light curve, by default with
+        ``altaipony.detrending.custom_detrending``.
 
-        Parameters:
+        Examples
+        --------
+        >>> flc.detrend()                  # custom_detrending, default settings
+        >>> flc.detrend(use_gp=False)      # options of custom_detrending
+        >>> flc.detrend(func=my_function)  # your own de-trending function
+
+        Parameters
         ----------
-        mode : str
-            "custom": detrend with the function passed to ``func``, e.g.
-            ``altaipony.detrending.custom_detrending``.
+        mode : None
+            Deprecated. ``"custom"`` is still accepted (with a warning) for
+            calls of the form ``detrend("custom", func=...)``.
+        func : function or None
+            De-trending function: takes a FlareLightCurve (and ``kwargs``) and
+            returns it with ``detrended_flux`` and ``detrended_flux_err`` set,
+            on the same time stamps. Default ``custom_detrending``.
         save : False or bool
-            If True, the light curve is saved as a fits file to a
-            given folder.
+            If True, the light curve is saved as a fits file to ``path``.
         path : str
-            Path to resulting fits file. 
-            As a default, the fits file will be stored in the
-            working directory.
-        func : function
-            custom detrending function
+            Path to resulting fits file.
         kwargs : dict
             Keyword arguments to pass to ``func``.
 
         Returns
         --------
         FlareLightCurve
+            The light curve itself, with the columns the detrending function
+            produced (e.g. ``detrended_flux``, ``detrended_flux_err``,
+            ``gp_model``, ``it_med``) added or updated.
         """
-        if mode == "custom":
-            
-            if func is None:
-                LOG.error('If you wish to use a custom detrending function you'
-                          ' must pass a callable to the "func" parameter.')
-                raise ValueError
+        if mode is not None:
+            if mode != "custom":
+                raise ValueError(f'De-trending mode {mode!r} does not exist. Call '
+                                 'detrend() for custom_detrending, or pass your own '
+                                 'function as func=.')
+            warnings.warn('detrend("custom", func=...) is deprecated; call detrend() '
+                          'or detrend(func=...).', DeprecationWarning, stacklevel=2)
+        if func is None:
+            from .detrending import custom_detrending
+            func = custom_detrending
 
-            new_lc = copy.deepcopy(self)
-            
-            new_lc = func(new_lc, **kwargs)            
-            
-            if (np.isnan(new_lc.detrended_flux).all() | np.isnan(new_lc.detrended_flux_err).all()):
-                LOG.error('The custom de-trending function you passed does not'
-                          ' return an detrended_flux or detrended_flux_err attri'
-                          'bute.')
-                raise AttributeError
-            
-            if save == True:
-                new_lc.to_fits(path)
-            
-            return new_lc
-        
-        else:
-            err_str = (f'\nDe-trending mode {mode} does not exist. Pass "custom" and a '
-                       'detrending function to func=, e.g. '
-                       'altaipony.detrending.custom_detrending.')
-            LOG.exception(err_str)
-            raise ValueError(err_str)
+        # The function works on a copy: it may restructure its input (e.g.
+        # interpolate missing cadences); its results are then copied back.
+        new_lc = func(copy.deepcopy(self), **kwargs)
+
+        if (new_lc.detrended_flux is None or new_lc.detrended_flux_err is None
+                or np.isnan(new_lc.detrended_flux).all()
+                or np.isnan(new_lc.detrended_flux_err).all()):
+            raise AttributeError('The de-trending function does not return a '
+                                 'detrended_flux or detrended_flux_err attribute.')
+
+        if len(new_lc) != len(self) or not np.allclose(new_lc.time.value, self.time.value):
+            raise ValueError('The de-trending function returned a light curve with '
+                             'different time stamps; its results cannot be added '
+                             'to this light curve.')
+        for col in new_lc.colnames:
+            if col != "time":
+                self[col] = new_lc[col]
+        for key, value in new_lc.meta.items():
+            if key not in ("flares", "fake_flares"):
+                self.meta[key] = value
+
+        if save == True:
+            self.to_fits(path)
+
+        return self
 
 
             
@@ -643,7 +661,8 @@ class FlareLightCurve(LightCurve):
             
             
             
-    def find_flares(self, minsep=3, fake=False, **kwargs):
+    def find_flares(self, minsep=3, fake=False, maxgap=0.09, median_iterations=4,
+                    **kwargs):
 
         '''
         Find flares in a ``FlareLightCurve``.
@@ -652,6 +671,15 @@ class FlareLightCurve(LightCurve):
         -------------
         minsep : 3 or int
             Minimum distance between two candidate start times in datapoints.
+        fake : bool
+            Kept for compatibility; flares are always searched anew, and any
+            previous flare table is replaced.
+        maxgap : float (Default is 0.09)
+            Time gap in days that separates continuous observing windows
+            (see ``find_cont_windows``).
+        median_iterations : int (Default is 4)
+            Maximum number of sigma-clipping iterations of the iterative
+            median (see ``find_iterative_median``).
         kwargs : dict
             keyword arguments to pass to :func:`find_flares_in_cont_obs_period`
         
@@ -689,22 +717,18 @@ class FlareLightCurve(LightCurve):
         Returns
         ----------
         FlareLightCurve
+            The light curve itself, with the ``flares`` table replaced and
+            ``cont_windows`` and ``it_med`` updated.
         '''
-        if ((fake==False) & (self.flares.shape[0]>0)):
-            return self
-        else:
-            lc = copy.deepcopy(self)
-            #re-init flares
-            columns = ['istart', 'istop', 'cstart', 'cstop', 'tstart',
-                       'tstop', 'ed_rec', 'ed_rec_err', 'ampl_rec', 'dur']
-            lc.flares = pd.DataFrame(columns=columns)
-            #find continuous observing periods
-            lc = lc.find_cont_windows()
-            #find the true median value iteratively
-            lc = lc.find_iterative_median(n=4)
-            #find flares
-            lc = find_flares(lc, minsep=minsep, **kwargs)
-            
+        lc = self
+        # replace any previous flare table
+        lc.flares = pd.DataFrame(columns=FLARE_COLUMNS)
+        # find continuous observing periods
+        lc = lc.find_cont_windows(maxgap=maxgap)
+        # find the true median value iteratively
+        lc = lc.find_iterative_median(n=median_iterations)
+        # find flares (the module function works on a copy)
+        lc.flares = find_flares(lc, minsep=minsep, **kwargs).flares
 
         return lc
     
@@ -779,8 +803,8 @@ class FlareLightCurve(LightCurve):
 
     def sample_flare_recovery(self, iterations=2000, inject_before_detrending=False,
                               mode=None, func=None, save_lc_to_file=False, folder="", 
-                              fakefreq=0.05, save=False, path=None, detrend_kwargs={},
-                              **kwargs):
+                              fakefreq=0.05, save=False, path=None, detrend_kwargs=None,
+                              progress=True, **kwargs):
         """
         Runs a number of injection recovery cycles and characterizes the light
         curve by recovery probability and equivalent duration underestimation.
@@ -792,63 +816,74 @@ class FlareLightCurve(LightCurve):
             Number of injection/recovery cycles
         inject_before_detrending : False or bool
             If True, fake flare are injected directly into raw data.
-        mode : str
-            De-trending mode passed to ``FlareLightCurve.detrend``, i.e.
-            "custom" (with ``func``). Required if ``inject_before_detrending``
-            is True.
+        mode : None
+            Deprecated, ignored (de-trending uses ``func``).
+        func : function or None
+            De-trending function passed to ``FlareLightCurve.detrend`` when
+            ``inject_before_detrending`` is True. Default
+            ``custom_detrending``.
         fakefreq : 0.05 or float
             number of flares per day, but at least one per continuous observation period will be injected
         detrend_kwargs : dict
             Keyword arguments to pass to FlareLightCurve.detrend
+        progress : True or bool
+            Show a progress bar with the number of fake flares injected and
+            recovered so far.
         kwargs : dict
             Keyword arguments to pass to inject_fake_flares
 
         Returns
         -------
         lc : FlareLightCurve
-            Detrended LC with all fake_flares listed in the attribute
+            The light curve itself (detrended, if ``inject_before_detrending``),
+            with its flares found and all injection-recovery results in
+            ``fake_flares``.
         fake_lc : FlareLightCurve
             Light curve with the last iteration of synthetic flares injected.
         """
         injrecstr = {True : "before", False : "after"} # define string to identify fake flare analysis by file name
+        detrend_kwargs = {} if detrend_kwargs is None else detrend_kwargs
+        if mode is not None:
+            warnings.warn("sample_flare_recovery(mode=...) is deprecated and ignored; "
+                          "pass func= to choose the de-trending function.",
+                          DeprecationWarning, stacklevel=2)
         
-        lc = copy.deepcopy(self)
+        lc = self
         if inject_before_detrending == True:
-            lc = lc.detrend(mode, func=func, **detrend_kwargs)
-        lc = lc.find_cont_windows()
-        lc = lc.find_flares()
-        lc = lc.find_iterative_median()
-        
-        lc_ = copy.deepcopy(lc)
+            lc.detrend(func=func, **detrend_kwargs)
+        lc.find_cont_windows()
+        lc.find_flares()
+        lc.find_iterative_median()
         
         columns =  ['istart', 'istop', 'cstart', 'cstop', 'tstart', 'tstop',
                     'ed_rec', 'ed_rec_err', 'duration_d', 'amplitude', 'ed_inj',
                     'peak_time', 'ampl_rec', 'dur', 'recovered']
         
 
-        widgets = [progressbar.Percentage(), progressbar.Bar()]
-        bar = progressbar.ProgressBar(widgets=widgets, max_value=iterations).start()
-        for i in range(iterations):
+        n_injected, n_recovered = 0, 0
+        bar = tqdm(range(iterations), desc="Injection-recovery", unit="iteration",
+                   disable=not progress)
+        for i in bar:
             fake_lc = lc.inject_fake_flares(inject_before_detrending=inject_before_detrending,
                                                  fakefreq=fakefreq,
                                                  **kwargs)
             
             if save_lc_to_file == True:
-                fake_lc.to_fits("{folder}before.fits")
-                print(f"saved {self.targetit} LC before detrending")
+                fake_lc.to_fits(f"{folder}before.fits")
+                print(f"saved {self.targetid} LC before detrending")
                 
             injs = fake_lc.fake_flares
            
             if inject_before_detrending == True:
                 LOG.info('\nDetrending fake LC:\n')
-                fake_lc = fake_lc.detrend(mode, func=func, **detrend_kwargs)
+                fake_lc = fake_lc.detrend(func=func, **detrend_kwargs)
             
             fake_lc = fake_lc.find_flares(fake=True)
             recs = fake_lc.flares
           
             if save_lc_to_file == True:
                 fake_lc.to_fits(f"{folder}after.fits")
-                print(f"saved {self.targetit} LC after detrending")
+                print(f"saved {self.targetid} LC after detrending")
                 
             # The following line makes sure that column order is retained    
             injrec_results = pd.DataFrame(columns=columns)
@@ -858,7 +893,9 @@ class FlareLightCurve(LightCurve):
                                                    ignore_index=True)
             
 
-            bar.update(i + 1)
+            n_injected += len(injrec_results)
+            n_recovered += int(injrec_results["recovered"].fillna(False).astype(bool).sum())
+            bar.set_postfix(injected=n_injected, recovered=n_recovered)
             
             if save == True:
             
@@ -866,7 +903,7 @@ class FlareLightCurve(LightCurve):
                 if path is None:
                     path = (f'{iterations}_{lc.targetid}_inj_'
                             f'{injrecstr[inject_before_detrending]}_'
-                            f'{lc.campaign}.csv')
+                            f'{lc._qcs()}.csv')
                             
                 # If it already exists append new injrec to the end       
                 if os.path.exists(path):
@@ -888,8 +925,7 @@ class FlareLightCurve(LightCurve):
             lc.fake_flares = pd.read_csv(path)  
 
         
-        # End monitoring
-        bar.finish()
+        bar.close()
         return lc, fake_lc
 
  
@@ -906,10 +942,11 @@ class FlareLightCurve(LightCurve):
 
         Returns
         --------
-        FlareLightCurve with the flares table supplemented with an integer
-        ``quality`` and, if applicable, a string ``explanation`` column.
+        FlareLightCurve (itself) with the flares table supplemented with an
+        integer ``quality`` and, if applicable, a string ``explanation``
+        column.
         """
-        lc = copy.copy(self)
+        lc = self
         f = lc.flares
         if 'quality' not in f.columns:
             f['quality'] = 0
@@ -921,76 +958,6 @@ class FlareLightCurve(LightCurve):
             f['explanation'] = f.apply(g, axis=1)
         lc.flares = f
         return lc
-
-    def get_saturation(self, factor=10, return_level=False):
-        """
-        Goes back to the TPF and measures the maximum saturation level during a
-        flare, averaged over the aperture mask.
-
-        Parameters
-        -----------
-        factor : 10 or float
-            Saturation level in full well depths.
-
-        Returns
-        -------
-        FlareLightCurve with modified 'flares' attribute.
-        """
-        flc = copy.copy(self)
-        well_depth = 10093
-
-        def sat(flares, flc=flc, well_depth=10093, return_level=False):
-            pfl = flc.pixel_flux[flares.istart:flares.istop]
-            flare_aperture_pfl = pfl[:,flc.pipeline_mask]
-            return sat_level(flare_aperture_pfl, well_depth, return_level)
-            
-        def sat_level(flare_aperture_pfl, well_depth, return_level):
-            saturation_level = np.nanmean(flare_aperture_pfl, axis=1) / well_depth
-            if return_level == False:
-                return np.any(saturation_level > factor)
-            else:
-                return np.nanmax(saturation_level)
-        
-        colname = 'saturation_f{}'.format(factor)
-        
-        if np.isnan(flc.saturation).all():
-            
-            if flc.flares.shape[0] > 0:#do not attempt if no flares are detected
-                flc.flares[colname] = flc.flares.apply(sat, axis=1,
-                                                    return_level=return_level)
-                
-            elif flc.flares.shape[0] == 0: # calculate saturation for all times
-                flare_aperture_pfl = flc.pixel_flux[:,flc.pipeline_mask]
-                saturation_level = np.nanmax(flare_aperture_pfl, axis=tuple(np.arange(len(flare_aperture_pfl.shape)))[1:]) / well_depth
-                if return_level == False:
-                    flc.saturation = saturation_level > factor
-                else:
-                    flc.saturation = saturation_level
-                                           
-
-        else:
-             if flc.flares.shape[0] > 0:#do not attempt if no flares are detected
-                 if isinstance(flc.saturation[0], np.bool_) :
-                     if return_level == False:
-                        flc.flares[colname] = flc.flares.apply(lambda x: (flc.saturation[x.istart: x.istop] == True).any(),
-                                                        axis=1)
-                     elif return_level == True:
-                         LOG.info("Warning: Saturation is given as boolean flag. \n Choose return_level=False.")
-                         return flc.get_saturation(factor=factor, return_level=False)
-                    
-                 elif (isinstance(flc.saturation[0], np.float64) | isinstance(flc.saturation[0], np.float32)) :
-                     if return_level == False:
-                        flc.flares[colname] = flc.flares.apply(lambda x: (flc.saturation[x.istart: x.istop] > factor).any(),
-                                                               axis=1)
-
-                     elif return_level == True:
-                        flc.flares[colname] = flc.flares.apply(lambda x: np.nanmax(flc.saturation[x.istart: x.istop]),
-                                                        axis=1)
-
-                                               
-
-        return flc
-
 
     def inject_fake_flares(self, model="mendoza2022", gapwindow=0.1, fakefreq=.005,
                            inject_before_detrending=False, d=False, seed=None, 
@@ -1048,8 +1015,9 @@ class FlareLightCurve(LightCurve):
                            )
                        )
         
-        # Use a light curve where you know the median flux
-        fake_lc = fake_lc.find_iterative_median()
+        # Use a light curve where you know the median flux: of the flux the
+        # flares go into (raw flux if injected before detrending)
+        fake_lc = fake_lc.find_iterative_median(detrended=(typ == "detrended_flux"))
         
         # Init arrays for the synthetic flare parameters
         t0_fake = np.zeros(nfakesum, dtype='float') # peak times
@@ -1204,6 +1172,7 @@ class FlareLightCurve(LightCurve):
             self.fake_flares = pd.concat([self.fake_flares, df])
         else:
             self.fake_flares = df
+        return self
 
     def plot_recovery_probability_heatmap(self, ampl_bins=None, 
                                           dur_bins=None, flares_per_bin=20, **kwargs):
@@ -1244,11 +1213,11 @@ class FlareLightCurve(LightCurve):
 
     def characterize_flares(self, flares_per_bin=30, ampl_bins=None, dur_bins=None):
         """Use results from injection recovery to determine
-        corrected flare characteristics.
-        
+        corrected flare characteristics, added as columns to the
+        ``flares`` table (in place; returns the light curve itself).
         """
-        flc = copy.deepcopy(self)
-        flares = wrap_characterization_of_flares(flc.fake_flares, flc.flares,
+        flc = self
+        flares = wrap_characterization_of_flares(flc.fake_flares.copy(), flc.flares.copy(),
                                                  flares_per_bin=flares_per_bin,
                                                  ampl_bins=ampl_bins,
                                                  dur_bins=dur_bins)
@@ -1282,8 +1251,9 @@ class FlareLightCurve(LightCurve):
 
         Returns
         -------
-        results : list
-            A list of fitted model results.
+        FlareLightCurve
+            The light curve itself; the fitted model results are stored and
+            summarised by ``flare_table()``.
         """
         results = fit_flares_func(
             time=self.time.value,
@@ -1298,6 +1268,7 @@ class FlareLightCurve(LightCurve):
             **kwargs
         )
         self._flare_fit_results = results
+        return self
         
 
 
@@ -1361,91 +1332,3 @@ class FlareLightCurve(LightCurve):
                           [f"amp{i}" for i in range(nf)]
     
         return plot_corner(samples, param_names=param_names, **kwargs)
-
-
-    def interpolate_missing_cadences(lc, **kwargs):
-        """Interpolate missing cadences in 
-        light curve, skipping larger gaps in data.
-        
-        Parameters:
-        -----------
-        lc : FlareLightCurve
-            the light curve
-        kwargs : dict
-            keyword arguments to pass to find_cont_windows method
-            
-        Return:
-        -------
-        interpolated FlareLightCurve
-        """
-        # find the continuous windows; the gaps between them are too big to
-        # be interpolated with a good conscience
-        cont_windows = lc.find_cont_windows(**kwargs).cont_windows
-        
-        # set up interpolated arrays
-        time, flux, flux_err, newcadence = [], [], [], []
-        original_flux, original_flux_err, quality = [], [], []
-        
-        # interpolate within each continuous window
-        for i, j in cont_windows:
-            # select window
-            windowlc = lc[i:j]
-            # get old cadence
-            oldx = windowlc.cadenceno.value
-            # cadenceno are complete in uncorrected flux, 
-            # so we fill in the removed cadences
-            newx = np.arange(windowlc.cadenceno.value[0], windowlc.cadenceno.value[-1]+1)
-            newcadence.append(newx)
-            
-            # interpolate flux error
-            f = interp1d(oldx, windowlc.flux_err, fill_value='extrapolate')
-            flux_err.append(f(newx))
-            
-            # interpolate time
-            f = interp1d(oldx, windowlc.time.value, fill_value='extrapolate')
-            time.append(f(newx))
-            
-            # interpolate flux
-            f = interp1d(oldx, windowlc.flux.value, fill_value='extrapolate')
-            flux.append(f(newx))
-
-            # interpolate original_flux if it exists
-            if 'original_flux' in windowlc.colnames:
-                f = interp1d(oldx, windowlc['original_flux'].value, fill_value='extrapolate')
-                original_flux.append(f(newx))   
-            # interpolate original_flux_err if it exists
-            if 'original_flux_err' in windowlc.colnames:
-                f = interp1d(oldx, windowlc['original_flux_err'].value, fill_value='extrapolate')
-                original_flux_err.append(f(newx))
-            # interpolate original_flux if it exists
-            if 'quality' in windowlc.colnames:
-                f = interp1d(oldx, windowlc['quality'].value, fill_value='extrapolate')
-                quality.append(f(newx))   
-        
-        # Copy the original light curve to preserve all attributes
-        newlc = FlareLightCurve(time = np.concatenate(time),
-                                flux = np.concatenate(flux),
-                                flux_err = np.concatenate(flux_err),
-                                meta=lc.meta)
-        
- 
-        # add original_flux if it exists
-        if len(original_flux) > 0:
-            newlc['original_flux'] = np.concatenate(original_flux)
-        if len(quality) > 0:
-            newlc['quality'] = np.concatenate(quality)  
-        if len(original_flux_err) > 0:
-            newlc['original_flux_err'] = np.concatenate(original_flux_err)
-        
-        # add new cadence array
-        newcadenceno = np.concatenate(newcadence)
-        newlc["cadenceno"] = newcadenceno
-        
-        # flag values that have been interpolated in the new light curve
-        newvals = np.sort(list(set(newcadenceno) - set(lc.cadenceno.value)))
-        newvalindx = np.searchsorted(newcadenceno, newvals)
-        newlc["interpolated"] = 0  # not interpolated values
-        newlc.interpolated[newvalindx] = 1  # interpolated values
-
-        return newlc
-

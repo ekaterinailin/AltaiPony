@@ -9,12 +9,12 @@ To run a series of injections, call the ``sample_flare_recovery()`` method on a 
 
 ::
 
-    from altaipony.lcio import from_mast
-    from altaipony.detrending import custom_detrending
-    flc = from_mast("TIC 29780677", mode="LC", c=2, mission="TESS")
-    flc = flc[0].detrend("custom", func=custom_detrending)
+    import lightkurve as lk
+    from altaipony.lcio import to_flare_lightcurve
+    lc = lk.search_lightcurve("TIC 29780677", sector=2, exptime=120, author="SPOC")[0].download()
+    flc = to_flare_lightcurve(lc)
+    flc = flc.detrend()
     flc, fake_flc = flc.sample_flare_recovery(inject_before_detrending=True,
-                                              mode="custom", func=custom_detrending,
                                               iterations=50, fakefreq=1, ampl=[1e-4, 0.5], 
                                               dur=[.001/6., 0.1/6.])
 
@@ -47,12 +47,12 @@ Let's pick GJ 1243, a famous flare star, inject and recover some flares and look
 
 ::
 
-    from altaipony.lcio import from_mast
-    from altaipony.detrending import custom_detrending
-    flc = from_mast("GJ 1243", mode="LC", c=15, mission="TESS")
-    flc = flc.detrend("custom", func=custom_detrending)
+    import lightkurve as lk
+    from altaipony.lcio import to_flare_lightcurve
+    lc = lk.search_lightcurve("GJ 1243", sector=15, exptime=120, author="SPOC")[0].download()
+    flc = to_flare_lightcurve(lc)
+    flc = flc.detrend()
     flc, fake_flc = flc.sample_flare_recovery(inject_before_detrending=True,
-                                              mode="custom", func=custom_detrending,
                                               iterations=500, fakefreq=.01, ampl=[1e-4, 0.5], 
                                               dur=[.001/6., 0.1/6.])
 

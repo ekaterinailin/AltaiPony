@@ -57,7 +57,6 @@ different numbers of flares (1 to ``max_flares``) using ``emcee``.
 
     import matplotlib.pyplot as plt
     from altaipony.lcio import to_flare_lightcurve
-    from altaipony.detrending import custom_detrending
     import lightkurve as lk
 
 
@@ -75,7 +74,7 @@ different numbers of flares (1 to ``max_flares``) using ``emcee``.
     flc.plot()
     
     
-    flcd = flc.detrend("custom", func=custom_detrending)
+    flcd = flc.detrend()
     
     plt.figure(figsize=(12, 5))
     

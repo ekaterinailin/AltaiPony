@@ -162,13 +162,12 @@ def custom_detrending(
         gp_model : the GP baseline in input flux units (NaN if no GP was
             fitted).
     """
+    # Work on a copy: the input light curve stays unchanged.  Missing
+    # cadences are not filled in: the baseline, the GP and the noise
+    # estimate work on the actual time stamps.
+    lc = lc.copy()
     dt = np.mean(np.diff(lc.time.value))
     cont_windows = lc.find_cont_windows(maxgap=maxgap * dt).cont_windows
-    # Store original flux as a column so it survives filtering operations
-    lc["original_flux"] = lc.flux.copy()
-    lc["original_flux_err"] = lc.flux_err.copy()
-
-    lc = lc.interpolate_missing_cadences()
     time, flux = lc.time.value, lc.flux.value
 
     # --- Baseline: segmented polynomial ------------------------------------
@@ -198,13 +197,10 @@ def custom_detrending(
     best_params["periodic"] = is_periodic
 
     # The baseline output is the detrended flux, at the input flux level; the
-    # GP step replaces it.  ``flux`` and ``flux_err``
-    # stay the original ones, which the GP is trained on.
+    # GP step replaces it.  ``flux`` and ``flux_err`` are the original ones,
+    # which the GP is trained on.
     lc4 = lc
     lc4.detrended_flux = m2flux * u.electron / u.s
-    lc4.flux = lc4["original_flux"] * u.electron / u.s
-    lc4.flux_err = lc4["original_flux_err"] * u.electron / u.s
-    lc4.remove_column("original_flux")
 
     # Optional final Gaussian-Process refinement (in place on lc4/best_params).
     _apply_gp_step(
@@ -235,11 +231,6 @@ def custom_detrending(
         det = np.asarray(getattr(lc4.detrended_flux, "value", lc4.detrended_flux), dtype=float)
         level = _find_iterative_median(det, None)[0]
         lc4.detrended_flux = (NORMALIZED_BASELINE * det / level) * u.electron / u.s
-
-    # Drop the cadences that interpolate_missing_cadences filled in: they
-    # only served to give the fits a regular grid.
-    if "interpolated" in lc4.colnames:
-        lc4 = lc4[np.asarray(lc4["interpolated"]) == 0]
 
     # Iterative median of the final detrended flux.
     lc4.find_iterative_median()

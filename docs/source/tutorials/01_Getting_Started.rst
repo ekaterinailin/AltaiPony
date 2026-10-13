@@ -10,7 +10,6 @@ curve via ``lightkurve``.
 
     import lightkurve as lk
     
-    from altaipony.detrending import custom_detrending
     from altaipony.lcio import to_flare_lightcurve
     
     import matplotlib.pyplot as plt
@@ -104,7 +103,7 @@ variability. Let’s remove it with the ``custom_detrending`` function:
 
 .. code:: ipython3
 
-    flcd = flc.detrend("custom", func=custom_detrending, spline_coarseness=8)
+    flcd = flc.detrend()
     
     plt.figure(figsize=(10, 5))
     plt.plot(flc.time.value, flc.flux, label='Original Flux', alpha=0.5)

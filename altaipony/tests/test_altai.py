@@ -106,7 +106,6 @@ def test_equivalent_duration():
     lc.detrended_flux=detrended_flux
     lc.it_med =np.full(1000,1.)
     lc.detrended_flux_err=np.full(1000,1e-8)
-   # print(lc.saturation)
     ed, ed_err = equivalent_duration(lc, 60, 70, err=True)
     assert ed == pytest.approx(45,rel=1e-8)
     assert ed_err == pytest.approx(2.665569e-08, rel=1e-4)

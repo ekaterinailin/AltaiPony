@@ -43,7 +43,6 @@ Depending on the methods you use, you may also want to cite
 
   - Maschberger and Kroupa (2009) [2]_ (MMLE power law fit)
   - Wheatland (2004) [3]_ (MCMC power law fit)
-  - Aigrain et al. (2016) [4]_ and their software [5]_ (**K2SC** de-trending)
 
 
 .. [a] Ekaterina Ilin, Sarah J. Schmidt, Katja Poppenhäger, James R. A. Davenport, Martti H. Kristiansen, Mark Omohundro (2021). "Flares in Open Clusters with K2. II. Pleiades, Hyades, Praesepe, Ruprecht 147, and M67" Astronomy & Astrophysics, Volume 645, id.A42, 25 pp.  	https://doi.org/10.1051/0004-6361/202039198 
@@ -56,12 +55,7 @@ Depending on the methods you use, you may also want to cite
 
 .. [3] Wheatland, Michael S. "A Bayesian approach to solar flare prediction." The Astrophysical Journal 609.2 (2004): 1134. https://doi.org/10.1086/421261
 
-.. [4] Aigrain, Suzanne; Parviainen, Hannu; Pope, Benjamin "K2SC: flexible systematics correction and detrending of K2 light curves using Gaussian process regression" Monthly Notices of the Royal Astronomical Society, Volume 459, Issue 3, p.2408-2419 https://doi.org/10.1093/mnras/stw706
 
-.. [5] Aigrain, Suzanne; Parviainen, Hannu; Pope, Benjamin "K2SC: K2 Systematics Correction." Astrophysics Source Code Library, record ascl:1605.012 https://ui.adsabs.harvard.edu/abs/2016ascl.soft05012A/abstract
-
-
-.. _k2sc: https://github.com/OxES/k2sc 
 .. _Appaloosa: https://github.com/jradavenport/appaloosa
 .. _lightkurve: https://github.com/KeplerGO/lightkurve
 .. _docs: http://docs.lightkurve.org/index.html

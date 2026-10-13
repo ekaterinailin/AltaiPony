@@ -42,6 +42,9 @@ def estimate_detrended_noise(
     flc : FlareLightCurve
         Input light curve with detrended_flux_err attribute updated.
     """
+    if flc.detrended_flux is None:
+        raise ValueError("No detrended flux: call detrend() first.")
+
     # Find continuous windows if not already done
     if flc.cont_windows is None:
         flc = flc.find_cont_windows()

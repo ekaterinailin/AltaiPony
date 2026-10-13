@@ -325,8 +325,12 @@ def find_flares(flc, minsep=3, sigma=None, merge_sigma=0.25, extend_sigma=1.0,
     istart = np.array([], dtype='int')
     istop = np.array([], dtype='int')
 
-    if np.isnan(lc.detrended_flux).all():
-        raise TypeError('Flare finding only works on de-trended light curves.')
+    if lc.detrended_flux is None or np.isnan(lc.detrended_flux).all():
+        raise TypeError('Flare finding only works on de-trended light curves: '
+                        'call detrend() first.')
+    if lc.detrended_flux_err is None:
+        raise TypeError('No detrended_flux_err: estimate the noise first, e.g. '
+                        'with altaipony.detrending.estimate_detrended_noise.')
 
     #Now work on periods of continuous observation with no gaps
     for (le,ri) in lc.cont_windows:

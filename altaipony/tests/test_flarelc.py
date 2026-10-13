@@ -35,23 +35,13 @@ def mock_flc(origin='TPF', detrended=False, ampl=1., dur=1):
     """
     n = 1000
     time = np.arange(0, n/48, 1./48.)
-    pixel_time = np.outer(time,np.full((3,3), 1)).reshape((1000,3,3))
-    np.random.seed(13854)
-
-    pipeline_mask = np.array([[False, False, False],
-                              [False, True,  False],
-                              [False, False, False],])
     quality = np.zeros_like(time)
     np.random.seed(33)
     flux_err = np.random.rand(n)/100.
     if detrended==False:
         flux = np.sin(time/2)*7. + 500. +flux_err
-        pixel_flux = np.random.rand(len(time),3,3)/100.+500.+np.sin(pixel_time/2)*7.
-        pixel_flux_err = np.random.rand(len(time),3,3)/100.
     else:
         flux = 500. + flux_err
-        pixel_flux = np.random.rand(len(time),3,3)/100.+500.
-        pixel_flux_err = np.random.rand(len(time),3,3)/100.
     flux[15:15+dur] += 500.*ampl
     flux[15+dur:15+2*dur] += 250.*ampl
     flux[15+2*dur:15+3*dur] += 130.*ampl
@@ -63,10 +53,9 @@ def mock_flc(origin='TPF', detrended=False, ampl=1., dur=1):
             'cadenceno' : np.arange(n), 'it_med' : np.full_like(time,500.005),
             'quality' : quality,}
     meta = {'targetid' : 800000000,
-            'origin' : origin,  'pipeline_mask' : pipeline_mask,
-            'pixel_flux' : pixel_flux, 'campaign' : 5, 'ra' : 22.,
-            'dec' : 22., 'mission' : 'K2', 'channel' : 55, 
-            'pixel_flux_err' : pixel_flux_err, 'time_format': 'bkjd',
+            'origin' : origin, 'campaign' : 5, 'ra' : 22.,
+            'dec' : 22., 'mission' : 'K2', 'channel' : 55,
+            'time_format': 'bkjd',
             'primary_header':3, 'data_header':2}
 
     if detrended == False:
@@ -113,7 +102,7 @@ def test_sample_flare_recovery():
     flc = mock_flc(detrended=True)
     
     flcd, fflc = flc.sample_flare_recovery(iterations=10, inject_before_detrending=True,
-                                          func=func, **{"model":"davenport2014"}, mode="custom")
+                                          func=func, **{"model":"davenport2014"})
     #make sure no flares are injected overlapping true flares
     data = flcd.fake_flares
     assert data[(data.istart > 14) & (data.istart < 19)].shape[0] == 0
@@ -136,7 +125,7 @@ def test_sample_flare_recovery():
     flc = mock_flc(detrended=True)
     
     flcd, fflc = flc.sample_flare_recovery(iterations=10, inject_before_detrending=True,
-                                           func=func, mode="custom", **{"model":"davenport2014"},
+                                           func=func, **{"model":"davenport2014"},
                                            detrend_kwargs={"kw":17})
     #make sure no flares are injected overlapping true flares
     data = flcd.fake_flares
@@ -180,7 +169,88 @@ def test_sample_flare_recovery():
 
 
 def test_repr():
-    pass
+    """repr works with and without a known cadence."""
+    flc = FlareLightCurve(time=np.arange(10) / 720., flux=np.ones(10),
+                          flux_err=np.ones(10))
+    assert "Cadence: 120 s" in repr(flc)
+    flc.meta["cadence"] = 20.
+    assert "Cadence: 20 s" in repr(flc)
+    assert "Unknown" in repr(FlareLightCurve(time=[1.], flux=[1.], flux_err=[1.]))
+
+
+def test_reading_does_not_create_columns():
+    """Uncomputed columns read as None and are not created; steps that need
+    detrended flux say so."""
+    flc = FlareLightCurve(time=np.arange(100) / 720., flux=np.ones(100),
+                          flux_err=np.full(100, 0.01))
+    assert flc.detrended_flux is None
+    assert flc.detrended_flux_err is None
+    assert flc.gp_model is None
+    assert flc.it_med is None
+    assert flc.cont_windows is None
+    assert len(flc.flares) == 0 and len(flc.fake_flares) == 0
+    assert list(flc.cadenceno) == list(range(100))
+    assert flc.colnames == ["time", "flux", "flux_err"]
+    assert "flares" not in flc.meta
+
+    with pytest.raises(ValueError, match="call detrend"):
+        flc.find_flares()
+    with pytest.raises(ValueError, match="call detrend"):
+        flc.find_iterative_median()
+
+
+def test_methods_work_in_place():
+    """Analysing methods change the light curve itself and return it;
+    inject_fake_flares returns a new light curve and leaves it unchanged."""
+    flc = mock_flc(detrended=True)
+
+    def half(lc):
+        lc["detrended_flux"] = lc.flux / 2.
+        lc["detrended_flux_err"] = lc.flux_err / 2.
+        return lc
+
+    assert flc.detrend(func=half) is flc
+    assert flc.detrended_flux.value == pytest.approx(flc.flux.value / 2.)
+
+    assert flc.find_cont_windows() is flc
+    assert flc.cont_windows == [(0, 1000)]
+
+    assert flc.find_flares() is flc
+    assert len(flc.flares) == 1
+
+    flares_before = flc.flares.copy()
+    fake = flc.inject_fake_flares(fakefreq=0.05, model="davenport2014")
+    assert fake is not flc
+    assert len(fake.fake_flares) > 0
+    assert len(flc.fake_flares) == 0
+    assert flc.flares.equals(flares_before)
+
+
+def test_find_flares_recomputes():
+    """A second find_flares call with other settings replaces the flares."""
+    flc = mock_flc(detrended=True).find_flares()
+    assert flc.flares.istart[0] == 12
+    classic = flc.find_flares(max_window=None, merge_sigma=None, extend_sigma=None)
+    assert classic.flares.istart[0] == 15
+    assert len(classic.flares) == 1
+
+
+def test_fits_round_trip_keeps_btjd_times(tmp_path):
+    """save_to_fits / read_from_fits keep BTJD times, and a file without
+    TARGETID can still be read."""
+    import lightkurve as lk
+    from astropy.time import Time
+    from altaipony.lcio import to_flare_lightcurve
+    lc = lk.LightCurve(time=Time(np.arange(1500, 1501, 1 / 720.), format="btjd"),
+                       flux=np.ones(720), flux_err=np.full(720, 0.01),
+                       meta={"TIMEDEL": 2 / 1440., "SECTOR": 7, "MISSION": "TESS"})
+    flc = to_flare_lightcurve(lc)
+    flc.targetid = 1234
+    path = flc.save_to_fits(loc=str(tmp_path), name="rt.fits")
+    back = FlareLightCurve.read_from_fits(path)
+    assert back.time.format == "btjd"
+    assert back.time.value == pytest.approx(flc.time.value)
+    assert back.targetid == 1234
 
 def test_getitem():
     pass
@@ -221,7 +291,7 @@ def test_gaps_and_find_gaps_are_deprecated_aliases():
     assert flc_old.cont_windows == [(0, 500), (500, 1000)]
 
 def test_detrend():
-    """Custom detrending via FlareLightCurve.detrend(mode="custom")."""
+    """De-trending via FlareLightCurve.detrend(func=...)."""
     
     # --- create a very minimalistic light curve
     N = int(1e4)
@@ -236,7 +306,7 @@ def test_detrend():
         return flc
 
     with pytest.raises(AttributeError) as e:
-        new_flc = flc.detrend(mode="custom", func=custom_detrending)
+        new_flc = flc.detrend(func=custom_detrending)
 
     # -- test a minimum function that does the job    
     def custom_detrending(flc):
@@ -244,7 +314,7 @@ def test_detrend():
         flc["detrended_flux_err"] = flc.flux_err
         return flc    
         
-    new_flc = flc.detrend(mode="custom", func=custom_detrending)
+    new_flc = flc.detrend(func=custom_detrending)
     assert (new_flc.flux.value == flc.flux.value).all()
     assert (new_flc.flux_err.value == flc.flux_err.value).all()
 
@@ -256,14 +326,33 @@ def test_detrend():
         assert a == 20
         return flc    
         
-    new_flc = flc.detrend(mode="custom", func=custom_detrending, kw=17)
+    new_flc = flc.detrend(func=custom_detrending, kw=17)
     assert (new_flc.flux.value == flc.flux.value).all()
     assert (new_flc.flux_err.value == flc.flux_err.value).all()
 
-    # --- function should fail if no func is given
+    # --- the old call detrend("custom", func=...) still works, with a warning
+    with pytest.warns(DeprecationWarning):
+        new_flc = flc.detrend("custom", func=custom_detrending, kw=17)
+    assert (new_flc.detrended_flux.value == flc.flux.value).all()
 
-    with pytest.raises(ValueError) as e:
-        new_flc = flc.detrend(mode="custom")
+
+def test_detrend_defaults_to_custom_detrending(monkeypatch):
+    """detrend() without func uses altaipony.detrending.custom_detrending
+    and passes its keyword arguments on."""
+    import altaipony.detrending
+    calls = {}
+
+    def fake_custom_detrending(flc, **kwargs):
+        calls.update(kwargs)
+        flc["detrended_flux"] = flc.flux / 2.
+        flc["detrended_flux_err"] = flc.flux_err
+        return flc
+
+    monkeypatch.setattr(altaipony.detrending, "custom_detrending", fake_custom_detrending)
+    flc = mock_flc(detrended=True)
+    assert flc.detrend(use_gp=False) is flc
+    assert calls == {"use_gp": False}
+    assert flc.detrended_flux.value == pytest.approx(flc.flux.value / 2.)
 
 
 def test_detrend_fails():
@@ -272,9 +361,8 @@ def test_detrend_fails():
     # De-trending fails in general when an invalid mode is passed.
     # But also a helpful message is thrown out.
     flc =  mock_flc()
-    err_string = ('\nDe-trending mode blaaaah does not exist. Pass "custom" and a '
-                  'detrending function to func=, e.g. '
-                  'altaipony.detrending.custom_detrending.')
+    err_string = ("De-trending mode 'blaaaah' does not exist. Call detrend() for "
+                  "custom_detrending, or pass your own function as func=.")
     with pytest.raises(ValueError) as err:
         flc.detrend("blaaaah")
     assert err_string == err.value.args[0]
@@ -681,9 +769,9 @@ class TestSaveToFits:
     
     def test_nan_handling_in_optional_columns(self, mock_flc, temp_dir):
         """Test that columns with all NaN are handled correctly"""
-        # it_med defaults to all NaN
-        assert np.all(np.isnan(mock_flc.it_med))
-        
+        # an all-NaN optional column
+        mock_flc["it_med"] = np.full(len(mock_flc.time), np.nan)
+
         # Should save without error (it_med should be excluded by _add_column_if_valid)
         path = mock_flc.save_to_fits(loc=str(temp_dir))
         
@@ -895,10 +983,10 @@ class TestReadFromFits:
     # ========== Test Group C: Unit Handling ==========
     
     def test_bkjd_unit_conversion(self, tmp_path):
-        """Test that bkjd units are converted to days"""
+        """Test that a bkjd time column is read as BKJD (JD - 2454833)"""
         # Create FITS with bkjd time unit
         time_col = fits.Column(name='TIME', format='D', unit='bkjd',
-                              array=np.linspace(2450000, 2450010, 100))
+                              array=np.linspace(150, 160, 100))
         flux_col = fits.Column(name='FLUX', format='E', unit='electron / s',
                               array=np.ones(100))
         flux_err_col = fits.Column(name='FLUX_ERR', format='E', unit='electron / s',
@@ -919,9 +1007,10 @@ class TestReadFromFits:
         assert hasattr(flc.time, 'value')
         assert len(flc.time) == 100
 
-        # assert that the time values are in days and match original
-        expected_time = np.linspace(2450000, 2450010, 100)
-        assert np.allclose(flc.time.jd, expected_time, rtol=1e-6)
+        # assert that the time values are BKJD and convert to JD correctly
+        assert flc.time.format == 'bkjd'
+        assert np.allclose(flc.time.value, np.linspace(150, 160, 100))
+        assert np.allclose(flc.time.jd, np.linspace(150, 160, 100) + 2454833, rtol=1e-9)
 
     
     def test_electron_per_s_unit_conversion(self, tmp_path):
@@ -1000,8 +1089,8 @@ class TestReadFromFits:
         flc = FlareLightCurve.read_from_fits(str(path))
         assert flc.meta['cadence'] == 120.0
         
-    def test_missing_targetid_raises_error(self, tmp_path):
-        """Test that missing TARGETID raises ValueError"""
+    def test_missing_targetid_warns(self, tmp_path):
+        """Test that a missing TARGETID gives a warning, not an error"""
         # Create FITS without TARGETID
         time_col = fits.Column(name='TIME', format='D', unit='d',
                             array=np.linspace(2450000, 2450010, 10))
@@ -1014,9 +1103,9 @@ class TestReadFromFits:
         path = tmp_path / "no_targetid.fits"
         hdul.writeto(path, overwrite=True)
         
-        # Should raise ValueError
-        with pytest.raises(ValueError, match="TARGETID not found in FITS header"):
-            FlareLightCurve.read_from_fits(str(path))
+        with pytest.warns(UserWarning, match="TARGETID not found in FITS header"):
+            flc = FlareLightCurve.read_from_fits(str(path))
+        assert len(flc.time) == 10
     
     def test_column_names_normalized_to_lowercase(self, tmp_path):
         """Test that column names are normalized to lowercase"""
@@ -1063,9 +1152,10 @@ class TestReadFromFits:
         path = tmp_path / "minimal.fits"
         hdul.writeto(path, overwrite=True)
         
-        # Should throw ValueError due to missing TARGETID
-        with pytest.raises(ValueError, match="TARGETID not found in FITS header"):
-            FlareLightCurve.read_from_fits(str(path))
+        # Missing TARGETID only gives a warning
+        with pytest.warns(UserWarning, match="TARGETID not found in FITS header"):
+            flc = FlareLightCurve.read_from_fits(str(path))
+        assert len(flc.flux) == 10
 
 
 def _two_level_flc():

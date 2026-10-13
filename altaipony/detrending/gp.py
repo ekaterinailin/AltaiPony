@@ -219,7 +219,7 @@ def fit_gp_rotation(
     Parameters
     ----------
     time : ndarray
-        Full time array in days (may contain NaNs from interpolated gaps).
+        Full time array in days (may contain NaNs).
     flux : ndarray
         Original (non-detrended) flux.
     flux_err : ndarray or float
