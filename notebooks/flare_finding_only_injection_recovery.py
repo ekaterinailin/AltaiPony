@@ -53,14 +53,14 @@ def flare_finder_perfect_detrending(time, flux, meta, flare_table):
 def compare(perfect, pipeline):
     """Recovery with perfect detrending vs. the pipeline, by S/N, FWHM and
     type of star (spotless, fast rotator with P_min < 36 h, other)."""
-    assert np.allclose(perfect.tpeak, pipeline.tpeak), "different injected flares"
+    assert np.allclose(perfect.peak_time, pipeline.peak_time), "different injected flares"
     spotless = {i: generate_synthetic_lc(seed=SEED + i)[2]["spotless"]
                 for i in perfect.lc_id.unique()}
     star = np.where(perfect.lc_id.map(spotless), "spotless",
                     np.where(perfect.min_period_hr < 36, "fast rotator", "other spotted"))
     groups = {
         "S/N": pd.cut(perfect.snr, [0, 5, 10, 25, np.inf], labels=["2–5", "5–10", "10–25", ">25"]),
-        "FWHM [min]": pd.cut(perfect.fwhm * 1440, [0, 15, 30, 60, 120, 200],
+        "FWHM [min]": pd.cut(perfect.duration_d * 1440, [0, 15, 30, 60, 120, 200],
                              labels=["≤15", "15–30", "30–60", "60–120", "120–200"]),
         "star": pd.Series(star),
     }

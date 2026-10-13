@@ -4,15 +4,97 @@ import numpy as np
 import logging
 import copy
 
+from scipy.stats import chi2, norm
 
 from .utils import sigma_clip
 
 
 LOG = logging.getLogger(__name__)
 
-def find_flares_in_cont_obs_period(flux, median, error, sigma=None, 
+def _local_beta(z, n, window=720, min_blocks=10):
+    """Local ratio of the scatter of ``n``-cadence block means of ``z`` to
+    the white-noise expectation ``1 / sqrt(n)``, per cadence, at least 1.
+
+    ``z`` is split into non-overlapping blocks of ``n`` cadences.  Around
+    each block, over about ``window`` cadences, the robust scatter of the
+    block means (1.4826 times their median absolute deviation from the
+    running median) is compared with ``1 / sqrt(n)``.  Each cadence gets the
+    value of its block.  Blocks with non-finite values are left out; where
+    fewer than ``min_blocks`` are available, 1 is used.
+    """
+    beta = np.ones(len(z))
+    n_blocks = len(z) // n
+    k = max(2 * min_blocks, window // n)
+    if n_blocks < k:
+        return beta
+    blocks = z[: n_blocks * n].reshape(n_blocks, n)
+    means = pd.Series(np.where(np.isfinite(blocks).all(axis=1), blocks.mean(axis=1), np.nan))
+    med = means.rolling(k, center=True, min_periods=min_blocks).median()
+    mad = (means - med).abs().rolling(k, center=True, min_periods=min_blocks).median()
+    beta_blocks = (1.4826 * mad * np.sqrt(n)).clip(lower=1.0).fillna(1.0).to_numpy()
+    beta[: n_blocks * n] = np.repeat(beta_blocks, n)
+    beta[n_blocks * n:] = beta_blocks[-1]
+    return beta
+
+
+def _window_flare_candidates(flux, median, sigma, N1=3, N3=3, max_window=10,
+                             beta_window=720):
+    """Flag cadences in windows of ``N3`` to ``max_window`` consecutive
+    points that are unlikely to be noise.
+
+    Each point's excursion ``z = (flux - median) / sigma`` is capped at
+    ``N1`` (points below the median count as no excursion) and converted
+    to its one-sided Gaussian tail probability ``p``.  Fisher's statistic
+    ``sum(-2 ln p)`` over a window of ``n`` points follows a chi-square
+    distribution with ``2n`` degrees of freedom under Gaussian noise.  A
+    window is flagged if its noise probability is below that of ``N3``
+    points at ``N1`` sigma, so that for ``n = N3`` the criterion is exactly
+    ``N3`` consecutive points above ``N1`` sigma, and longer windows need
+    a smaller but sustained excess (e.g. 10 points at 1.8 sigma for N1 = 3,
+    N3 = 3).  With the cap, a single extreme cadence cannot carry a window.
+    Windows with non-finite values are skipped.  Returns a boolean array.
+
+    The test assumes white noise.  Residuals that are correlated over
+    several cadences (e.g. detrending leftovers at the turning points of a
+    fast, large modulation) make long windows look significant.  So for each
+    window length ``n`` longer than ``N3`` the excursions are first divided
+    by a local ``beta_n`` (see :func:`_local_beta`): how much more the means
+    of ``n``-cadence blocks scatter within about ``beta_window`` cadences
+    than white noise would.  ``beta_n`` is 1 for white noise and never below
+    1.  Windows of ``N3`` points keep the plain criterion, so the detector is
+    never stricter than ``N3`` consecutive points above ``N1`` sigma.
+    """
+    flux = np.asarray(getattr(flux, "value", flux), dtype=float)
+    median = np.asarray(getattr(median, "value", median), dtype=float)
+    sigma = np.asarray(getattr(sigma, "value", sigma), dtype=float)
+    n_pts = len(flux)
+    isflare = np.zeros(n_pts, dtype=bool)
+    z = (flux - median) / sigma
+    finite = np.isfinite(z)
+    z0 = np.where(finite, z, 0.0)
+    p_threshold = chi2.sf(-2.0 * N3 * norm.logsf(N1), 2 * N3)
+    cbad = np.concatenate([[0], np.cumsum(~finite)])
+    for n in range(N3, max_window + 1):
+        if n > n_pts:
+            break
+        beta = 1.0 if n == N3 else _local_beta(z, n, window=beta_window)
+        score = -2.0 * norm.logsf(np.clip(z0 / beta, 0.0, N1))
+        csum = np.concatenate([[0.0], np.cumsum(score)])
+        window_score = csum[n:] - csum[:-n]
+        window_ok = (cbad[n:] - cbad[:-n]) == 0
+        # >= with a small tolerance: N3 points capped at N1 sit exactly on
+        # the threshold and must pass
+        critical = chi2.isf(p_threshold, 2 * n) * (1 - 1e-9)
+        hits = np.flatnonzero(window_ok & (window_score >= critical))
+        for i in hits:
+            isflare[i:i + n] = True
+    return isflare
+
+
+def find_flares_in_cont_obs_period(flux, median, error, sigma=None,
                                    N1=3, N2=2, N3=3, addtail=False,
-                                   tailthreshdiff=1.):
+                                   tailthreshdiff=1., max_window=None,
+                                   beta_window=720):
     '''
     The algorithm for local changes due to flares defined by
     S. W. Chang et al. (2015), Eqn. 3a-d
@@ -46,6 +128,16 @@ def find_flares_in_cont_obs_period(flux, median, error, sigma=None,
         relaxes the detection threshold for datapoints that are added to
         the decay tails of flare candidates. Tailthreshdiff is subtracted
         from N1 and N2, and should not be larger than either of the two.
+    max_window : int or None (Default is None)
+        If given, flag windows of ``N3`` to ``max_window`` consecutive
+        points whose combined probability of being noise is below that of
+        ``N3`` points at ``N1`` sigma (see :func:`_window_flare_candidates`)
+        instead of requiring ``N3`` consecutive points above the thresholds.
+        ``N2`` and ``addtail`` are not used then.
+    beta_window : int (Default is 720)
+        With ``max_window``, the number of cadences over which the local
+        correction for correlated residuals is measured (see
+        :func:`_local_beta`).
 
 
     Return:
@@ -58,6 +150,10 @@ def find_flares_in_cont_obs_period(flux, median, error, sigma=None,
     # If no local scatter characteristics are given, use formal error as sigma    
     if sigma is None:
         sigma = error
+    if max_window is not None:
+        return _window_flare_candidates(flux, median, sigma, N1=N1, N3=N3,
+                                        max_window=max_window,
+                                        beta_window=beta_window)
     T0 = flux - median # excursion should be positive #"N0"
     T1 = np.abs(flux - median) / sigma #N1
     T2 = np.abs(flux - median - error) / sigma #N2
@@ -144,9 +240,47 @@ def _merge_elevated_gaps(istart, istop, flux, median, error, merge_sigma):
     return np.array(starts), np.array(stops)
 
 
-def find_flares(flc, minsep=3, sigma=None, merge_sigma=None, **kwargs):
+def _extend_candidates(istart, istop, flux, median, error, extend_sigma):
+    """Extend each candidate backwards and forwards over the neighbouring
+    cadences whose excursion ``(flux - median) / error`` is at least
+    ``extend_sigma``, then join candidates that touch or overlap.  The
+    extension never starts a new candidate; it only moves the edges of
+    existing ones, e.g. back over the peak of a faint flare whose detection
+    started on the decay.  ``istart``/``istop`` are inclusive indices into
+    ``flux``."""
+    if extend_sigma is None or len(istart) == 0:
+        return istart, istop
+    x = (np.asarray(getattr(flux, "value", flux), dtype=float)
+         - np.asarray(getattr(median, "value", median), dtype=float)) / np.asarray(
+        getattr(error, "value", error), dtype=float)
+    above = x >= extend_sigma  # NaN counts as below
+    starts, stops = [], []
+    for a, b in zip(istart, istop):
+        a, b = int(a), int(b)
+        while a > 0 and above[a - 1]:
+            a -= 1
+        while b < len(x) - 1 and above[b + 1]:
+            b += 1
+        if stops and a <= stops[-1] + 1:
+            stops[-1] = max(stops[-1], b)
+        else:
+            starts.append(a)
+            stops.append(b)
+    return np.array(starts), np.array(stops)
+
+
+def find_flares(flc, minsep=3, sigma=None, merge_sigma=0.25, extend_sigma=1.0,
+                max_window=10, beta_window_days=1.0, **kwargs):
     '''
     Main wrapper to obtain and process a light curve.
+
+    By default, candidates are windows of 3 to 10 consecutive cadences whose
+    combined probability of being noise is below that of 3 points at 3 sigma
+    (see :func:`_window_flare_candidates`), fragments are merged where the
+    flux between them averages at least 0.25 sigma, and detections are
+    extended over adjacent cadences above 1 sigma.  ``max_window=None``,
+    ``merge_sigma=None`` and ``extend_sigma=None`` give the classic rule of
+    Chang et al. (2015): 3 consecutive points above 3 sigma.
 
     Parameters
     -------------
@@ -163,7 +297,24 @@ def find_flares(flc, minsep=3, sigma=None, merge_sigma=None, **kwargs):
         the cadences between them is at least ``merge_sigma`` times the
         noise (``sigma`` if given, else ``detrended_flux_err``).  Long, faint
         flares are otherwise split into several short candidates wherever the
-        flux dips below the detection threshold.  Default None (no merging).
+        flux dips below the detection threshold.  Default 0.25; None
+        disables merging.
+    extend_sigma : float or None
+        If given, extend each candidate (after merging) backwards and
+        forwards over all adjacent cadences whose excursion above the
+        iterative median is at least ``extend_sigma`` times the noise, and
+        join candidates that then touch.  Faint flares are otherwise often
+        detected only on part of the decay, without their peak.  Default
+        1.0; None disables the extension.
+    max_window : int or None
+        Longest window, in cadences, of the window detector (see
+        :func:`find_flares_in_cont_obs_period`).  Default 10; None uses the
+        classic rule of ``N3`` consecutive points above the thresholds.
+    beta_window_days : float
+        With ``max_window``, the time span over
+        which the window detector measures correlated residuals, converted
+        to cadences for each continuous window (see
+        :func:`_window_flare_candidates`).  Default 1 day.
     kwargs : dict
         keyword arguments to pass to :func:`find_flares_in_cont_obs_period`
     Return
@@ -179,6 +330,10 @@ def find_flares(flc, minsep=3, sigma=None, merge_sigma=None, **kwargs):
 
     #Now work on periods of continuous observation with no gaps
     for (le,ri) in lc.cont_windows:
+        kwargs["max_window"] = max_window
+        if max_window is not None and ri - le > 1:
+            cadence = np.nanmedian(np.diff(lc.time.value[le:ri]))
+            kwargs["beta_window"] = max(1, int(round(beta_window_days / cadence)))
         error = lc.detrended_flux_err[le:ri]
         flux = lc.detrended_flux[le:ri]
         
@@ -207,6 +362,10 @@ def find_flares(flc, minsep=3, sigma=None, merge_sigma=None, **kwargs):
             istart_gap, istop_gap = _merge_elevated_gaps(
                 istart_gap, istop_gap, flux, median,
                 error if sigma is None else sigma[le:ri], merge_sigma,
+            )
+            istart_gap, istop_gap = _extend_candidates(
+                istart_gap, istop_gap, flux, median,
+                error if sigma is None else sigma[le:ri], extend_sigma,
             )
 
         #stitch indices back into the original light curve

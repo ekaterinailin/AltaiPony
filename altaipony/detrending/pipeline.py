@@ -46,6 +46,7 @@ def custom_detrending(
     gp_residual_term=True,
     matched_filter_flares=True,
     matched_filter_snr=5.0,
+    matched_filter_iters=3,
     matched_filter_fwhm_grid=(0.02, 0.05, 0.1, 0.2),
 ):
     """Custom de-trending for TESS and Kepler
@@ -141,6 +142,12 @@ def custom_detrending(
         hidden from the GP.  Defaults to True.
     matched_filter_snr : float
         Matched-filter detection threshold, in filter sigma.  Defaults to 5.0.
+    matched_filter_iters : int
+        Number of matched-filter passes.  Each pass runs the matched filter on
+        the residual of the latest GP fit, adds its detections to the flare
+        mask and refits; it stops early when a pass adds no new cadences.
+        Defaults to 3 (+5 flares over a single pass in injection-recovery,
+        no extra false positives).
     matched_filter_fwhm_grid : sequence of float
         Flare FWHMs (days) the matched filter templates against.  Defaults to
         ``(0.02, 0.05, 0.1, 0.2)``.
@@ -217,6 +224,7 @@ def custom_detrending(
         periodicity_fap_threshold=periodicity_fap_threshold,
         matched_filter_flares=matched_filter_flares,
         matched_filter_snr=matched_filter_snr,
+        matched_filter_iters=matched_filter_iters,
         matched_filter_fwhm_grid=matched_filter_fwhm_grid,
     )
 
@@ -316,6 +324,7 @@ def _apply_gp_step(
     periodicity_fap_threshold=1e-3,
     matched_filter_flares=True,
     matched_filter_snr=5.0,
+    matched_filter_iters=3,
     matched_filter_fwhm_grid=(0.02, 0.05, 0.1, 0.2),
 ):
     """Apply the final Gaussian-Process detrending step, in place.
@@ -420,7 +429,10 @@ def _apply_gp_step(
         # runs on the first GP's residual, not on the baseline residual:
         # there, rotation the baseline could not follow would be masked as
         # flares, and the GP would never see the maxima it has to fit.
-        if matched_filter_flares:
+        # Each further pass runs on the residual of the refit, in which the
+        # flares masked so far are no longer absorbed, so they stand out more
+        # and their masks grow further.
+        for _ in range(matched_filter_iters if matched_filter_flares else 0):
             mf_mask = _matched_filter_mask(
                 t4_gp,
                 f4_gp / norm - gp_model,
@@ -428,9 +440,10 @@ def _apply_gp_step(
                 snr_threshold=matched_filter_snr,
                 fwhm_grid=matched_filter_fwhm_grid,
             )
-            if (mf_mask & ~flare_mask).any():
-                flare_mask = flare_mask | mf_mask
-                gp_model, gp_params = _fit(flare_mask, extra)
+            if not (mf_mask & ~flare_mask).any():
+                break
+            flare_mask = flare_mask | mf_mask
+            gp_model, gp_params = _fit(flare_mask, extra)
 
         n_masked = int(flare_mask.sum())
         gp_model = gp_model * norm

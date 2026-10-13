@@ -152,12 +152,12 @@ def test_sample_flare_recovery():
     # Test that the original flare was not changed accidentally
     assert flcd.flares.loc[0,'ed_rec'] == pytest.approx(3455.8875941, rel=1e-4)
     assert flcd.flares['ed_rec_err'][0] < flcd.flares['ed_rec'][0]
-    assert flcd.flares['istart'][0] == 15
-    assert flcd.flares['istop'][0] == 19
-    assert flcd.flares['cstop'][0] == 19
-    assert flcd.flares['cstart'][0] == 15
-    assert flcd.flares['tstart'][0] == pytest.approx(0.3125, rel=1e-4)
-    assert flcd.flares['tstop'][0] == pytest.approx(0.395833, rel=1e-4)
+    assert flcd.flares['istart'][0] == 12
+    assert flcd.flares['istop'][0] == 21
+    assert flcd.flares['cstop'][0] == 21
+    assert flcd.flares['cstart'][0] == 12
+    assert flcd.flares['tstart'][0] == pytest.approx(0.25, rel=1e-4)
+    assert flcd.flares['tstop'][0] == pytest.approx(0.4375, rel=1e-4)
     assert flcd.flares['total_n_valid_data_points'][0] == 1000
     assert flcd.flares['ampl_rec'][0] == pytest.approx(1, rel=1e-3)
     
@@ -280,19 +280,29 @@ def test_detrend_fails():
     assert err_string == err.value.args[0]
 
 def test_find_flares():
-    """Test that an obvious flare is recovered sufficiently well."""
+    """Test that an obvious flare is recovered sufficiently well, with the
+    default window detector (detection extended over adjacent cadences above
+    1 sigma) and with the classic rule."""
     flc = mock_flc(detrended=True)
     flc = flc.find_flares()
     assert flc.flares.loc[0,'ed_rec'] == pytest.approx(3455.8875941, rel=1e-4)
     assert flc.flares['ed_rec_err'][0] < flc.flares['ed_rec'][0]
-    assert flc.flares['istart'][0] == 15
-    assert flc.flares['istop'][0] == 19
-    assert flc.flares['cstop'][0] == 19
-    assert flc.flares['cstart'][0] == 15
-    assert flc.flares['tstart'][0] == pytest.approx(0.3125, rel=1e-4)
-    assert flc.flares['tstop'][0] == pytest.approx(0.395833, rel=1e-4)
+    assert flc.flares['istart'][0] == 12
+    assert flc.flares['istop'][0] == 21
+    assert flc.flares['cstop'][0] == 21
+    assert flc.flares['cstart'][0] == 12
+    assert flc.flares['tstart'][0] == pytest.approx(0.25, rel=1e-4)
+    assert flc.flares['tstop'][0] == pytest.approx(0.4375, rel=1e-4)
     assert flc.flares['total_n_valid_data_points'][0] == 1000
     assert flc.flares['ampl_rec'][0] == pytest.approx(1, rel=1e-3)
+
+    classic = mock_flc(detrended=True).find_flares(
+        max_window=None, merge_sigma=None, extend_sigma=None).flares
+    assert classic.loc[0, 'ed_rec'] == pytest.approx(3455.8875941, rel=1e-4)
+    assert classic['istart'][0] == 15
+    assert classic['istop'][0] == 19
+    assert classic['tstart'][0] == pytest.approx(0.3125, rel=1e-4)
+    assert classic['tstop'][0] == pytest.approx(0.395833, rel=1e-4)
 
     
 def test_get_response_curve(tmp_path):

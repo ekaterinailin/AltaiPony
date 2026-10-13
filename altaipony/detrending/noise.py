@@ -87,12 +87,15 @@ def estimate_detrended_noise(
         flux_normalized_masked = flux_normalized.copy()
         flux_normalized_masked[~mask_refined] = np.nan
 
-        # Compute rolling std on the cleaned, centred residuals
+        # Compute rolling std on the cleaned, centred residuals.  Where a
+        # whole window is masked (e.g. a segment that starts during a flare)
+        # the std is NaN; fill those from the nearest valid values on both
+        # sides, so that flares at segment edges can still be detected.
         final_err = (
             pd.Series(flux_normalized_masked)
             .rolling(std_window, center=True, min_periods=1)
             .std()
-            .interpolate()
+            .interpolate(limit_direction="both")
             .values
         )
 

@@ -28,7 +28,8 @@ from lightkurve.utils import KeplerQualityFlags
 
 from .altai import (find_flares,
                     _find_iterative_median)
-from .fakeflares import (merge_fake_and_recovered_events,
+from .fakeflares import (match_flares,
+                         template_equivalent_duration,
                          generate_fake_flare_distribution,
                          mod_random,
                          flare_model,
@@ -666,11 +667,24 @@ class FlareLightCurve(LightCurve):
             How many times above sigma and detrended_flux_err is required
         N3 : int (Default is 3)
             The number of consecutive points required to flag as a flare.
-        merge_sigma : float or None (Default is None)
+        max_window : int or None (Default is 10)
+            Longest window, in cadences, of the window detector: windows of
+            ``N3`` to ``max_window`` points whose combined probability of
+            being noise is below that of ``N3`` points at ``N1`` sigma are
+            flagged. None gives the classic rule (``N3`` consecutive points
+            above the thresholds, Chang et al. 2015).
+        beta_window_days : float (Default is 1.0)
+            Time span over which the window detector corrects for correlated
+            residuals.
+        merge_sigma : float or None (Default is 0.25)
             Merge consecutive candidates when the mean flux between them
             stays at least ``merge_sigma`` times the noise above the
             iterative median, so that long, faint flares are not split into
             several candidates. None disables merging.
+        extend_sigma : float or None (Default is 1.0)
+            Extend each detection over adjacent cadences at least
+            ``extend_sigma`` times the noise above the iterative median.
+            None disables the extension.
 
         Returns
         ----------
@@ -809,7 +823,7 @@ class FlareLightCurve(LightCurve):
         
         columns =  ['istart', 'istop', 'cstart', 'cstop', 'tstart', 'tstop',
                     'ed_rec', 'ed_rec_err', 'duration_d', 'amplitude', 'ed_inj',
-                    'peak_time', 'ampl_rec', 'dur']
+                    'peak_time', 'ampl_rec', 'dur', 'recovered']
         
 
         widgets = [progressbar.Percentage(), progressbar.Bar()]
@@ -840,7 +854,7 @@ class FlareLightCurve(LightCurve):
             injrec_results = pd.DataFrame(columns=columns)
             
             # Merge injected and recovered flares
-            injrec_results = pd.concat([injrec_results, merge_fake_and_recovered_events(injs, recs)],
+            injrec_results = pd.concat([injrec_results, match_flares(injs, recs)[0]],
                                                    ignore_index=True)
             
 
@@ -1012,27 +1026,6 @@ class FlareLightCurve(LightCurve):
 
         '''
 
-        def _equivalent_duration(time, flux):
-            '''
-            Compute the Equivalent Duration of a fake flare.
-            This is the area under the flare, in relative flux units.
-
-            Parameters:
-            -------------
-            time : numpy array
-                units of DAYS
-            flux : numpy array
-                relative flux units
-            Return:
-            ------------
-            p : float
-                equivalent duration of a single event in units of seconds
-            '''
-            x = time * 60.0 * 60.0 * 24.0
-            integral = np.sum(np.diff(x) * flux[:-1])
-            return integral
-        
-        
         fake_lc = copy.deepcopy(self)
         LOG.debug(str() + '{} FakeFlares started'.format(datetime.datetime.now()))
         
@@ -1159,7 +1152,7 @@ class FlareLightCurve(LightCurve):
                     fl_flux = flare_model(model,time, t0, dur_fake[k], ampl_fake[k])
                     
                     # calculate the injected ED
-                    ed_fake[k] = _equivalent_duration(time, fl_flux)
+                    ed_fake[k] = template_equivalent_duration(time, fl_flux)
                     
                 # inject flare in to light curve by adding the flare flux
                 if typ == "flux":

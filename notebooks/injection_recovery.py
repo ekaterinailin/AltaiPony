@@ -22,7 +22,11 @@ false-positive detection:
 
 The bottom panel is only drawn when the flare finder returns a dict (see
 the ``flare_finder`` parameter of ``run_injection_recovery``).  Returning
-a plain list of detections still works and produces a single-panel plot.
+only the flare table still works and produces a single-panel plot.
+
+The results table uses the column names of ``FlareLightCurve.fake_flares``
+(see ``run_injection_recovery``), so ``altaipony.injrecanalysis`` can be
+used on it.
 """
 
 import os
@@ -31,6 +35,7 @@ import numpy as np
 import pandas as pd
 from altaipony.detrending import estimate_detrended_noise, custom_detrending
 from altaipony.flarelc import FlareLightCurve
+from altaipony.fakeflares import match_flares
 from altaipony.synthetic import generate_synthetic_lc, inject_flares
 
 import matplotlib.pyplot as plt
@@ -38,63 +43,10 @@ import matplotlib.pyplot as plt
 import astropy.units as u
 
 
-# ---------------------------------------------------------------------------
-# Matching injected → recovered
-# ---------------------------------------------------------------------------
-
-def _overlaps(a_start, a_end, b_start, b_end):
-    """True if two intervals overlap."""
-    return ((a_start >= b_start) and (a_start <= b_end)) | \
-           ((a_end   >= b_start) and (a_end   <= b_end)) | \
-           ((a_start <= b_start) and (a_end >= b_end))   | \
-           ((b_start <= a_start) and (b_end >= a_end))
-
-
-def match_flares(injected, recovered):
-    """Match injected flares to recovered detections by time overlap.
-
-    Parameters
-    ----------
-    injected : pd.DataFrame
-        Output of ``inject_flares``.  Must have columns t_start, t_end.
-    recovered : list of (float, float)
-        Detected flare intervals (t_start, t_end) from the flare finder.
-
-    Returns
-    -------
-    matched_injected : pd.DataFrame
-        ``injected`` with extra columns: recovered (bool), rec_t_start,
-        rec_t_end.
-    fp_table : pd.DataFrame
-        One row per false-positive detection (rec_t_start, rec_t_end).
-    """
-    rec = list(recovered)
-    matched_rows = []
-    used_rec = set()
-
-    for _, inj in injected.iterrows():
-        found = False
-        for i, (rs, re) in enumerate(rec):
-            if _overlaps(rs, re, inj.t_start, inj.t_end):
-                matched_rows.append({**inj.to_dict(),
-                                     'recovered': True,
-                                     'rec_t_start': rs,
-                                     'rec_t_end': re})
-                used_rec.add(i)
-                found = True
-                break
-        if not found:
-            matched_rows.append({**inj.to_dict(),
-                                 'recovered': False,
-                                 'rec_t_start': np.nan,
-                                 'rec_t_end': np.nan})
-
-    # Build FP table from unmatched detections
-    fp_rows = [{'rec_t_start': rec[i][0], 'rec_t_end': rec[i][1]}
-               for i in range(len(rec)) if i not in used_rec]
-    fp_table = pd.DataFrame(fp_rows, columns=['rec_t_start', 'rec_t_end'])
-
-    return pd.DataFrame(matched_rows), fp_table
+# Names of the ``inject_flares`` columns in the results table, as in
+# ``FlareLightCurve.fake_flares``
+INJECTED_COLUMNS = {'tpeak': 'peak_time', 'fwhm': 'duration_d', 'ampl': 'amplitude',
+                    'ed': 'ed_inj', 't_start': 'inj_tstart', 't_end': 'inj_tstop'}
 
 
 # ---------------------------------------------------------------------------
@@ -144,7 +96,7 @@ def _plot_false_positives(
         Iterative-median baseline aligned to ``detrended_time``.
         Overlaid in blue on the bottom panel.  Pass None to omit.
     fp_df : pd.DataFrame
-        False-positive table with columns rec_t_start and rec_t_end.
+        False-positive table with columns tstart and tstop.
     injected_table : pd.DataFrame
         Injected flare table (t_start, t_end) for context annotation.
     meta : dict
@@ -161,8 +113,8 @@ def _plot_false_positives(
         med_f = _to_array(it_med) if it_med is not None else None
 
     for fp_idx, fp_row in fp_df.iterrows():
-        fp_start = fp_row['rec_t_start']
-        fp_end   = fp_row['rec_t_end']
+        fp_start = fp_row['tstart']
+        fp_end   = fp_row['tstop']
         fp_mid   = 0.5 * (fp_start + fp_end)
         fp_dur   = max(fp_end - fp_start, 2.0 / 1440.0)  # minimum 2 min
 
@@ -254,18 +206,22 @@ def detect_flares(lc):
     """Flare detection on a detrended light curve, as used by both
     benchmarks (``injection_recovery.py`` and
     ``flare_finding_only_injection_recovery.py``): noise estimate,
-    continuous windows, global iterative median, ``find_flares`` with
-    fragments merged at 1 sigma.
+    continuous windows, global iterative median, ``find_flares`` with the
+    window detector (windows of 3 to 10 cadences whose combined probability
+    of being noise is below that of 3 points at 3 sigma, corrected for
+    correlated residuals over 1 day), fragments merged where the flux
+    between them averages at least 0.25 sigma, and detections extended over
+    adjacent cadences above 1 sigma.
 
     ``lc.detrended_flux`` must be relative flux (quiet level ~1) as a plain
-    array.  Returns the light curve after detection and the list of
-    detections as ``(tstart, tstop)``.
+    array.  Returns the light curve after detection and its flare table
+    (``lc.flares``).
     """
     lc = estimate_detrended_noise(lc)
     lc = lc.find_cont_windows()
     lc = lc.find_iterative_median()
-    flares = lc.find_flares(merge_sigma=1.0).flares
-    return lc, flares[["tstart", "tstop"]].values.tolist()
+    lc = lc.find_flares(max_window=10, merge_sigma=0.25, extend_sigma=1.0)
+    return lc, lc.flares
 
 
 def rotation_period(meta):
@@ -289,9 +245,9 @@ def plot_recovery_scatter(results, path):
     rec = results['recovered'].astype(bool)
     missed = results[~rec]
     found = results[rec]
-    ax.scatter(missed['fwhm'], missed['snr'], c=missed['rot_period_d'], cmap=cmap, norm=norm,
+    ax.scatter(missed['duration_d'], missed['snr'], c=missed['rot_period_d'], cmap=cmap, norm=norm,
                s=18, alpha=0.8, linewidths=0)
-    ax.scatter(found['fwhm'], found['snr'], facecolors='none',
+    ax.scatter(found['duration_d'], found['snr'], facecolors='none',
                edgecolors=cmap(norm(found['rot_period_d'].to_numpy())), s=18, alpha=0.8,
                linewidths=0.8)
     sm = plt.cm.ScalarMappable(norm=norm, cmap=cmap)
@@ -325,16 +281,16 @@ def run_injection_recovery(
         Function with signature::
 
             flare_finder(time, flux, meta, flare_table)
-                -> list of (t_start, t_end)
+                -> flare table (DataFrame with at least tstart, tstop)
                    OR
                    dict with keys:
-                     'detections'     – list of (t_start, t_end)         [required]
+                     'detections'     – flare table                      [required]
                      'detrended_time' – ndarray aligned to detrended LC  [optional]
                      'detrended_flux' – ndarray of detrended flux values  [optional]
                      'it_med'         – ndarray of iterative-median      [optional]
 
         Returning a dict enables the two-panel false-positive diagnostic
-        plot.  Returning a plain list still works and produces a
+        plot.  Returning only the table still works and produces a
         single-panel plot showing only the raw injected light curve.
     n_lcs : int
         Number of synthetic light curves to generate and test.
@@ -354,13 +310,24 @@ def run_injection_recovery(
     Returns
     -------
     results : pd.DataFrame
-        One row per injected flare across all light curves, with columns:
+        One row per injected flare across all light curves.  The flare
+        columns follow ``FlareLightCurve.fake_flares`` (from
+        ``sample_flare_recovery``), so ``altaipony.injrecanalysis`` works on
+        the table:
 
-        lc_id, noise_ppm, n_modes, tpeak, fwhm, ampl, snr,
-        t_start, t_end, recovered, rec_t_start, rec_t_end, false_positives
+        - injected: peak_time, duration_d (the template's FWHM parameter, as
+          in ``fake_flares``), amplitude, ed_inj (s), and inj_tstart,
+          inj_tstop (where the flare exceeds 10 % of its amplitude);
+        - recovered: the row of the detection that contains the injected
+          peak (``fakeflares.match_flares``) from the finder's flare table
+          (tstart, tstop, ed_rec, ed_rec_err, ampl_rec, dur, istart, istop,
+          ...), NaN if missed.
+
+        Also: lc_id, noise_ppm, n_modes, min_period_hr, rot_period_d, snr,
+        recovered (bool), false_positives (per light curve).
     fp_results : pd.DataFrame
-        One row per false-positive detection, with columns:
-        lc_id, noise_ppm, n_modes, rec_t_start, rec_t_end
+        One row per false-positive detection: lc_id, noise_ppm, n_modes,
+        min_period_hr, rot_period_d and the finder's columns.
     """
     all_rows = []
     fp_rows  = []
@@ -417,7 +384,7 @@ def run_injection_recovery(
             it_med         = None
 
         # --- match injected → recovered
-        matched, fp = match_flares(flare_table, detections)
+        matched, fp = match_flares(flare_table.rename(columns=INJECTED_COLUMNS), detections)
         n_fp = len(fp)
 
         matched['lc_id']           = lc_id
@@ -464,23 +431,19 @@ def run_injection_recovery(
         return pd.DataFrame(), pd.DataFrame()
 
     results = pd.concat(all_rows, ignore_index=True)
-    results['snr'] = results['ampl'] / (results['noise_ppm'] * 1e-6)
+    results['snr'] = results['amplitude'] / (results['noise_ppm'] * 1e-6)
 
-    col_order = [
-        'lc_id', 'noise_ppm', 'n_modes', 'min_period_hr', 'rot_period_d',
-        'tpeak', 'fwhm', 'ampl', 'snr', 't_start', 't_end',
-        'recovered', 'rec_t_start', 'rec_t_end',
-        'false_positives',
-    ]
-    results = results[[c for c in col_order if c in results.columns]]
+    lc_cols = ['lc_id', 'noise_ppm', 'n_modes', 'min_period_hr', 'rot_period_d']
+    first = lc_cols + ['peak_time', 'duration_d', 'amplitude', 'ed_inj', 'snr',
+                       'inj_tstart', 'inj_tstop', 'recovered']
+    rest = [c for c in results.columns if c not in first + ['false_positives']]
+    results = results[first + rest + ['false_positives']]
 
-    fp_col_order = ['lc_id', 'noise_ppm', 'n_modes', 'min_period_hr', 'rot_period_d',
-                    'rec_t_start', 'rec_t_end']
     if fp_rows:
         fp_results = pd.concat(fp_rows, ignore_index=True)
-        fp_results = fp_results[[c for c in fp_col_order if c in fp_results.columns]]
+        fp_results = fp_results[lc_cols + [c for c in fp_results.columns if c not in lc_cols]]
     else:
-        fp_results = pd.DataFrame(columns=fp_col_order)
+        fp_results = pd.DataFrame(columns=lc_cols + ['tstart', 'tstop'])
 
     return results, fp_results
 
@@ -506,7 +469,6 @@ def summarise(results, fp_results=None):
     print(f"False pos: {n_fp}")
 
     results = results.copy()
-    results['snr'] = results['ampl'] / (results['noise_ppm'] * 1e-6)
     bins   = [0, 2, 5, 10, 25, np.inf]
     labels = ['<2', '2–5', '5–10', '10–25', '>25']
     results['snr_bin'] = pd.cut(results['snr'], bins=bins, labels=labels)
@@ -518,7 +480,6 @@ def summarise(results, fp_results=None):
     print(tbl.to_string())
 
     if 'min_period_hr' in results:
-        # fastest mode within reach of the 6-36 h sinusoid correction
         results['fast_rotator'] = results['min_period_hr'] < 36.0
         by_fast = (results.groupby(['fast_rotator', 'snr_bin'], observed=True)['recovered']
                           .agg(['sum', 'count'])
@@ -594,7 +555,7 @@ if __name__ == "__main__":
         plt.plot(lcd.time.value, lcd.it_med, 'b-', linewidth=1)
         for t_start, t_stop in flare_table[["t_start", "t_end"]].values:
             plt.axvspan(t_start, t_stop, color='orange', alpha=0.5)
-        for tstart, tstop in flares:
+        for tstart, tstop in flares[["tstart", "tstop"]].values:
             plt.axvspan(tstart, tstop, color='cyan', alpha=0.5)
         plt.title(
             f"Flare finder example | noise={meta['noise_ppm']:.0f} ppm | "
@@ -630,6 +591,7 @@ if __name__ == "__main__":
 
     # save results to CSV for later analysis
     results.to_csv("diag_plots/injection_recovery_results.csv", index=False)
+    fp_table.to_csv("diag_plots/injection_recovery_false_positives.csv", index=False)
 
     print("\n--- Summary ---")
     summarise(results, fp_table)

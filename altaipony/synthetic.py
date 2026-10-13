@@ -13,7 +13,7 @@ injection-recovery experiments).
 import numpy as np
 import pandas as pd
 
-from .fakeflares import flare_model_mendoza2022
+from .fakeflares import flare_model_mendoza2022, template_equivalent_duration
 
 
 # ---------------------------------------------------------------------------
@@ -231,7 +231,7 @@ def inject_flares(time, flux, n_flares=None, rng=None, flares=None, mean_n_flare
 
     ``fwhm`` and ``ampl`` are the template's parameters: the template peaks at
     about 0.95 ``ampl``, its measured FWHM is about 1.09 ``fwhm``, and its
-    equivalent duration is about 1.82 ``ampl * fwhm``.
+    equivalent duration is about 2.0 ``ampl * fwhm``.
 
     Parameters
     ----------
@@ -253,7 +253,9 @@ def inject_flares(time, flux, n_flares=None, rng=None, flares=None, mean_n_flare
     flux_with_flares : ndarray
     flare_table : pd.DataFrame
         One row per flare with columns tpeak, fwhm, ampl (relative),
-        t_start, t_end (the window where the flare exceeds 10 % of ``ampl``).
+        t_start, t_end (the window where the flare exceeds 10 % of ``ampl``)
+        and ed, the equivalent duration in seconds
+        (``fakeflares.template_equivalent_duration``).
     """
     if flares is None:
         if rng is None:
@@ -279,6 +281,7 @@ def inject_flares(time, flux, n_flares=None, rng=None, flares=None, mean_n_flare
             t_start, t_end = time[above][0], time[above][-1]
         else:
             t_start, t_end = tpeak - 2 * fwhm, tpeak + 2 * fwhm
-        rows.append(dict(tpeak=tpeak, fwhm=fwhm, ampl=ampl, t_start=t_start, t_end=t_end))
+        rows.append(dict(tpeak=tpeak, fwhm=fwhm, ampl=ampl, t_start=t_start, t_end=t_end,
+                         ed=template_equivalent_duration(time, flare_flux)))
 
-    return flux_out, pd.DataFrame(rows, columns=["tpeak", "fwhm", "ampl", "t_start", "t_end"])
+    return flux_out, pd.DataFrame(rows, columns=["tpeak", "fwhm", "ampl", "t_start", "t_end", "ed"])

@@ -1,6 +1,14 @@
 Changelog (starting 04-2023)
 =======================================
 
+13-10-2026
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+* ``find_flares`` uses a new default detection rule. Instead of requiring 3 consecutive points above 3 sigma, it flags windows of 3 to 10 consecutive points whose combined probability of being noise is below that of 3 points at 3 sigma, corrected for residuals that are correlated over minutes to hours. Fragments of one flare are merged (``merge_sigma=0.25``) and detections are extended over adjacent points above 1 sigma (``extend_sigma=1.0``). Pass ``max_window=None, merge_sigma=None, extend_sigma=None`` for the previous behaviour.
+* ``custom_detrending`` is a new pipeline: a polynomial baseline, then a Gaussian process with a rotation kernel, iteratively masking flares with a matched filter.
+* Removed the Savitzky-Golay de-trending mode (``detrend("savgol")``); use ``detrend("custom", func=custom_detrending)``.
+* ``sample_flare_recovery`` counts an injected flare as recovered if its peak lies inside a detection (``fakeflares.match_flares``), and its results have a ``recovered`` column.
+
 25-08-2023
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 

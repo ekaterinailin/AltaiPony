@@ -6,7 +6,10 @@ from ..altai import (find_flares,
                      chi_square,
                      equivalent_duration,
                      _find_iterative_median,
-                     _merge_elevated_gaps)
+                     _merge_elevated_gaps,
+                     _extend_candidates,
+                     _local_beta,
+                     _window_flare_candidates)
 
 from ..flarelc import FlareLightCurve
 from .test_flarelc import mock_flc
@@ -393,14 +396,14 @@ def _burst_lc(bursts, elevated, sigma=1e-3, seed=42):
 
 
 def test_find_flares_merges_fragments_of_one_flare():
-    """Two bursts with the flux staying ~1.5 sigma above baseline in between
+    """(Merging logic, with the classic detection rule.) Two bursts with the flux staying ~1.5 sigma above baseline in between
     are one flare that dipped under the detection threshold."""
     flc = _burst_lc(bursts=[(400, 410), (430, 440)], elevated=[(410, 430, 1.5)])
 
-    unmerged = flc.find_flares().flares
+    unmerged = flc.find_flares(merge_sigma=None, max_window=None, extend_sigma=None).flares
     assert len(unmerged) == 2
 
-    merged = flc.find_flares(merge_sigma=1.).flares
+    merged = flc.find_flares(merge_sigma=1., max_window=None, extend_sigma=None).flares
     assert len(merged) == 1
     assert merged.istart.iloc[0] <= 401
     assert merged.istop.iloc[0] >= 438
@@ -412,14 +415,14 @@ def test_find_flares_merging_chains_fragments():
     """Three fragments of one flare become one detection."""
     flc = _burst_lc(bursts=[(300, 310), (330, 340), (360, 370)],
                     elevated=[(310, 330, 1.5), (340, 360, 1.5)])
-    assert len(flc.find_flares().flares) == 3
-    assert len(flc.find_flares(merge_sigma=1.).flares) == 1
+    assert len(flc.find_flares(merge_sigma=None, max_window=None, extend_sigma=None).flares) == 3
+    assert len(flc.find_flares(merge_sigma=1., max_window=None, extend_sigma=None).flares) == 1
 
 
 def test_find_flares_keeps_separate_flares_apart():
     """Two bursts with the flux back at baseline in between stay separate."""
     flc = _burst_lc(bursts=[(400, 410), (430, 440)], elevated=[])
-    assert len(flc.find_flares(merge_sigma=1.).flares) == 2
+    assert len(flc.find_flares(merge_sigma=1., max_window=None, extend_sigma=None).flares) == 2
 
 
 def test_merge_elevated_gaps():
@@ -444,3 +447,79 @@ def test_merge_elevated_gaps():
     flux_nan[10:15] = np.nan
     a, b = _merge_elevated_gaps(istart, istop, flux_nan, median, error, 0.4)
     assert list(a) == [5, 15] and list(b) == [9, 29]
+
+
+def test_extend_candidates():
+    """Candidates grow over adjacent cadences above extend_sigma and join
+    when they touch; NaN stops the growth."""
+    x = np.zeros(30)
+    x[5:9] = 2.        # elevated stretch before candidate 1 (cadences 9-10)
+    x[9:11] = 5.
+    x[11:14] = 1.5     # bridge to candidate 2 (cadences 14-15)
+    x[14:16] = 5.
+    x[16] = np.nan
+    x[17:19] = 2.
+    starts, stops = _extend_candidates(np.array([9, 14]), np.array([10, 15]),
+                                       x, 0., 1., extend_sigma=1.)
+    assert starts.tolist() == [5]
+    assert stops.tolist() == [15]
+    # without extension the candidates are unchanged
+    starts, stops = _extend_candidates(np.array([9, 14]), np.array([10, 15]),
+                                       x, 0., 1., extend_sigma=None)
+    assert starts.tolist() == [9, 14]
+
+
+def test_window_flare_candidates_reduces_to_classic_rule():
+    """With windows of exactly N3 points the detector flags the same runs
+    as N3 consecutive points above N1 sigma."""
+    rng = np.random.default_rng(1)
+    z = rng.normal(size=5000)
+    z[1000:1003] = 3.5     # three points above 3 sigma: flagged
+    z[2000:2003] = [3.5, 3.5, 2.9]  # one point below: not flagged
+    flagged = _window_flare_candidates(z, 0., np.ones_like(z), max_window=3)
+    classic = find_flares_in_cont_obs_period(z, 0., np.ones_like(z))
+    assert flagged[1000:1003].all()
+    assert not flagged[2000:2003].any()
+    # the classic rule flags the same runs, plus the cadence after each run
+    assert (classic[flagged]).all()
+    extra = np.flatnonzero(classic & ~flagged)
+    assert flagged[extra - 1].all()
+
+
+def test_window_flare_candidates_sensitivity():
+    """A sustained moderate excess over 10 points is detected, a single
+    extreme point is not, and white noise gives no detections."""
+    rng = np.random.default_rng(2)
+    z = rng.normal(size=20000)
+    assert not _window_flare_candidates(z, 0., np.ones_like(z)).any()
+
+    excess = np.zeros(200)
+    excess[100:110] = 2.5
+    assert _window_flare_candidates(excess, 0., np.ones(200))[100:110].all()
+
+    spike = np.zeros(200)
+    spike[100] = 10.
+    assert not _window_flare_candidates(spike, 0., np.ones(200)).any()
+
+    # the window detector is passed on by find_flares_in_cont_obs_period
+    assert find_flares_in_cont_obs_period(excess, 0., np.ones(200), max_window=10)[100:110].all()
+    assert not find_flares_in_cont_obs_period(excess, 0., np.ones(200))[100:110].any()
+
+
+def test_local_beta():
+    """Local beta is ~1 for white noise and larger where the residual is
+    correlated over many cadences."""
+    rng = np.random.default_rng(3)
+    z = rng.normal(size=9000)
+    assert np.median(_local_beta(z, 10)) == pytest.approx(1.0, abs=0.1)
+    assert (_local_beta(z, 10) >= 1.).all()
+    # correlated residual in the first half only
+    red = np.convolve(rng.normal(size=4500 + 49), np.ones(50) / np.sqrt(50), "valid")
+    zr = z.copy()
+    zr[:4500] += red
+    beta = _local_beta(zr, 10)
+    assert np.median(beta[:3500]) > 1.5
+    assert np.median(beta[5500:]) < 1.2
+    # too few blocks: no correction
+    assert (_local_beta(z[:100], 10) == 1.).all()
+

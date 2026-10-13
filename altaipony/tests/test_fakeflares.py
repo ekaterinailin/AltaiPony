@@ -5,43 +5,57 @@ from inspect import signature
 
 from ..fakeflares import (flare_model_mendoza2022, flare_model_davenport2014,
                           generate_fake_flare_distribution,
-                          merge_fake_and_recovered_events,
-                          mod_random,)
+                          match_flares,
+                          mod_random,
+                          template_equivalent_duration,)
 
 
 from .test_flarelc import mock_flc
 
 
 def test_mod_random():
-    assert mod_random(1, d=True)[0] == pytest.approx(0.48661046)
+    # deterministic with d=True, random otherwise
+    assert mod_random(3, d=True) == pytest.approx(mod_random(3, d=True))
+    assert mod_random(3, d=True, seed=1) != pytest.approx(mod_random(3, d=True, seed=2))
     assert mod_random(1)[0] != mod_random(1)[0]
+    # numpy's global random state is left alone
+    np.random.seed(5)
+    expected = np.random.rand(2)
+    np.random.seed(5)
+    mod_random(4, d=True)
+    mod_random(4)
+    assert np.random.rand(2) == pytest.approx(expected)
 
 
-def test_merge_fake_and_recovered_events():
+def test_template_equivalent_duration():
+    time = np.arange(0, 2, 1. / 720.)
+    flux = flare_model_mendoza2022(time, 1., 0.05, 0.1)
+    x = time * 60.0 * 60.0 * 24.0
+    assert template_equivalent_duration(time, flux) == pytest.approx(np.sum(np.diff(x) * flux[:-1]))
+    # about 2.0 ampl * fwhm, in seconds
+    assert template_equivalent_duration(time, flux) == pytest.approx(1.99 * 0.1 * 0.05 * 86400, rel=0.01)
 
-    flares = {'istart' : [5, 30],
-              'istop' : [15, 36],
-              'cstart' : [8, 33],
-              'cstop': [18, 39],
-              'tstart' : [2335.5846, 2335.5846 + 12.5/24.],
-              'tstop' : [2335.5846 + 5./24., 2335.5846 + 15.5/24.],
-              'ed_rec' : [650, 250],
-              'ed_rec_err' : [46, 15]}
-    fakes = {'duration_d' : np.linspace(0.01,1,20),
-             'amplitude' : np.linspace(0.01,1,20),
-             'ed_inj' : np.linspace(100,50000,20),
-             'peak_time' : np.linspace(2320,2340,20),}
-    flares = pd.DataFrame(flares)
-    fakes = pd.DataFrame(fakes)
-    tab = merge_fake_and_recovered_events(fakes, flares)
-    assert tab.size == 240
-    assert tab.shape[0] == 20
-    match = tab.dropna(how='any')
-    assert match.shape[0] == 1
-    row = match.iloc[0]
-    assert row.peak_time >= row.tstart
-    assert row.peak_time <= row.tstop
-    assert row.ed_inj > row.ed_rec
+
+def test_match_flares():
+    flares = pd.DataFrame({'tstart': [1.0, 3.0, 5.0],
+                           'tstop': [1.5, 3.2, 5.5],
+                           'ed_rec': [650., 250., 30.]})
+    fakes = pd.DataFrame({'peak_time': [1.2, 2.9, 3.2, 1.4, 8.0],
+                          'amplitude': [0.1, 0.2, 0.3, 0.4, 0.5]})
+    matched, fp = match_flares(fakes, flares)
+    assert matched.shape[0] == 5
+    # peaks inside (1.2, 1.4), on the edge (3.2), just before a detection
+    # (2.9: only its tail overlaps), and outside all detections (8.0)
+    assert matched.recovered.tolist() == [True, False, True, True, False]
+    assert np.allclose(matched.ed_rec.fillna(-1).to_numpy(), [650, -1, 250, 650, -1])
+    assert matched.amplitude.tolist() == fakes.amplitude.tolist()
+    # the detection at 5.0-5.5 contains no injected peak
+    assert fp.tstart.tolist() == [5.0]
+    # no detections
+    matched, fp = match_flares(fakes, flares.iloc[:0])
+    assert not matched.recovered.any()
+    assert fp.empty
+
 
 def test_generate_fake_flare_distribution():
 

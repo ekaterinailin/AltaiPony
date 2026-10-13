@@ -70,19 +70,44 @@ def mod_random(x, d=False, seed=667):
     Helper function that generates deterministic
     random numbers if needed for testing.
 
+    Draws from its own ``numpy.random.Generator``, so numpy's global random
+    state is neither used nor changed.
+
     Parameters
     -----------
+    x : int
+        Number of random numbers, uniform in [0, 1).
     d : False or bool
         Flag to set if random numbers shall be deterministic.
-    seed : 5 or int
-        Sets the seed value for random number generator.
+    seed : 667 or int
+        Seed of the generator if ``d`` is True.
     """
-    if d == True:
-        np.random.seed(seed)
-        return np.random.rand(x)
-    else:
-        np.random.seed()#do not remove: seed is fixed otherwise!
-        return np.random.rand(x) 
+    rng = np.random.default_rng(seed if d else None)
+    return rng.random(x)
+
+
+def template_equivalent_duration(time, flux):
+    """
+    Equivalent duration of an injected flare template.
+
+    Sums the relative flare flux over the time grid the same way
+    ``altai.equivalent_duration`` does for a detected flare, so injected
+    and recovered ED are comparable.
+
+    Parameters
+    -----------
+    time : array
+        Time in days.
+    flux : array
+        Flare flux in relative units (the template, without the quiescent
+        level).
+
+    Return
+    -------
+    float : equivalent duration in seconds
+    """
+    x = np.asarray(time) * 60.0 * 60.0 * 24.0
+    return np.sum(np.diff(x) * np.asarray(flux)[:-1])
 
 def flare_eqn(t, ampl):
     '''
@@ -236,30 +261,40 @@ def flare_model_davenport2014(t, tpeak, dur, ampl, upsample=False, uptime=10):
 
     return flare
 
-def merge_fake_and_recovered_events(injs, recs):
+def match_flares(injected, recovered):
     """
-    Helper function that merges the DataFrames containing injected fake flares
-    with the recovered events.
+    Match injected flares to detected flares: an injected flare is recovered
+    if its peak time lies within a detection (``tstart <= peak_time <=
+    tstop``).
 
     Parameters
     -----------
-    injs : DataFrame
-        injected flares
-    recs : DataFrame
-        recovered flares
+    injected : DataFrame
+        injected flares, with at least a ``peak_time`` column
+    recovered : DataFrame
+        detected flares (``FlareLightCurve.flares``), with at least
+        ``tstart`` and ``tstop`` columns
 
     Return
     ------
-    DataFrame with both recovered and unrecovered events. The former contain
-    additional info about recovered energy and captured datapoints.
+    matched : DataFrame
+        ``injected`` with a column ``recovered`` (bool) and the columns of
+        the matching detection (NaN if missed). If several detections
+        contain the peak, the first one is used.
+    false_positives : DataFrame
+        the rows of ``recovered`` that contain no injected peak
     """
-    recs['temp'] = 1
-    injs['temp'] = 1
-    merged = injs.merge(recs,how='outer')
-    merged_recovered = merged[(merged.tstart < merged.peak_time) & (merged.tstop > merged.peak_time)]
-    rest = injs[~injs.amplitude.isin(merged_recovered.amplitude.values)]
-    merged_all = pd.concat([merged_recovered, rest]).drop('temp',axis=1)
-    return merged_all
-
-
-
+    recovered = recovered.reset_index(drop=True)
+    tstart = recovered.tstart.to_numpy(dtype=float)
+    tstop = recovered.tstop.to_numpy(dtype=float)
+    rows, used = [], set()
+    for _, inj in injected.iterrows():
+        row = {**inj.to_dict(), "recovered": False}
+        hits = np.flatnonzero((tstart <= inj.peak_time) & (inj.peak_time <= tstop))
+        if len(hits) > 0:
+            row.update(recovered=True, **recovered.loc[hits[0]].to_dict())
+            used.update(hits)
+        rows.append(row)
+    columns = [*injected.columns, "recovered", *recovered.columns]
+    return (pd.DataFrame(rows, columns=columns),
+            recovered.drop(index=sorted(used)))
