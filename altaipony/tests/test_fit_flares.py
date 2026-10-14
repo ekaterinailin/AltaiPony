@@ -510,6 +510,19 @@ class TestFitFlares:
         # Verify emcee was called multiple times (once per flare region)
         assert mock_sampler_class.call_count >= 3
     
+    @patch('emcee.EnsembleSampler')
+    def test_fit_flares_unsorted_input(self, mock_sampler_class, multi_flare_lc, mock_emcee_sampler):
+        """Flares need not be in time order (e.g. a table sorted by energy):
+        the regions are the same as for sorted input."""
+        flc = multi_flare_lc
+        mock_sampler_class.side_effect = lambda *args, **kwargs: mock_emcee_sampler(8)
+        tstarts = np.array([9.8, 15.8, 3.8]) + 2450000
+        tstops = np.array([10.2, 16.2, 4.2]) + 2450000
+        results = fit_flares(flc.time.value, flc.flux.value, flc.flux_err.value,
+                             tstarts, tstops, buffer=0.2, max_flares=2, plot=False)
+        assert len(results) >= 3
+        assert mock_sampler_class.call_count >= 3
+
     # ========== Test Flare Table Creation with MCMC ==========
     
     @patch('emcee.EnsembleSampler')

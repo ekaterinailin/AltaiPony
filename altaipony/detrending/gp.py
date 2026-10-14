@@ -156,6 +156,44 @@ def _bin_training_per_segment(t, f, e, bin_factor, segment_gap_factor=10):
     return tb[order], fb[order], eb[order]
 
 
+def _pad_segment_edges(time, flux, flux_err, train_mask, t_train, f_train, err_train, n_pad):
+    """Extend the training data of every segment beyond both ends by up to
+    ``n_pad`` cadences on a straight line fitted to the segment's first or
+    last ``n_pad`` training points (see ``fit_gp_rotation(edge_pad=...)``).
+    At gaps between segments each side uses at most half the gap, minus 6
+    cadences, so that the segments stay apart."""
+    err_all = (np.full(len(time), float(flux_err)) if np.isscalar(flux_err)
+               else np.asarray(flux_err, dtype=float))
+    bounds = _segment_bounds(time)
+    pad_t, pad_f, pad_e = [], [], []
+    for j, (a, b) in enumerate(bounds):
+        idx = np.flatnonzero(train_mask[a:b]) + a
+        if len(idx) < 10:
+            continue
+        dt = np.nanmedian(np.diff(time[a:b]))
+        for side in ("start", "end"):
+            sel = idx[:n_pad] if side == "start" else idx[-n_pad:]
+            if side == "start":
+                room = np.inf if j == 0 else (time[a] - time[bounds[j - 1][1] - 1]) / 2
+            else:
+                room = np.inf if j == len(bounds) - 1 else (time[bounds[j + 1][0]] - time[b - 1]) / 2
+            n = int(min(n_pad, np.floor(room / dt) - 6))
+            if n <= 0:
+                continue
+            steps = dt * np.arange(1, n + 1)
+            tn = time[sel[0]] - steps if side == "start" else time[sel[-1]] + steps
+            coef = np.polyfit(time[sel], flux[sel], 1)
+            pad_t.append(tn)
+            pad_f.append(np.polyval(coef, tn))
+            pad_e.append(np.full(n, np.nanmedian(err_all[sel])))
+    if not pad_t:
+        return t_train, f_train, err_train
+    t_all = np.concatenate([t_train] + pad_t)
+    order = np.argsort(t_all, kind="stable")
+    return (t_all[order], np.concatenate([f_train] + pad_f)[order],
+            np.clip(np.abs(np.concatenate([err_train] + pad_e)[order]), 1e-10, None))
+
+
 def fit_gp_rotation(
     time,
     flux,
@@ -175,6 +213,8 @@ def fit_gp_rotation(
     return_std=False,
     extra_periods=(),
     min_damping_days=2.0,
+    clip_two_sided=False,
+    edge_pad=0,
 ):
     """Fit a celerite2 quasi-periodic GP to flare-masked flux.
 
@@ -271,6 +311,17 @@ def fit_gp_rotation(
     extra_periods : sequence of float
         Periods in days of further rotation terms (see above).  Defaults to
         none, a single rotation term.
+    clip_two_sided : bool
+        If True, the post-fit clip also removes training points more than
+        ``gp_clip_sigma`` below the model.  Defaults to False.
+    edge_pad : int
+        If > 0, each segment's training data are extended beyond both ends
+        by up to ``edge_pad`` cadences, and at most 5 % of the shortest
+        period of the kernel, on a straight line fitted to as many of the
+        first and last training points, so that the GP is constrained on
+        both sides of every real edge.  At gaps each side uses at most half
+        the gap.  The model is only predicted at the real cadences.
+        Defaults to 0 (no padding).
     min_damping_days : float
         Minimum damping time of the rotation terms, in days: how long the
         modulation keeps its shape before it evolves.  For an SHO at period
@@ -333,6 +384,16 @@ def fit_gp_rotation(
     else:
         err_train = np.asarray(flux_err)[train_mask]
     err_train = np.clip(np.abs(err_train), 1e-10, None)
+
+    if edge_pad > 0:
+        # at most 5 % of the shortest period, so that a straight line is a
+        # fair continuation of the modulation
+        cadence = np.nanmedian(np.diff(time))
+        shortest = min([period] + list(extra_periods))
+        n_pad = int(min(edge_pad, np.floor(0.05 * shortest / cadence)))
+        if n_pad >= 3:
+            t_train, f_train, err_train = _pad_segment_edges(
+                time, flux, flux_err, train_mask, t_train, f_train, err_train, n_pad)
 
     # ── optional binning ──────────────────────────────────────────────────
     # Bin the training arrays before fitting so the GP kernel matrix is
@@ -456,6 +517,8 @@ def fit_gp_rotation(
             resid = f_train - mu_tr
             thr = upper_outlier_threshold(resid, gp_clip_sigma)
             keep = resid <= thr  # one-sided: positive only
+            if clip_two_sided:
+                keep &= resid >= 2 * np.nanmedian(resid) - thr
             if anchor_edges:
                 # Never clip the first/last point of a segment: removing an
                 # edge anchor re-opens the extrapolation this whole scheme is

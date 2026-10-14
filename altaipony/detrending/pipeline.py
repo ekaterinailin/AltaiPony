@@ -19,6 +19,8 @@ from ..altai import _find_iterative_median
 from .baselines.polynomial import fit_lightcurve_detrender
 from .gp import _CELERITE2_AVAILABLE, fit_gp_rotation
 from .matchedfilter import matched_filter_flare_mask as _matched_filter_mask
+from .matchedfilter import _segment_slices
+from .noise import estimate_detrended_noise
 from .periodicity import detect_strong_periodicity, lomb_scargle
 
 #: Common baseline that every detrended light curve is normalised to, so that
@@ -41,12 +43,15 @@ def custom_detrending(
     gp_bin_factor=10,
     gp_clip_sigma=3.0,
     gp_clip_iters=3,
+    gp_clip_two_sided=False,
+    gp_edge_pad=0,
     gp_anchor_edges=True,
     gp_second_rotation=True,
     gp_residual_term=True,
     matched_filter_flares=True,
     matched_filter_snr=5.0,
     matched_filter_iters=3,
+    matched_filter_edge_days=0.0,
     matched_filter_fwhm_grid=(0.02, 0.05, 0.1, 0.2),
 ):
     """Custom de-trending for TESS and Kepler
@@ -110,6 +115,12 @@ def custom_detrending(
     gp_clip_iters : int
         Maximum number of post-fit residual clipping passes.  Set to 0
         to disable.  Defaults to 3.
+    gp_clip_two_sided : bool
+        Clip training points below the GP as well as above it (see
+        ``fit_gp_rotation``).  Defaults to False.
+    gp_edge_pad : int
+        Extend each segment's GP training data beyond its ends by this many
+        cadences on a straight line (see ``fit_gp_rotation``).  Defaults to 0.
     gp_anchor_edges : bool
         If True (default), pin the first/last cadence of every segment into
         the GP training set and shield them from the clip, so the GP is
@@ -148,6 +159,10 @@ def custom_detrending(
         mask and refits; it stops early when a pass adds no new cadences.
         Defaults to 3 (+5 flares over a single pass in injection-recovery,
         no extra false positives).
+    matched_filter_edge_days : float
+        Matched-filter detections that start within this many days of a
+        segment start, or end within it of a segment end, are not masked
+        (see ``_drop_edge_events``).  Defaults to 0 (all are masked).
     matched_filter_fwhm_grid : sequence of float
         Flare FWHMs (days) the matched filter templates against.  Defaults to
         ``(0.02, 0.05, 0.1, 0.2)``.
@@ -159,6 +174,8 @@ def custom_detrending(
             ``NORMALIZED_BASELINE`` (1.0), independent of the units of the
             input flux (still labelled e-/s for now).
         it_med : iterative median of the final detrended flux.
+        detrended_flux_err : noise of the detrended flux, estimated from
+            its flare-masked rolling scatter (``estimate_detrended_noise``).
         gp_model : the GP baseline in input flux units (NaN if no GP was
             fitted).
     """
@@ -214,6 +231,8 @@ def custom_detrending(
         gp_bin_factor=gp_bin_factor,
         gp_clip_sigma=gp_clip_sigma,
         gp_clip_iters=gp_clip_iters,
+        gp_clip_two_sided=gp_clip_two_sided,
+        gp_edge_pad=gp_edge_pad,
         gp_anchor_edges=gp_anchor_edges,
         gp_second_rotation=gp_second_rotation,
         gp_residual_term=gp_residual_term,
@@ -221,6 +240,7 @@ def custom_detrending(
         matched_filter_flares=matched_filter_flares,
         matched_filter_snr=matched_filter_snr,
         matched_filter_iters=matched_filter_iters,
+        matched_filter_edge_days=matched_filter_edge_days,
         matched_filter_fwhm_grid=matched_filter_fwhm_grid,
     )
 
@@ -232,8 +252,9 @@ def custom_detrending(
         level = _find_iterative_median(det, None)[0]
         lc4.detrended_flux = (NORMALIZED_BASELINE * det / level) * u.electron / u.s
 
-    # Iterative median of the final detrended flux.
+    # Iterative median and noise of the final detrended flux.
     lc4.find_iterative_median()
+    lc4 = estimate_detrended_noise(lc4)
 
     return lc4
 
@@ -278,6 +299,22 @@ def _second_period_candidates(time, flux, periods, fap_threshold,
     return candidates
 
 
+def _drop_edge_events(time, mask, edge_days):
+    """Remove the runs of ``mask`` that start within ``edge_days`` of the
+    start of a segment or end within ``edge_days`` of its end (segments split
+    at gaps as in the matched filter).  There the GP has data on one side
+    only, so a masked edge lets it extrapolate freely."""
+    mask = mask.copy()
+    for a, b in _segment_slices(time):
+        seg = mask[a:b]
+        d = np.diff(np.concatenate([[0], seg.astype(int), [0]]))
+        for s0, s1 in zip(np.flatnonzero(d == 1), np.flatnonzero(d == -1)):
+            if (time[a + s0] - time[a] < edge_days) or (time[b - 1] - time[a + s1 - 1] < edge_days):
+                seg[s0:s1] = False
+        mask[a:b] = seg
+    return mask
+
+
 def _residual_period(time, residual, fap_threshold, period_min=0.1):
     """Period of the highest Lomb-Scargle peak of a GP residual if it is
     significant (FAP below ``fap_threshold``), else None.  The periodogram is
@@ -309,6 +346,8 @@ def _apply_gp_step(
     gp_bin_factor,
     gp_clip_sigma,
     gp_clip_iters,
+    gp_clip_two_sided,
+    gp_edge_pad,
     gp_anchor_edges=True,
     gp_second_rotation=True,
     gp_residual_term=True,
@@ -316,6 +355,7 @@ def _apply_gp_step(
     matched_filter_flares=True,
     matched_filter_snr=5.0,
     matched_filter_iters=3,
+    matched_filter_edge_days=0.0,
     matched_filter_fwhm_grid=(0.02, 0.05, 0.1, 0.2),
 ):
     """Apply the final Gaussian-Process detrending step, in place.
@@ -364,6 +404,8 @@ def _apply_gp_step(
                 bin_factor=gp_bin_factor,
                 gp_clip_sigma=gp_clip_sigma,
                 gp_clip_iters=gp_clip_iters,
+                clip_two_sided=gp_clip_two_sided,
+                edge_pad=gp_edge_pad,
                 anchor_edges=gp_anchor_edges,
                 extra_periods=extra_periods,
             )
@@ -431,6 +473,8 @@ def _apply_gp_step(
                 snr_threshold=matched_filter_snr,
                 fwhm_grid=matched_filter_fwhm_grid,
             )
+            if matched_filter_edge_days > 0:
+                mf_mask = _drop_edge_events(t4_gp, mf_mask, matched_filter_edge_days)
             if not (mf_mask & ~flare_mask).any():
                 break
             flare_mask = flare_mask | mf_mask

@@ -508,8 +508,11 @@ def fit_flares(time, flux, flux_err, tstarts, tstops,
         raise ValueError("max_flares must be >= 1")
     
     results = []
-    tstarts = np.asarray(tstarts)
-    tstops = np.asarray(tstops)
+    # Group in time order, whatever the order of the input (e.g. a flare
+    # table sorted by energy)
+    order = np.argsort(np.asarray(tstarts, dtype=float), kind="stable")
+    tstarts = np.asarray(tstarts, dtype=float)[order]
+    tstops = np.asarray(tstops, dtype=float)[order]
     groups = group_peaks(tstarts, tstops, buffer=buffer)
     group_id = 1
     plot_row_index = 0
@@ -517,8 +520,8 @@ def fit_flares(time, flux, flux_err, tstarts, tstops,
     
     for group in groups:
         
-        group_t0 = tstarts[group[0]] - buffer
-        group_t1 = tstops[group[-1]] + buffer
+        group_t0 = np.min(tstarts[group]) - buffer
+        group_t1 = np.max(tstops[group]) + buffer
         n_group = len(group)
         print(f"\n Fitting region from {group_t0:.5f} to {group_t1:.5f}; Region [{ids}]"
               f"(max. number of flares in group = {max_flares} x {n_group})")

@@ -56,6 +56,26 @@ def test_stars_take_the_intended_path(detrended):
         assert np.isnan(_values(detrended["no_gp", scale][0].gp_model)).all()
 
 
+def test_noise_is_estimated(detrended):
+    """custom_detrending also returns the noise of the detrended flux, close
+    to the injected white noise."""
+    for (star, scale), (lc, _) in detrended.items():
+        err = _values(lc.detrended_flux_err)
+        assert np.isfinite(err).all()
+        assert np.nanmedian(err) == pytest.approx(NOISE, rel=0.2)
+
+
+def test_detrend_then_find_flares(make_lc):
+    """The documented workflow: FlareLightCurve.detrend() with its default
+    de-trending, then find_flares(), finds the injected flares."""
+    lc, table = make_lc(modes=[dict(period=1.3, amplitude=0.02)], flares=FLARES,
+                        noise=NOISE, scale=3400.0)
+    assert lc.detrend() is lc
+    assert lc.find_flares() is lc
+    for tpeak in table.tpeak:
+        assert ((lc.flares.tstart <= tpeak) & (lc.flares.tstop >= tpeak)).any()
+
+
 @pytest.mark.parametrize("star", STARS)
 @pytest.mark.parametrize("scale", SCALES)
 def test_quiet_baseline_is_one(detrended, star, scale):
