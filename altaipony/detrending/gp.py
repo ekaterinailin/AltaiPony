@@ -7,13 +7,8 @@ from scipy.optimize import minimize
 
 from ..utils import upper_outlier_threshold
 
-try:
-    import celerite2
-    from celerite2 import terms as celerite2_terms
-
-    _CELERITE2_AVAILABLE = True
-except ImportError:
-    _CELERITE2_AVAILABLE = False
+import celerite2
+from celerite2 import terms as celerite2_terms
 
 
 def _segment_bounds(t, gap_factor=10):
@@ -315,12 +310,6 @@ def fit_gp_rotation(
     params : dict
         Fitted hyperparameters plus ``converged`` and ``nll`` keys.
     """
-    if not _CELERITE2_AVAILABLE:
-        raise ImportError(
-            "celerite2 is required for the GP step.  "
-            "Install with: pip install celerite2"
-        )
-
     # ── training set: unmasked, non-NaN cadences ──────────────────────────
     valid = ~np.isnan(flux) & ~np.isnan(time)
 

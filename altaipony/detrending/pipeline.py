@@ -5,7 +5,7 @@ UTF-8, Python 3
 AltaiPony
 ------------------
 
-Ekaterina Ilin, 2023, MIT License
+Ekaterina Ilin, 2026, MIT License
 
 The detrending pipeline: polynomial baseline and GP model.
 """
@@ -17,14 +17,12 @@ import astropy.units as u
 
 from ..altai import _find_iterative_median
 from .baselines.polynomial import fit_lightcurve_detrender
-from .gp import _CELERITE2_AVAILABLE, _bin_training_per_segment, fit_gp_rotation
+from .gp import _bin_training_per_segment, fit_gp_rotation
 from .matchedfilter import matched_filter_flare_mask as _matched_filter_mask
 from .noise import estimate_detrended_noise
 from .periodicity import detect_strong_periodicity, lomb_scargle
 
-#: Common baseline that every detrended light curve is normalised to, so that
-#: light curves from different stars / sectors share the same flux zero-point
-#: (a flat, flare-free baseline sits at exactly this value).
+# Common baseline in detrended light curves 
 NORMALIZED_BASELINE = 1.0
 
 logger = logging.getLogger(__name__)
@@ -78,7 +76,7 @@ def custom_detrending(
         0.6–1.2-day windows (plain and shifted by half a window, blended) and
         its own fraction-capped flare mask.  If None, its defaults are used.
     use_gp : bool
-        If True (and celerite2 is installed), follow the baseline fit with a
+        If True, follow the baseline fit with a
         Gaussian Process step, for every star: in injection-recovery tests it
         recovered more flares than the polynomial baseline alone even on stars
         without spots.  Flares are masked (the baseline stage's flare mask),
@@ -390,13 +388,11 @@ def _apply_gp_step(
     term at a second period from the flux's periodogram is added to all fits
     after the first, if it lowers the residual scatter.  Either way, the
     post-fit residual clipping still catches flares the mask missed.  Runs
-    when ``use_gp`` is True, ``dominant_period`` is finite and celerite2 is
-    installed; otherwise ``lc4`` is left untouched.  ``lc4`` (``detrended_flux``, ``gp_model``) and
+    when ``use_gp`` is True and ``dominant_period`` is finite; otherwise
+    ``lc4`` is left untouched.  ``lc4`` (``detrended_flux``, ``gp_model``) and
     ``best_params`` are modified in place.
     """
-    if not (use_gp and np.isfinite(dominant_period) and _CELERITE2_AVAILABLE):
-        if use_gp and not _CELERITE2_AVAILABLE:
-            logger.warning("GP requested but celerite2 is not installed (pip install celerite2) — skipping.")
+    if not (use_gp and np.isfinite(dominant_period)):
         return
 
     t4_gp = lc4.time.value
