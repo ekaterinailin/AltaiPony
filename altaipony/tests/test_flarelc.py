@@ -350,8 +350,8 @@ def test_detrend_defaults_to_custom_detrending(monkeypatch):
 
     monkeypatch.setattr(altaipony.detrending, "custom_detrending", fake_custom_detrending)
     flc = mock_flc(detrended=True)
-    assert flc.detrend(use_gp=False) is flc
-    assert calls == {"use_gp": False}
+    assert flc.detrend(gp_bin_factor=5) is flc
+    assert calls == {"gp_bin_factor": 5}
     assert flc.detrended_flux.value == pytest.approx(flc.flux.value / 2.)
 
 

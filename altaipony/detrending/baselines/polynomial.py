@@ -2,8 +2,8 @@
 
 The functions in this module fit segmented polynomial baselines and build
 flare masks and noise estimates.
-``fit_lightcurve_detrender`` adapts ``run_detrending`` to the baseline
-interface of ``custom_detrending``.
+``polynomial_flare_mask`` returns the flare mask that seeds the GP in
+``custom_detrending``.
 """
 from __future__ import annotations
 
@@ -38,18 +38,18 @@ class DetrendConfig:
         Sigma threshold used for the preliminary flare mask.
     flare_mask_window_d : float
         Rough detrending window, in days, used for the preliminary flare mask.
-    second_pass_sigma : float
-        Sigma threshold used for second-pass and final flare masks.  The final
-        mask is the GP's starting flare mask, so it is kept to the brightest
+    final_mask_sigma : float
+        Sigma threshold of the final flare mask.  The final mask is the GP's
+        starting flare mask, so it is kept to the brightest
         outliers (5 sigma): with 3 sigma, the maxima of fast, strong
         modulation were flagged as flares on low-noise stars, the GP never saw
         them and undershot there (62 vs. 29 false positives in 1000 synthetic
         light curves, recovery unchanged).  The matched filter masks the
         remaining flares on the GP's residual.
     final_flare_max_mask_fraction : float
-        Maximum allowed fraction of cadences in the recomputed final flare mask.
-        If the candidate mask exceeds this fraction, the code falls back to the
-        previous/provisional mask to prevent final-mask explosions.
+        Maximum allowed fraction of cadences in the final flare mask.  If the
+        candidate mask exceeds this fraction, the code falls back to the
+        preliminary mask to prevent final-mask explosions.
     rolling_window_pts : int
         Rolling window size, in cadences, for local noise estimates.
     smooth_sigma_cadences : int
@@ -62,7 +62,7 @@ class DetrendConfig:
     min_fit_pts: int = 15
     flare_mask_sigma: float = 5.0
     flare_mask_window_d: float = 2.0
-    second_pass_sigma: float = 5.0
+    final_mask_sigma: float = 5.0
     final_flare_max_mask_fraction: float = 0.05
     rolling_window_pts: int = 100
     smooth_sigma_cadences: int = 5
@@ -517,8 +517,13 @@ def run_detrending(
     flux: np.ndarray,
     flux_err: np.ndarray,
     config: DetrendConfig | None = None,
-) -> tuple[np.ndarray, np.ndarray]:
-    """Run the full two-pass detrending pipeline.
+) -> np.ndarray:
+    """Fit the segmented-polynomial baseline and mask the residual's flares.
+
+    A preliminary flare mask from a rough fit, then the blended fit of all
+    window grids without it, then the final flare mask on that fit's residual.
+    (A second fit with a mask from the first one changed nothing in
+    injection-recovery and was removed on 2026-10-15.)
 
     Parameters
     ----------
@@ -533,15 +538,13 @@ def run_detrending(
 
     Returns
     -------
-    final_residual : numpy.ndarray
-        Flux minus the second-pass baseline.
-    final_flare_mask : numpy.ndarray
+    numpy.ndarray
         Boolean mask of the residual's positive outliers.
 
     Raises
     ------
     RuntimeError
-        If no valid combined trend can be built during either pass.
+        If no valid combined trend can be built.
     """
     cfg = config or DetrendConfig()
 
@@ -553,53 +556,36 @@ def run_detrending(
         rolling_pts=cfg.rolling_window_pts,
     )
 
-    all_results_p1 = run_all_windows(
+    all_results = run_all_windows(
         time, flux, flux_err, flare_mask_prelim, cfg.window_sizes,
         poly_deg=cfg.poly_deg, n_edge=cfg.n_edge, edge_weight=cfg.edge_weight,
         min_fit_pts=cfg.min_fit_pts,
     )
-    fp_trend = assemble_combined_trend(
-        time, all_results_p1, smooth_sigma_cadences=cfg.smooth_sigma_cadences,
+    trend = assemble_combined_trend(
+        time, all_results, smooth_sigma_cadences=cfg.smooth_sigma_cadences,
         min_fit_pts=cfg.min_fit_pts,
     )
-    fp_residuals = flux - fp_trend
+    final_residual = flux - trend
 
-    fp_global_std = sigma_clipped_std(fp_residuals[~flare_mask_prelim & np.isfinite(fp_residuals)])
-    flare_mask_p2 = flare_mask_prelim | (
-        np.isfinite(fp_residuals) & (fp_residuals > cfg.second_pass_sigma * fp_global_std)
-    )
-    all_results_p2 = run_all_windows(
-        time, flux, flux_err, flare_mask_p2, cfg.window_sizes,
-        poly_deg=cfg.poly_deg, n_edge=cfg.n_edge, edge_weight=cfg.edge_weight,
-        min_fit_pts=cfg.min_fit_pts,
-    )
-    sp_trend = assemble_combined_trend(
-        time, all_results_p2, smooth_sigma_cadences=cfg.smooth_sigma_cadences,
-        min_fit_pts=cfg.min_fit_pts,
-    )
-    final_residual = flux - sp_trend
-
-    # Recompute the final flare mask on the second-pass residual (thresholded
-    # above its own median). This releases points that the first pass flagged
-    # only because its trend missed broad crests of the variability, while
-    # sharp positive outliers remain. The helper guards against final-mask
-    # explosions that would mark nearly the full light curve.
-    final_flare_mask = build_safe_final_flare_mask(
+    # Mask the residual's positive outliers (above its own median). This
+    # releases points the rough preliminary fit flagged only because it
+    # missed broad crests of the variability, while sharp positive outliers
+    # remain. The helper guards against final-mask explosions that would
+    # mark nearly the full light curve.
+    return build_safe_final_flare_mask(
         final_residual,
-        sigma_thresh=cfg.second_pass_sigma,
-        previous_mask=flare_mask_p2,
+        sigma_thresh=cfg.final_mask_sigma,
+        previous_mask=flare_mask_prelim,
         max_mask_fraction=cfg.final_flare_max_mask_fraction,
     )
-    return final_residual, final_flare_mask
 
 
-def fit_lightcurve_detrender(time, flux, flux_err, config=None):
-    """Segmented-polynomial baseline fit for ``custom_detrending``.
+def polynomial_flare_mask(time, flux, flux_err, config=None):
+    """Flare mask from the segmented-polynomial baseline: the GP's initial
+    flare mask in ``custom_detrending``.
 
-    Adapter that runs :func:`run_detrending` on the finite cadences and
-    returns ``(newflux, flare_mask)`` on the full grid.
-    ``run_detrending`` fits a segmented-polynomial baseline and carries its
-    own robust, fraction-capped flare masking.
+    Runs :func:`run_detrending` on the finite cadences and returns its flare
+    mask on the full grid.
 
     Notes
     -----
@@ -608,8 +594,6 @@ def fit_lightcurve_detrender(time, flux, flux_err, config=None):
       are mapped back onto the full grid (NaN elsewhere).
     * ``flux_err`` is forced strictly positive and finite (non-finite or
       non-positive values are replaced by the median positive error).
-    * The residual is rebased to the flux level (``+ median(flux)``), so the
-      detrended flux is at the level of the input flux.
 
     Parameters
     ----------
@@ -620,10 +604,8 @@ def fit_lightcurve_detrender(time, flux, flux_err, config=None):
 
     Returns
     -------
-    newflux : ndarray
-        Detrended flux at the original flux level (NaN where input was NaN).
-    flare_mask : ndarray
-        The final flare mask on the full grid (False where input was NaN).
+    ndarray
+        Boolean flare mask on the full grid (False where input was NaN).
     """
     time = np.asarray(time, dtype=float)
     flux = np.asarray(flux, dtype=float)
@@ -631,7 +613,7 @@ def fit_lightcurve_detrender(time, flux, flux_err, config=None):
 
     finite = np.isfinite(time) & np.isfinite(flux)
     if finite.sum() < 20:
-        raise ValueError("Too few finite cadences for the lightcurve detrender.")
+        raise ValueError("Too few finite cadences for the polynomial baseline.")
 
     # Force strictly positive, finite errors on the finite subset.
     err = flux_err[finite]
@@ -639,11 +621,6 @@ def fit_lightcurve_detrender(time, flux, flux_err, config=None):
     fill = np.median(err[good_err]) if good_err.any() else 1.0
     err = np.where(good_err, err, fill)
 
-    # Run the polynomial baseline on the finite subset.
-    resid_sub, mask_sub = run_detrending(time[finite], flux[finite], err, config)
-
-    newflux = np.full_like(flux, np.nan, dtype=float)
     final_mask = np.zeros(len(flux), dtype=bool)
-    newflux[finite] = resid_sub + np.nanmedian(flux[finite])
-    final_mask[finite] = mask_sub
-    return newflux, final_mask
+    final_mask[finite] = run_detrending(time[finite], flux[finite], err, config)
+    return final_mask

@@ -1,9 +1,9 @@
 """Light-curve detrending.
 
-``custom_detrending`` (in ``pipeline``) removes stellar variability in three
-two stages: a segmented-polynomial baseline fit (``baselines.polynomial``)
-and a Gaussian-process model of the stellar variability (``gp``), trained on
-the flux without the flares.  ``estimate_detrended_noise`` (``noise``)
+``custom_detrending`` (in ``pipeline``) removes stellar variability with a
+Gaussian-process model (``gp``), trained on the flux without the flares.  A
+segmented-polynomial baseline (``baselines.polynomial``) provides the initial
+flare mask, and a matched filter (``matchedfilter``) extends it.  ``estimate_detrended_noise`` (``noise``)
 estimates the noise of the result.
 """
 

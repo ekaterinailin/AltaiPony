@@ -1,6 +1,11 @@
 Changelog (starting 04-2023)
 =======================================
 
+15-10-2026
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+* ``custom_detrending`` always fits the GP; the ``use_gp`` option is removed. The polynomial baseline only provides the GP's initial flare mask, and it fits once instead of twice (the second fit made no difference in injection-recovery). Light curves too short for a periodogram raise a ``ValueError``, and a failed GP fit raises its error instead of silently returning the polynomial baseline. In ``DetrendConfig``, ``second_pass_sigma`` is now ``final_mask_sigma``.
+
 14-10-2026
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -15,7 +20,7 @@ Changelog (starting 04-2023)
 
 * ``find_flares`` uses a new default detection rule. Instead of requiring 3 consecutive points above 3 sigma, it flags windows of 3 to 10 consecutive points whose combined probability of being noise is below that of 3 points at 3 sigma, corrected for residuals that are correlated over minutes to hours. Fragments of one flare are merged (``merge_sigma=0.25``) and detections are extended over adjacent points above 1 sigma (``extend_sigma=1.0``). Pass ``max_window=None, merge_sigma=None, extend_sigma=None`` for the previous behaviour.
 * ``custom_detrending`` is a new pipeline: a polynomial baseline (which masks only points above 5 sigma before the GP, so that more of the modulation's peaks stay in the GP's training data), then a Gaussian process with a rotation kernel, iteratively masking flares with a matched filter. It works on the actual time stamps (missing cadences are not interpolated) and leaves its input light curve unchanged. It also estimates the noise of the detrended flux (``detrended_flux_err``), so that ``flc.detrend()`` can be followed directly by ``flc.find_flares()``.
-* ``FlareLightCurve.detrend()`` uses ``custom_detrending`` by default and passes keyword arguments on to it (``flc.detrend(use_gp=False)``); pass ``func=`` for your own function. The ``mode`` argument is deprecated: ``detrend("custom", func=...)`` still works with a warning, and ``sample_flare_recovery(mode=...)`` is ignored.
+* ``FlareLightCurve.detrend()`` uses ``custom_detrending`` by default and passes keyword arguments on to it (e.g. ``flc.detrend(gp_bin_factor=5)``); pass ``func=`` for your own function. The ``mode`` argument is deprecated: ``detrend("custom", func=...)`` still works with a warning, and ``sample_flare_recovery(mode=...)`` is ignored.
 * Removed the Savitzky-Golay de-trending mode (``detrend("savgol")``).
 * Removed ``FlareLightCurve.get_saturation`` and the remaining K2SC dependencies (``k2sc``, ``george``). ``celerite2`` (for the GP de-trending) and ``tqdm`` are now dependencies.
 * ``sample_flare_recovery`` shows a ``tqdm`` progress bar with the number of fake flares injected and recovered so far (``progress=False`` turns it off), replacing ``progressbar2``.

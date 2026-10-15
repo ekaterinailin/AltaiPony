@@ -526,7 +526,7 @@ class FlareLightCurve(LightCurve):
         Examples
         --------
         >>> flc.detrend()                  # custom_detrending, default settings
-        >>> flc.detrend(use_gp=False)      # options of custom_detrending
+        >>> flc.detrend(gp_bin_factor=5)   # options of custom_detrending
         >>> flc.detrend(func=my_function)  # your own de-trending function
 
         Parameters

@@ -17,9 +17,8 @@ pytestmark = pytest.mark.slow
 NOISE = 1e-3
 FLARES = [(2.3, 0.02, 0.01), (5.7, 0.04, 0.02)]   # (tpeak, fwhm, ampl), relative flux
 SCALES = (1.0, 3400.0)                            # normalised, and e-/s-like
-# star: (spot amplitude, use_gp). The GP runs for every star unless switched
-# off, so "no_gp" covers the path without it.
-STARS = {"periodic": (0.02, True), "flat": (0.0, True), "no_gp": (0.02, False)}
+# star: spot amplitude.  The GP runs for every star, spotted or not.
+STARS = {"periodic": 0.02, "flat": 0.0}
 
 
 def _quiet(time, table, pad_before=0.05, pad_after=0.3):
@@ -39,21 +38,19 @@ def detrended(make_lc):
     """Each star (8 days of 2-min data, spots at P = 1.3 d or none, white
     noise, two flares) detrended at each flux scale."""
     out = {}
-    for star, (amp, use_gp) in STARS.items():
+    for star, amp in STARS.items():
         for scale in SCALES:
             lc, table = make_lc(modes=[dict(period=1.3, amplitude=amp)], flares=FLARES,
                                 noise=NOISE, scale=scale)
-            out[star, scale] = (custom_detrending(lc, use_gp=use_gp), table)
+            out[star, scale] = (custom_detrending(lc), table)
     return out
 
 
 def test_stars_take_the_intended_path(detrended):
-    """Every star gets a GP model, with or without spots, unless the GP is
-    switched off."""
+    """Every star gets a GP model, with or without spots."""
     for scale in SCALES:
         assert np.isfinite(_values(detrended["periodic", scale][0].gp_model)).any()
         assert np.isfinite(_values(detrended["flat", scale][0].gp_model)).any()
-        assert np.isnan(_values(detrended["no_gp", scale][0].gp_model)).all()
 
 
 def test_noise_is_estimated(detrended):

@@ -10,13 +10,10 @@ Ekaterina Ilin, 2026, MIT License
 The detrending pipeline: polynomial baseline and GP model.
 """
 
-import logging
-
 import numpy as np
 import astropy.units as u
 
-from ..altai import _find_iterative_median
-from .baselines.polynomial import fit_lightcurve_detrender
+from .baselines.polynomial import polynomial_flare_mask
 from .gp import _bin_training_per_segment, fit_gp_rotation
 from .matchedfilter import matched_filter_flare_mask as _matched_filter_mask
 from .noise import estimate_detrended_noise
@@ -25,8 +22,6 @@ from .periodicity import detect_strong_periodicity, lomb_scargle
 # Common baseline in detrended light curves 
 NORMALIZED_BASELINE = 1.0
 
-logger = logging.getLogger(__name__)
-
 
 def custom_detrending(
     lc,
@@ -34,7 +29,6 @@ def custom_detrending(
     periodicity_fap_threshold=1e-3,
     period_min_days=0.1,
     detrender_config=None,
-    use_gp=True,
     gp_optimize=True,
     gp_period_tolerance=0.05,
     gp_bin_factor=10,
@@ -75,15 +69,6 @@ def custom_detrending(
         Configuration of the baseline: degree-4 polynomial fits on grids of
         0.6–1.2-day windows (plain and shifted by half a window, blended) and
         its own fraction-capped flare mask.  If None, its defaults are used.
-    use_gp : bool
-        If True, follow the baseline fit with a
-        Gaussian Process step, for every star: in injection-recovery tests it
-        recovered more flares than the polynomial baseline alone even on stars
-        without spots.  Flares are masked (the baseline stage's flare mask),
-        and a celerite2 ``RotationTerm`` GP is fitted to the masked *original*
-        flux.  The GP model smoothly bridges the masked windows and is then
-        subtracted to produce the final detrended flux, so the baseline
-        result only shapes the flare mask.  Defaults to True.
     gp_optimize : bool
         If True, optimise the GP hyperparameters (sigma, period within
         ±``gp_period_tolerance``, Q0, dQ, f, jitter) by maximising the
@@ -179,8 +164,13 @@ def custom_detrending(
         it_med : iterative median of the final detrended flux.
         detrended_flux_err : noise of the detrended flux, estimated from
             its flare-masked rolling scatter (``estimate_detrended_noise``).
-        gp_model : the GP baseline in input flux units (NaN if no GP was
-            fitted).
+        gp_model : the GP baseline in input flux units.
+
+    Raises
+    ------
+    ValueError
+        If the light curve is too short for a periodogram (fewer than 20
+        unmasked cadences, or spanning less than ``2 * period_min_days``).
     """
     # Work on a copy: the input light curve stays unchanged.  Missing
     # cadences are not filled in: the baseline, the GP and the noise
@@ -191,11 +181,10 @@ def custom_detrending(
     time, flux = lc.time.value, lc.flux.value
 
     # --- Baseline: segmented polynomial ------------------------------------
-    # Its flare mask is the GP's initial flare mask.
-    m2flux, baseline_flare_mask = fit_lightcurve_detrender(
+    # It only provides the GP's initial flare mask.
+    baseline_flare_mask = polynomial_flare_mask(
         time, flux, lc.flux_err.value, config=detrender_config
     )
-    best_params = {}
 
     # --- Periodicity check ------------------------------------------------
     # Lomb-Scargle periodogram of the raw flux without the cadences in the
@@ -204,26 +193,24 @@ def custom_detrending(
     # the highest peak, whether it is significant or not.
     period_max_days = (time[-1] - time[0]) / 2.0
     quiet = ~baseline_flare_mask
-    is_periodic, dominant_period, fap = detect_strong_periodicity(
+    _, dominant_period, _ = detect_strong_periodicity(
         time[quiet],
         flux[quiet],
         fap_threshold=periodicity_fap_threshold,
         period_min=period_min_days,
         period_max=period_max_days,
     )
-    best_params["dominant_period"] = dominant_period
-    best_params["periodogram_fap"] = fap
-    best_params["periodic"] = is_periodic
+    if not np.isfinite(dominant_period):
+        raise ValueError("No periodogram: the light curve has fewer than 20 unmasked "
+                         f"cadences or spans less than 2 x period_min_days ({period_min_days} d).")
 
     # ``flux`` and ``flux_err`` are the original ones, which the GP is
     # trained on.
     lc4 = lc
 
-    # Optional final Gaussian-Process refinement (in place on lc4/best_params).
+    # --- Gaussian process (in place on lc4) --------------------------------
     _apply_gp_step(
         lc4,
-        best_params,
-        use_gp=use_gp,
         dominant_period=dominant_period,
         flare_mask=baseline_flare_mask,
         gp_optimize=gp_optimize,
@@ -243,13 +230,6 @@ def custom_detrending(
         matched_filter_iters=matched_filter_iters,
         matched_filter_fwhm_grid=matched_filter_fwhm_grid,
     )
-
-    if "gp" not in best_params:
-        # No GP model (GP disabled, no usable period, or GP fit failed): use
-        # the baseline's detrended flux, which is at the input flux level,
-        # as relative flux scaled by its global iterative median.
-        level = _find_iterative_median(m2flux, None)[0]
-        lc4.detrended_flux = (NORMALIZED_BASELINE * m2flux / level) * u.dimensionless_unscaled
 
     # Iterative median and noise of the final detrended flux.
     lc4.find_iterative_median()
@@ -348,9 +328,7 @@ def _residual_period(time, residual, fap_threshold, period_min=0.1):
 
 def _apply_gp_step(
     lc4,
-    best_params,
     *,
-    use_gp,
     dominant_period,
     flare_mask,
     gp_optimize,
@@ -383,139 +361,124 @@ def _apply_gp_step(
     residual added to it.  With ``gp_second_rotation``, a second rotation
     term at a second period from the flux's periodogram is added to all fits
     after the first, if it lowers the residual scatter.  Either way, the
-    post-fit residual clipping still catches flares the mask missed.  Runs
-    when ``use_gp`` is True and ``dominant_period`` is finite; otherwise
-    ``lc4`` is left untouched.  ``lc4`` (``detrended_flux``, ``gp_model``) and
-    ``best_params`` are modified in place.
+    post-fit residual clipping still catches flares the mask missed.
+    ``lc4`` (``detrended_flux``, ``gp_model``) is modified in place.
     """
-    if not (use_gp and np.isfinite(dominant_period)):
-        return
 
     t4_gp = lc4.time.value
     f4_gp = lc4.flux.value  # original flux on lc4's filtered grid
     fe4_gp = lc4.flux_err.value  # formal errors on same grid
     flare_mask = np.asarray(flare_mask, dtype=bool)
 
-    try:
-        # Fit the GP to flux normalised by its median, so that the fit (and the
-        # optimiser's convergence) does not depend on the units of the flux.
-        # The fitted sigma and jitter are therefore relative to the median.
-        norm = np.nanmedian(f4_gp)
+    # Fit the GP to flux normalised by its median, so that the fit (and the
+    # optimiser's convergence) does not depend on the units of the flux.
+    # The fitted sigma and jitter are therefore relative to the median.
+    norm = np.nanmedian(f4_gp)
 
-        def _fit(mask, extra_periods=()):
-            model, _, params = fit_gp_rotation(
-                t4_gp,
-                f4_gp / norm,
-                fe4_gp / norm,
-                period=dominant_period,
-                flare_mask=mask,
-                optimize_hyperparams=gp_optimize,
-                period_tolerance=gp_period_tolerance,
-                bin_factor=bin_factor,
-                gp_clip_sigma=gp_clip_sigma,
-                gp_clip_iters=gp_clip_iters,
-                anchor_edges=gp_anchor_edges,
-                extra_periods=extra_periods,
-                jitter_only=gp_jitter_only,
-                jitter_floor=gp_jitter_floor,
-            )
-            return model, params
+    def _fit(mask, extra_periods=()):
+        model, _, params = fit_gp_rotation(
+            t4_gp,
+            f4_gp / norm,
+            fe4_gp / norm,
+            period=dominant_period,
+            flare_mask=mask,
+            optimize_hyperparams=gp_optimize,
+            period_tolerance=gp_period_tolerance,
+            bin_factor=bin_factor,
+            gp_clip_sigma=gp_clip_sigma,
+            gp_clip_iters=gp_clip_iters,
+            anchor_edges=gp_anchor_edges,
+            extra_periods=extra_periods,
+            jitter_only=gp_jitter_only,
+            jitter_floor=gp_jitter_floor,
+        )
+        return model, params
 
-        bin_factor = gp_bin_factor
-        gp_model, gp_params = _fit(flare_mask)
-        if gp_bin_max_bias is not None and gp_bin_factor > 1:
-            k = _bin_factor_for_curvature(t4_gp, f4_gp / norm, gp_model, flare_mask,
-                                          gp_bin_factor, gp_bin_max_bias)
-            if k != bin_factor:
-                bin_factor = k
-                gp_model, gp_params = _fit(flare_mask)
-        best_params["gp_bin_factor"] = bin_factor
+    bin_factor = gp_bin_factor
+    gp_model, gp_params = _fit(flare_mask)
+    if gp_bin_max_bias is not None and gp_bin_factor > 1:
+        k = _bin_factor_for_curvature(t4_gp, f4_gp / norm, gp_model, flare_mask,
+                                      gp_bin_factor, gp_bin_max_bias)
+        if k != bin_factor:
+            bin_factor = k
+            gp_model, gp_params = _fit(flare_mask)
 
-        # A second periodic signal at a period unrelated to the first (e.g.
-        # from a second star) cannot be fitted by the rotation term.  Its
-        # residual after the first fit is small and non-sinusoidal (the GP
-        # follows most of it), so search for it in the periodogram of the
-        # flux instead, refit with a second rotation term at each candidate
-        # period, and keep the fit with the lowest scatter of the unmasked
-        # residuals, if it is lower than with one term: a candidate can be a
-        # sidelobe, and two terms can also compete and fit worse than one.
-        def _scatter(model):
-            return np.nanstd((f4_gp / norm - model)[~flare_mask])
+    # A second periodic signal at a period unrelated to the first (e.g.
+    # from a second star) cannot be fitted by the rotation term.  Its
+    # residual after the first fit is small and non-sinusoidal (the GP
+    # follows most of it), so search for it in the periodogram of the
+    # flux instead, refit with a second rotation term at each candidate
+    # period, and keep the fit with the lowest scatter of the unmasked
+    # residuals, if it is lower than with one term: a candidate can be a
+    # sidelobe, and two terms can also compete and fit worse than one.
+    def _scatter(model):
+        return np.nanstd((f4_gp / norm - model)[~flare_mask])
 
-        extra = []
-        if gp_second_rotation:
-            best = _scatter(gp_model)
-            for candidate in _second_period_candidates(
-                t4_gp[~flare_mask],
-                (f4_gp / norm)[~flare_mask],
-                (dominant_period, gp_params["period"]),
-                fap_threshold=periodicity_fap_threshold,
-            ):
-                model2, params2 = _fit(flare_mask, [candidate])
-                if _scatter(model2) < best:
-                    best = _scatter(model2)
-                    gp_model, gp_params, extra = model2, params2, [candidate]
+    extra = []
+    if gp_second_rotation:
+        best = _scatter(gp_model)
+        for candidate in _second_period_candidates(
+            t4_gp[~flare_mask],
+            (f4_gp / norm)[~flare_mask],
+            (dominant_period, gp_params["period"]),
+            fap_threshold=periodicity_fap_threshold,
+        ):
+            model2, params2 = _fit(flare_mask, [candidate])
+            if _scatter(model2) < best:
+                best = _scatter(model2)
+                gp_model, gp_params, extra = model2, params2, [candidate]
 
-        # What the kernel still cannot follow (e.g. a fast, large modulation
-        # that changes faster than the terms' damping time allows) stays in
-        # the residual as a periodic signal.  If the residual periodogram has
-        # a significant peak, add a rotation term at its period, and keep it
-        # if it lowers the residual scatter.
-        if gp_residual_term:
-            residual_period = _residual_period(
-                t4_gp[~flare_mask],
-                (f4_gp / norm - gp_model)[~flare_mask],
-                fap_threshold=periodicity_fap_threshold,
-            )
-            if residual_period is not None:
-                model2, params2 = _fit(flare_mask, extra + [residual_period])
-                if _scatter(model2) < _scatter(gp_model):
-                    gp_model, gp_params = model2, params2
-                    extra = extra + [residual_period]
+    # What the kernel still cannot follow (e.g. a fast, large modulation
+    # that changes faster than the terms' damping time allows) stays in
+    # the residual as a periodic signal.  If the residual periodogram has
+    # a significant peak, add a rotation term at its period, and keep it
+    # if it lowers the residual scatter.
+    if gp_residual_term:
+        residual_period = _residual_period(
+            t4_gp[~flare_mask],
+            (f4_gp / norm - gp_model)[~flare_mask],
+            fap_threshold=periodicity_fap_threshold,
+        )
+        if residual_period is not None:
+            model2, params2 = _fit(flare_mask, extra + [residual_period])
+            if _scatter(model2) < _scatter(gp_model):
+                gp_model, gp_params = model2, params2
+                extra = extra + [residual_period]
 
-        # Second pass: per-cadence masks catch narrow flares but miss wide,
-        # moderate-SNR ones (each cadence sits under the cut while the
-        # integrated flux is large); the matched filter's coherent sum
-        # recovers them, so the GP does not train on and absorb them.  It
-        # runs on the first GP's residual, not on the baseline residual:
-        # there, rotation the baseline could not follow would be masked as
-        # flares, and the GP would never see the maxima it has to fit.
-        # Each further pass runs on the residual of the refit, in which the
-        # flares masked so far are no longer absorbed, so they stand out more
-        # and their masks grow further.
-        for _ in range(matched_filter_iters if matched_filter_flares else 0):
-            mf_mask = _matched_filter_mask(
-                t4_gp,
-                f4_gp / norm - gp_model,
-                noise=None,
-                snr_threshold=matched_filter_snr,
-                fwhm_grid=matched_filter_fwhm_grid,
-            )
-            if not (mf_mask & ~flare_mask).any():
-                break
-            flare_mask = flare_mask | mf_mask
-            gp_model, gp_params = _fit(flare_mask, extra)
+    # Second pass: per-cadence masks catch narrow flares but miss wide,
+    # moderate-SNR ones (each cadence sits under the cut while the
+    # integrated flux is large); the matched filter's coherent sum
+    # recovers them, so the GP does not train on and absorb them.  It
+    # runs on the first GP's residual, not on the baseline residual:
+    # there, rotation the baseline could not follow would be masked as
+    # flares, and the GP would never see the maxima it has to fit.
+    # Each further pass runs on the residual of the refit, in which the
+    # flares masked so far are no longer absorbed, so they stand out more
+    # and their masks grow further.
+    for _ in range(matched_filter_iters if matched_filter_flares else 0):
+        mf_mask = _matched_filter_mask(
+            t4_gp,
+            f4_gp / norm - gp_model,
+            noise=None,
+            snr_threshold=matched_filter_snr,
+            fwhm_grid=matched_filter_fwhm_grid,
+        )
+        if not (mf_mask & ~flare_mask).any():
+            break
+        flare_mask = flare_mask | mf_mask
+        gp_model, gp_params = _fit(flare_mask, extra)
 
-        n_masked = int(flare_mask.sum())
-        gp_model = gp_model * norm
+    gp_model = gp_model * norm
 
-        # Baseline model in input flux units: the GP shifted so that the
-        # residuals of the unmasked (quiescent) cadences have zero median.
-        resid = f4_gp - gp_model
-        quiet = ~flare_mask & np.isfinite(resid)
-        model = gp_model + np.nanmedian(resid[quiet])
+    # Baseline model in input flux units: the GP shifted so that the
+    # residuals of the unmasked (quiescent) cadences have zero median.
+    resid = f4_gp - gp_model
+    quiet = ~flare_mask & np.isfinite(resid)
+    model = gp_model + np.nanmedian(resid[quiet])
 
-        # Relative flux, 1 + residual / quiescent level: the flat, flare-free
-        # baseline sits at exactly NORMALIZED_BASELINE and flare amplitudes
-        # are relative, whatever the units of the input flux.
-        level = np.nanmedian(model[quiet])
-        lc4.detrended_flux = (NORMALIZED_BASELINE + (f4_gp - model) / level) * u.dimensionless_unscaled
-        lc4.gp_model = model
-
-        best_params["method"] = f"{best_params.get('method', 'baseline')}+gp"
-        best_params["gp"] = gp_params
-        best_params["n_gp_masked"] = n_masked
-
-    except Exception as exc:
-        logger.warning(f"  GP fit failed ({exc!r}); using the baseline result.")
-        best_params["gp_error"] = str(exc)
+    # Relative flux, 1 + residual / quiescent level: the flat, flare-free
+    # baseline sits at exactly NORMALIZED_BASELINE and flare amplitudes
+    # are relative, whatever the units of the input flux.
+    level = np.nanmedian(model[quiet])
+    lc4.detrended_flux = (NORMALIZED_BASELINE + (f4_gp - model) / level) * u.dimensionless_unscaled
+    lc4.gp_model = model

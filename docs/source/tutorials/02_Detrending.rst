@@ -101,9 +101,8 @@ rotational modulation in two stages:
    GP residual, and the GP is refitted without them.
 
 The de-trended flux is the residual from the GP model, normalised
-by the flux level and centred on 1. If
-``celerite2`` is not installed, or ``use_gp=False`` is passed, the
-polynomial baseline alone is used.
+by the flux level and centred on 1. The polynomial baseline only provides
+the GP's initial flare mask.
 
 Heavy spot modulation
 ---------------------
@@ -156,7 +155,7 @@ Your own de-trending function
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 ``flc.detrend()`` uses ``custom_detrending`` and passes any keyword
-arguments on to it, e.g. ``flc.detrend(use_gp=False)``. You can also pass
+arguments on to it, e.g. ``flc.detrend(gp_bin_factor=5)``. You can also pass
 *any* other de-trending function as ``flc.detrend(func=my_function)``. Make
 sure that the function returns a ``FlareLightCurve`` with the same time
 stamps, and that the output is stored as ``detrended_flux`` and

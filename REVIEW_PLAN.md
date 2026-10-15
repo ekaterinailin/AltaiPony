@@ -66,8 +66,8 @@ going into the helpers yet; then `_apply_gp_step` (309–470).
 **Tests** (`test_pipeline.py`):
 - [ ] Output has the same length and time stamps as the input, keeps NaNs
       where the input had them, and sets `it_med` and `gp_model`.
-- [x] Zero point at the documented level for the GP path and the non-GP path
-      (`use_gp=False`).
+- [x] Zero point at the documented level (the non-GP path, `use_gp=False`,
+      was removed on 2026-10-15).
 - [x] Scale invariance: `scale=1` and `scale=3400` give the same relative
       flare amplitude and equivalent duration.
 - [x] Fix the 4 Quantity failures (`detrended_flux` is dimensionless).

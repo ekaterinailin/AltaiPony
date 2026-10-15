@@ -47,7 +47,7 @@ Settings behind these numbers:
 Before the window detector (classic 3 x 3 sigma rule): 662 (pipeline) and
 692 (perfect detrending), 0 false positives outside injected flares.
 
-**5σ initial mask** (`second_pass_sigma=5.0`, default since 2026-10-13; 1000
+**5σ initial mask** (`second_pass_sigma=5.0`, now `final_mask_sigma`, default since 2026-10-13; 1000
 light curves): 7166 recovered, 45 false positives, 29 outside injected
 flares. Who produces them (2026-10-14):
 
