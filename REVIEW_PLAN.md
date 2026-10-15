@@ -98,7 +98,7 @@ going into the helpers yet; then `_apply_gp_step` (309–470).
 
 **Settled by injection-recovery:** the GP runs for every star and only takes
 its starting period from the highest peak; the FAP threshold gates the
-second-period search and the residual-period term. The Baluev FAP is tiny for
+residual-period term (the second-period search was removed on 2026-10-15). The Baluev FAP is tiny for
 almost everything, including flares alone on a spotless star (~1e-60, ~1e-33
 with the baseline's flare mask removed).
 
@@ -159,8 +159,7 @@ a mask thresholded above the residual's own median.)
 **Read:** `_segment_edge_mask` (31–54), `_bin_training_per_segment`
 (57–156), `fit_gp_rotation` (159–488, kernel bounds in `_rotation_bounds`
 410–423, clipping 440–472); in `pipeline.py`, `_apply_gp_step` (309–470):
-first fit (381), second-period search (394–406, `_second_period_candidates`
-250–287), residual-period term (408–424, `_residual_period` 290–306),
+first fit (381), residual-period term (408–424, `_residual_period` 290–306),
 matched-filter passes (426–446).
 
 **Check:**
@@ -193,9 +192,8 @@ matched-filter passes (426–446).
 - **Extra terms** (second period, residual period) are kept if they lower the
   residual scatter, not by a likelihood comparison. Can a term ever absorb
   flares, e.g. with many flares at roughly regular spacing?
-- ⚠ **Short light curves.** On 8–12-day two-period stars the second-period
-  candidates are often sidelobes just outside the ±10 % exclusion. Should the
-  exclusion width scale with 1/T?
+- ✓ **Short light curves** (second-period candidates as sidelobes): moot,
+  the second-period search was removed on 2026-10-15.
 - **Offset** (`pipeline.py` 455): `median(flux − gp)` over unmasked points.
 
 **Tests** (`test_gp.py`):

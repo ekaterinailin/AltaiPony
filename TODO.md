@@ -115,6 +115,16 @@ bumps in noisy stars above the 1-in-1000 rate of perfect detrending).
 
 ## Open
 
+- **Periodogram FAP threshold** (on hold, 2026-10-15). `periodicity_fap_threshold`
+  (1e-3; the benchmark passes 0.001) no longer affects the GP's starting
+  period (the highest peak, significant or not). It only gates the second
+  rotation term and the residual-period term, each kept only if it lowers
+  the residual scatter. 1e-2 would try more of them (slower, risk of a
+  term following short structure); since the jitter fix one rotation term
+  already follows a second mode in `test_gp.py`, so little effect is
+  expected. Test: one 1000-LC run with `periodicity_fap_threshold=0.01`
+  against the current reference. Related: check whether the two extra
+  terms still earn their keep at all.
 - **Missing cadences.** `custom_detrending` no longer interpolates missing
   cadences (2026-10-13). Test with a benchmark variant that drops 1–2 % of
   the cadences at random plus a few short dropouts; if recovery worsens,
@@ -306,8 +316,10 @@ Detrending:
 - Residual-period term (`gp_residual_term=True`): an extra rotation term at
   a significant period left in the GP residual (often an uncovered
   harmonic, e.g. 0.346 d on LC 21).
-- Second rotation term (`gp_second_rotation=True`) for a second, unrelated
-  spot period.
+- Second rotation term (`gp_second_rotation`) for a second, unrelated spot
+  period: removed 2026-10-15. Without it on 1000 LCs: 7167 vs. 7170
+  recovered, 14 vs. 13 false positives outside flares (LCs 662, 838, both
+  marginal noise bumps), 25 instead of 91 min.
 - Matched filter runs on the residual of a first GP fit, not on the baseline
   residual (which masked rotation maxima on fast rotators).
 - `custom_detrending` returns relative flux with a quiet baseline of exactly

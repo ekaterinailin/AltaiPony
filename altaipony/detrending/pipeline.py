@@ -39,7 +39,6 @@ def custom_detrending(
     gp_clip_sigma=3.0,
     gp_clip_iters=3,
     gp_anchor_edges=True,
-    gp_second_rotation=True,
     gp_residual_term=True,
     matched_filter_flares=True,
     matched_filter_snr=5.0,
@@ -61,8 +60,8 @@ def custom_detrending(
         False-alarm probability threshold for the periodograms.  The GP always
         starts from the highest peak of the periodogram of the flux without
         the baseline's flare mask, significant or not; the threshold applies
-        to the candidates of the second-period search
-        (``gp_second_rotation``).  Defaults to 1e-3.
+        to the GP residual's periodogram (``gp_residual_term``).  Defaults to
+        1e-3.
     period_min_days : float
         Shortest period searched by the Lomb-Scargle periodogram, in days.
         Defaults to 0.1 days.
@@ -120,14 +119,6 @@ def custom_detrending(
         forced through the segment edges rather than extrapolating past them.
         Fixes large edge residuals / spurious edge flares on low-noise,
         high-amplitude rotators.  Defaults to True.
-    gp_second_rotation : bool
-        If True, search the flux's periodogram for up to three candidate
-        second periods, ignoring the GP's rotation period and its first
-        harmonic, with the same FAP threshold as the initial periodicity
-        check.  The GP is refitted with a second rotation term at
-        each, and the fit with the lowest residual scatter is kept if it beats
-        the single term.  For stars with two unrelated periodic signals.
-        Defaults to True.
     gp_residual_term : bool
         If True (default), search the residual of the GP fit for a
         significant periodic signal (FAP below ``periodicity_fap_threshold``)
@@ -173,12 +164,16 @@ def custom_detrending(
         If the light curve is too short for a periodogram (fewer than 20
         unmasked cadences, or spanning less than ``2 * period_min_days``).
     """
-    # Work on a copy: the input light curve stays unchanged.  Missing
-    # cadences are not filled in: the baseline, the GP and the noise
-    # estimate work on the actual time stamps.
+    # work on a copy
     lc = lc.copy()
+
+    # time dt
     dt = np.mean(np.diff(lc.time.value))
+
+    # inplace: find continuous stretches of time series
     lc.find_cont_windows(maxgap=maxgap * dt)
+
+    
     time, flux = lc.time.value, lc.flux.value
 
     # --- Baseline: segmented polynomial ------------------------------------
@@ -223,7 +218,6 @@ def custom_detrending(
         gp_clip_sigma=gp_clip_sigma,
         gp_clip_iters=gp_clip_iters,
         gp_anchor_edges=gp_anchor_edges,
-        gp_second_rotation=gp_second_rotation,
         gp_residual_term=gp_residual_term,
         periodicity_fap_threshold=periodicity_fap_threshold,
         matched_filter_flares=matched_filter_flares,
@@ -237,46 +231,6 @@ def custom_detrending(
     lc4 = estimate_detrended_noise(lc4)
 
     return lc4
-
-
-def _second_period_candidates(time, flux, periods, fap_threshold,
-                              n_candidates=3, period_min=0.1, harmonic_tolerance=0.1):
-    """Candidate periods for a second periodic signal in ``flux``, strongest
-    first.
-
-    ``flux`` is relative flux (median ~1).  The Lomb-Scargle periodogram is
-    searched from ``period_min`` to half the time span, ignoring frequencies
-    within ``harmonic_tolerance`` of ``1 / P`` and ``2 / P`` for each ``P`` in
-    ``periods`` (the rotation period from the periodogram and as fitted by the
-    GP): a rotation term at ``P`` already covers both.  Up to ``n_candidates``
-    peaks are returned, each more than ``harmonic_tolerance`` away in
-    frequency from the stronger ones and passing the same FAP threshold as
-    the initial periodicity check
-    (``detect_strong_periodicity``).  Several candidates are needed because a
-    strong peak can be a sidelobe of the rotation signal (e.g. from its
-    changing amplitude) rather than a second signal.
-    """
-    finite = np.isfinite(time) & np.isfinite(flux)
-    t, f = time[finite], flux[finite]
-    if len(t) < 20:
-        return []
-    ls, frequency, power = lomb_scargle(
-        t, f - np.median(f), min_frequency=2.0 / (t[-1] - t[0]), max_frequency=1.0 / period_min
-    )
-    excluded = np.zeros(len(frequency), dtype=bool)
-    for period in periods:
-        for harmonic in (1.0 / period, 2.0 / period):
-            excluded |= np.abs(frequency / harmonic - 1) < harmonic_tolerance
-
-    candidates = []
-    while len(candidates) < n_candidates and not excluded.all():
-        peak = np.argmax(np.where(excluded, -np.inf, power))
-        fap = ls.false_alarm_probability(power[peak], method="baluev")
-        if not fap < fap_threshold:
-            break  # all remaining peaks are weaker
-        candidates.append(1.0 / frequency[peak])
-        excluded |= np.abs(frequency / frequency[peak] - 1) < harmonic_tolerance
-    return candidates
 
 
 def _bin_factor_for_curvature(time, flux, model, flare_mask, bin_factor, max_bias):
@@ -341,7 +295,6 @@ def _apply_gp_step(
     gp_clip_sigma,
     gp_clip_iters,
     gp_anchor_edges=True,
-    gp_second_rotation=True,
     gp_residual_term=True,
     periodicity_fap_threshold=1e-3,
     matched_filter_flares=True,
@@ -359,10 +312,10 @@ def _apply_gp_step(
     baseline's flare mask, aligned with ``lc4``.  With
     ``matched_filter_flares``, the GP is fitted twice: first with this mask,
     then with the detections of a matched filter run on the first fit's
-    residual added to it.  With ``gp_second_rotation``, a second rotation
-    term at a second period from the flux's periodogram is added to all fits
-    after the first, if it lowers the residual scatter.  Either way, the
-    post-fit residual clipping still catches flares the mask missed.
+    residual added to it.  With ``gp_residual_term``, a rotation term at a
+    significant period of the first fit's residual is added to all later
+    fits, if it lowers the residual scatter.  Either way, the post-fit
+    residual clipping still catches flares the mask missed.
     ``lc4`` (``detrended_flux``, ``gp_model``) is modified in place.
     """
 
@@ -377,7 +330,7 @@ def _apply_gp_step(
     norm = np.nanmedian(f4_gp)
 
     def _fit(mask, extra_periods=()):
-        model, _, params = fit_gp_rotation(
+        model, _, _ = fit_gp_rotation(
             t4_gp,
             f4_gp / norm,
             fe4_gp / norm,
@@ -393,41 +346,21 @@ def _apply_gp_step(
             jitter_only=gp_jitter_only,
             jitter_floor=gp_jitter_floor,
         )
-        return model, params
+        return model
 
     bin_factor = gp_bin_factor
-    gp_model, gp_params = _fit(flare_mask)
+    gp_model = _fit(flare_mask)
     if gp_bin_max_bias is not None and gp_bin_factor > 1:
         k = _bin_factor_for_curvature(t4_gp, f4_gp / norm, gp_model, flare_mask,
                                       gp_bin_factor, gp_bin_max_bias)
         if k != bin_factor:
             bin_factor = k
-            gp_model, gp_params = _fit(flare_mask)
+            gp_model = _fit(flare_mask)
 
-    # A second periodic signal at a period unrelated to the first (e.g.
-    # from a second star) cannot be fitted by the rotation term.  Its
-    # residual after the first fit is small and non-sinusoidal (the GP
-    # follows most of it), so search for it in the periodogram of the
-    # flux instead, refit with a second rotation term at each candidate
-    # period, and keep the fit with the lowest scatter of the unmasked
-    # residuals, if it is lower than with one term: a candidate can be a
-    # sidelobe, and two terms can also compete and fit worse than one.
     def _scatter(model):
         return np.nanstd((f4_gp / norm - model)[~flare_mask])
 
     extra = []
-    if gp_second_rotation:
-        best = _scatter(gp_model)
-        for candidate in _second_period_candidates(
-            t4_gp[~flare_mask],
-            (f4_gp / norm)[~flare_mask],
-            (dominant_period, gp_params["period"]),
-            fap_threshold=periodicity_fap_threshold,
-        ):
-            model2, params2 = _fit(flare_mask, [candidate])
-            if _scatter(model2) < best:
-                best = _scatter(model2)
-                gp_model, gp_params, extra = model2, params2, [candidate]
 
     # What the kernel still cannot follow (e.g. a fast, large modulation
     # that changes faster than the terms' damping time allows) stays in
@@ -441,9 +374,9 @@ def _apply_gp_step(
             fap_threshold=periodicity_fap_threshold,
         )
         if residual_period is not None:
-            model2, params2 = _fit(flare_mask, extra + [residual_period])
+            model2 = _fit(flare_mask, extra + [residual_period])
             if _scatter(model2) < _scatter(gp_model):
-                gp_model, gp_params = model2, params2
+                gp_model = model2
                 extra = extra + [residual_period]
 
     # Second pass: per-cadence masks catch narrow flares but miss wide,
@@ -467,7 +400,7 @@ def _apply_gp_step(
         if not (mf_mask & ~flare_mask).any():
             break
         flare_mask = flare_mask | mf_mask
-        gp_model, gp_params = _fit(flare_mask, extra)
+        gp_model = _fit(flare_mask, extra)
 
     gp_model = gp_model * norm
 

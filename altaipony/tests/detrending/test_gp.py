@@ -29,11 +29,11 @@ def two_period_star(make_lc):
     return lc
 
 
-@pytest.mark.parametrize("second_rotation", [False, True])
-def test_two_periods_leave_white_noise(two_period_star, second_rotation):
-    """With or without the second rotation term, the residual is close to the
-    white noise."""
-    lc = custom_detrending(two_period_star, gp_second_rotation=second_rotation)
+def test_two_periods_leave_white_noise(two_period_star):
+    """A star with two unrelated spot periods: the residual is close to the
+    white noise (the separate second rotation term was removed on
+    2026-10-15)."""
+    lc = custom_detrending(two_period_star)
     scatter = np.nanstd(_values(lc.detrended_flux)) / NOISE
     assert scatter < 1.5
 
