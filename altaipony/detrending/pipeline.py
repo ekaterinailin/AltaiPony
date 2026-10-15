@@ -175,7 +175,7 @@ def custom_detrending(
     FlareLightCurve with
         detrended_flux : relative flux whose flat, flare-free baseline is
             ``NORMALIZED_BASELINE`` (1.0), independent of the units of the
-            input flux (still labelled e-/s for now).
+            input flux (dimensionless).
         it_med : iterative median of the final detrended flux.
         detrended_flux_err : noise of the detrended flux, estimated from
             its flare-masked rolling scatter (``estimate_detrended_noise``).
@@ -187,16 +187,15 @@ def custom_detrending(
     # estimate work on the actual time stamps.
     lc = lc.copy()
     dt = np.mean(np.diff(lc.time.value))
-    cont_windows = lc.find_cont_windows(maxgap=maxgap * dt).cont_windows
+    lc.find_cont_windows(maxgap=maxgap * dt)
     time, flux = lc.time.value, lc.flux.value
 
     # --- Baseline: segmented polynomial ------------------------------------
-    m2flux, _, best_params = fit_lightcurve_detrender(
-        time, flux, lc.flux_err.value, cont_windows, config=detrender_config
+    # Its flare mask is the GP's initial flare mask.
+    m2flux, baseline_flare_mask = fit_lightcurve_detrender(
+        time, flux, lc.flux_err.value, config=detrender_config
     )
-
-    # The baseline stage's flare mask is the GP's initial flare mask.
-    baseline_flare_mask = best_params.pop("ld_final_flare_mask")
+    best_params = {}
 
     # --- Periodicity check ------------------------------------------------
     # Lomb-Scargle periodogram of the raw flux without the cadences in the
@@ -216,11 +215,9 @@ def custom_detrending(
     best_params["periodogram_fap"] = fap
     best_params["periodic"] = is_periodic
 
-    # The baseline output is the detrended flux, at the input flux level; the
-    # GP step replaces it.  ``flux`` and ``flux_err`` are the original ones,
-    # which the GP is trained on.
+    # ``flux`` and ``flux_err`` are the original ones, which the GP is
+    # trained on.
     lc4 = lc
-    lc4.detrended_flux = m2flux * u.electron / u.s
 
     # Optional final Gaussian-Process refinement (in place on lc4/best_params).
     _apply_gp_step(
@@ -248,12 +245,11 @@ def custom_detrending(
     )
 
     if "gp" not in best_params:
-        # No GP model (GP disabled, no usable period, or GP fit failed): the
-        # detrended flux is still at the input flux level.  Express it as
-        # relative flux too, scaled by its global iterative median.
-        det = np.asarray(getattr(lc4.detrended_flux, "value", lc4.detrended_flux), dtype=float)
-        level = _find_iterative_median(det, None)[0]
-        lc4.detrended_flux = (NORMALIZED_BASELINE * det / level) * u.electron / u.s
+        # No GP model (GP disabled, no usable period, or GP fit failed): use
+        # the baseline's detrended flux, which is at the input flux level,
+        # as relative flux scaled by its global iterative median.
+        level = _find_iterative_median(m2flux, None)[0]
+        lc4.detrended_flux = (NORMALIZED_BASELINE * m2flux / level) * u.dimensionless_unscaled
 
     # Iterative median and noise of the final detrended flux.
     lc4.find_iterative_median()
@@ -513,7 +509,7 @@ def _apply_gp_step(
         # baseline sits at exactly NORMALIZED_BASELINE and flare amplitudes
         # are relative, whatever the units of the input flux.
         level = np.nanmedian(model[quiet])
-        lc4.detrended_flux = (NORMALIZED_BASELINE + (f4_gp - model) / level) * u.electron / u.s
+        lc4.detrended_flux = (NORMALIZED_BASELINE + (f4_gp - model) / level) * u.dimensionless_unscaled
         lc4.gp_model = model
 
         best_params["method"] = f"{best_params.get('method', 'baseline')}+gp"
@@ -521,5 +517,5 @@ def _apply_gp_step(
         best_params["n_gp_masked"] = n_masked
 
     except Exception as exc:
-        logger.warning(f"  GP fit failed ({exc!r}); keeping pre-GP result.")
+        logger.warning(f"  GP fit failed ({exc!r}); using the baseline result.")
         best_params["gp_error"] = str(exc)

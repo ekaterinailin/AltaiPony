@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import logging
-import warnings
 
 import numpy as np
 import pandas as pd
@@ -55,13 +54,6 @@ class DetrendConfig:
         Rolling window size, in cadences, for local noise estimates.
     smooth_sigma_cadences : int
         Gaussian smoothing width, in cadences, for the combined trend.
-    center_final_residual : bool
-        If True, subtract the moving-average median from the final residual.
-    centering_ma_window : int
-        Moving-average window used for residual centering diagnostics.
-    centering_clip_abs : float or None
-        Optional absolute clipping limit applied when estimating the centering offset.
-        The default is None, so no pre-centering clipping is performed.
     """
     window_sizes: tuple[float, ...] = (0.6, 0.9, 1.2)
     poly_deg: int = 4
@@ -74,29 +66,6 @@ class DetrendConfig:
     final_flare_max_mask_fraction: float = 0.05
     rolling_window_pts: int = 100
     smooth_sigma_cadences: int = 5
-    center_final_residual: bool = True
-    centering_ma_window: int = 10
-    centering_clip_abs: float | None = None
-
-@dataclass
-class DetrendResult:
-    """Outputs produced by the detrending pipeline.
-
-    Attributes
-    ----------
-    final_df : pandas.DataFrame
-        Time-sorted table containing flux, trends, residuals, masks, and diagnostics.
-    seg_stats_p1 : pandas.DataFrame
-        First-pass per-segment fit-quality table.
-    seg_stats_p2 : pandas.DataFrame
-        Second-pass per-segment fit-quality table.
-    summary : dict
-        Scalar run summary and diagnostic values.
-    """
-    final_df: pd.DataFrame
-    seg_stats_p1: pd.DataFrame
-    seg_stats_p2: pd.DataFrame
-    summary: dict
 
 def sigma_clipped_std(arr: np.ndarray, n_sigma: float = 3.0, max_iter: int = 20) -> float:
     """Compute an iterative sigma-clipped standard deviation.
@@ -204,12 +173,8 @@ def preliminary_flare_mask(
         if len(idx) < poly_deg + 2:
             continue
         t_loc = time[idx] - time[idx].mean()
-        w_    = 1.0 / np.maximum(flux_err[idx], 1e-15)**2
-        try:
-            coeffs = np.polyfit(t_loc, flux[idx], deg=poly_deg, w=np.sqrt(w_))
-            baseline[idx] = np.polyval(coeffs, t_loc)
-        except np.linalg.LinAlgError:
-            continue
+        coeffs = np.polyfit(t_loc, flux[idx], deg=poly_deg, w=np.sqrt(1.0 / flux_err[idx]**2))
+        baseline[idx] = np.polyval(coeffs, t_loc)
 
     residuals = flux - baseline
     finite    = np.isfinite(residuals)
@@ -265,7 +230,7 @@ def fit_window_grid(
     seg_id : numpy.ndarray
         Integer segment index at every cadence.
     metrics : dict
-        Per-segment fit-quality statistics.
+        Per-segment fit-quality statistics used by ``score_segment``.
     """
     # Build segment grid starting from time.min() + shift
     t_offset = time - (time.min() + shift)
@@ -280,13 +245,12 @@ def fit_window_grid(
             continue
 
         t_seg, f_seg = time[idx], flux[idx]
-        fe_seg = np.maximum(flux_err[idx], 1e-15)
+        fe_seg = flux_err[idx]
         fm_seg = flare_mask[idx]
 
         t_local   = t_seg - t_seg.mean()
         n_total   = len(idx)
-        n_masked  = int(fm_seg.sum())
-        frac_mask = n_masked / n_total
+        frac_mask = fm_seg.sum() / n_total
 
         fit_idx = np.where(~fm_seg)[0]
         if len(fit_idx) < min_fit_pts:
@@ -302,10 +266,7 @@ def fit_window_grid(
             weights[:n_e]  *= edge_weight
             weights[-n_e:] *= edge_weight
 
-        try:
-            coeffs = np.polyfit(t_fit, f_fit, deg=poly_deg, w=np.sqrt(weights))
-        except (np.linalg.LinAlgError, ValueError):
-            continue
+        coeffs = np.polyfit(t_fit, f_fit, deg=poly_deg, w=np.sqrt(weights))
 
         baseline[idx] = np.polyval(coeffs, t_local)
 
@@ -320,26 +281,13 @@ def fit_window_grid(
         r2     = 1.0 - ss_res / ss_tot if ss_tot > 1e-30 else np.nan
         r2_adj = (1.0 - (1.0 - r2) * (n_q - 1) / dof) if np.isfinite(r2) and dof > 0 else np.nan
 
-        chi2     = float(np.sum((r_q / fe_fit)**2))
-        red_chi2 = chi2 / dof
-        rsd      = float(np.std(r_q))
-
-        rss = max(ss_res, 1e-300)
-        aic = n_q * np.log(rss / max(n_q, 1)) + 2.0 * k
-        bic = n_q * np.log(rss / max(n_q, 1)) + k * np.log(max(n_q, 1))
+        red_chi2 = float(np.sum((r_q / fe_fit)**2)) / dof
 
         metrics[sid] = {
-            "r2_adj":     r2_adj,
-            "red_chi2":   red_chi2,
-            "rsd":        rsd,
-            "aic":        float(aic),
-            "bic":        float(bic),
-            "n_fit":      len(fit_idx),
-            "n_total":    n_total,
-            "n_masked":   n_masked,
+            "r2_adj":      r2_adj,
+            "red_chi2":    red_chi2,
+            "n_fit":       len(fit_idx),
             "frac_masked": frac_mask,
-            "seg_start":  float(t_seg.min()),
-            "seg_end":    float(t_seg.max()),
         }
 
     return baseline, seg_id, metrics
@@ -376,12 +324,12 @@ def run_all_windows(time, flux, flux_err, flare_mask, window_sizes,
     Returns
     -------
     dict
-        Dictionary keyed by ``(window_size, shift)`` with baselines, segment ids,
-        metrics, and grid labels.
+        Dictionary keyed by ``(window_size, shift)`` with baselines, segment ids
+        and metrics.
     """
     results = {}
     for w in window_sizes:
-        for shift_frac, label in [(0.0, "normal"), (0.5, "shifted")]:
+        for shift_frac in (0.0, 0.5):
             shift = shift_frac * w
             bl, sids, mets = fit_window_grid(
                 time, flux, flux_err, flare_mask,
@@ -389,58 +337,9 @@ def run_all_windows(time, flux, flux_err, flare_mask, window_sizes,
                 poly_deg=poly_deg, n_edge=n_edge,
                 edge_weight=edge_weight, min_fit_pts=min_fit_pts,
             )
-            results[(w, shift)] = {
-                "baseline":    bl,
-                "seg_ids":     sids,
-                "metrics":     mets,
-                "window_size": w,
-                "shift":       shift,
-                "label":       label,
-            }
-
-            if not mets:
-                warnings.warn(
-                    f"No valid segments were fitted for window {w:.2f} d ({label} grid).",
-                    RuntimeWarning,
-                )
+            results[(w, shift)] = {"baseline": bl, "seg_ids": sids, "metrics": mets}
 
     return results
-
-
-def build_segment_stats_df(all_results: dict) -> pd.DataFrame:
-    """Flatten per-segment metrics into one table.
-
-    Parameters
-    ----------
-    all_results : dict
-        Output from ``run_all_windows``.
-
-    Returns
-    -------
-    pandas.DataFrame
-        Table with one row per fitted segment and window grid.
-    """
-    rows = []
-    for (w, shift), res in all_results.items():
-        for sid, m in res["metrics"].items():
-            rows.append({
-                "window_size":  w,
-                "shift":        shift,
-                "window_label": res["label"],
-                "seg_id":       sid,
-                "seg_start":    m["seg_start"],
-                "seg_end":      m["seg_end"],
-                "r2_adj":       m["r2_adj"],
-                "red_chi2":     m["red_chi2"],
-                "rsd":          m["rsd"],
-                "aic":          m["aic"],
-                "bic":          m["bic"],
-                "n_fit":        m["n_fit"],
-                "n_total":      m["n_total"],
-                "n_masked":     m["n_masked"],
-                "frac_masked":  m["frac_masked"],
-            })
-    return pd.DataFrame(rows)
 
 
 def score_segment(
@@ -464,10 +363,8 @@ def score_segment(
     float
         Segment score. Returns ``-numpy.inf`` for disqualified segments.
     """
-    r2_adj     = m.get("r2_adj",     np.nan)
-    red_chi2   = m.get("red_chi2",   np.nan)
-    n_fit      = m.get("n_fit",      0)
-    frac_mask  = m.get("frac_masked", 1.0)
+    r2_adj, red_chi2 = m["r2_adj"], m["red_chi2"]
+    n_fit, frac_mask = m["n_fit"], m["frac_masked"]
 
     # Hard disqualifiers
     if not np.isfinite(r2_adj):
@@ -494,7 +391,7 @@ def assemble_combined_trend(
     all_results: dict,
     smooth_sigma_cadences: int = 5,
     min_fit_pts: int = 15,
-) -> tuple:
+) -> np.ndarray:
     """Build a blended per-cadence baseline from all window grids.
 
     At each cadence, valid segment fits are weighted by ``exp(score)`` using scores
@@ -514,16 +411,8 @@ def assemble_combined_trend(
 
     Returns
     -------
-    trend : numpy.ndarray
+    numpy.ndarray
         Smoothed blended baseline.
-    best_window_size : numpy.ndarray
-        Window size of the highest-scoring candidate per cadence.
-    best_shift : numpy.ndarray
-        Grid shift of the highest-scoring candidate per cadence.
-    best_seg_id : numpy.ndarray
-        Segment id of the highest-scoring candidate per cadence.
-    best_score : numpy.ndarray
-        Score of the highest-scoring candidate per cadence.
 
     Raises
     ------
@@ -576,206 +465,59 @@ def assemble_combined_trend(
     if smooth_sigma_cadences > 0 and np.all(np.isfinite(trend)):
         trend = gaussian_filter1d(trend.astype(float), sigma=smooth_sigma_cadences)
 
-    # Track the single best candidate at each cadence (for diagnostics)
-    best_ki           = np.argmax(sc_stack, axis=0)
-    best_window_size  = np.array([keys[best_ki[i]][0] for i in range(n)])
-    best_shift        = np.array([keys[best_ki[i]][1] for i in range(n)])
-    best_seg_id       = np.array([int(all_results[keys[best_ki[i]]]["seg_ids"][i]) for i in range(n)])
-    best_score        = sc_stack[best_ki, np.arange(n)]
+    return trend
 
-    return trend, best_window_size, best_shift, best_seg_id, best_score
-
-
-
-def moving_average(arr: np.ndarray, window: int) -> np.ndarray:
-    """Return a centred moving average.
-
-    Parameters
-    ----------
-    arr : numpy.ndarray
-        Values to smooth.
-    window : int
-        Rolling window length, in cadences.
-
-    Returns
-    -------
-    numpy.ndarray
-        Centred moving-average values.
-
-    Raises
-    ------
-    ValueError
-        If ``window`` is smaller than one.
-    """
-    if window < 1:
-        raise ValueError("window must be at least 1.")
-    return pd.Series(arr).rolling(window, center=True, min_periods=1).mean().to_numpy()
-
-
-def center_residual_by_moving_average(
-    residuals: np.ndarray,
-    ma_window: int = 10,
-    clip_abs: float | None = None,
-) -> tuple[np.ndarray, dict]:
-    """Center residuals by subtracting the moving-average median.
-
-    Because moving averages are linear, subtracting this offset from the
-    residual shifts every recomputed moving average by the same amount.
-
-    Parameters
-    ----------
-    residuals : numpy.ndarray
-        Residual flux values to center.
-    ma_window : int, optional
-        Moving-average window length, in cadences.
-    clip_abs : float or None, optional
-        Optional absolute clipping limit used when estimating the median offset. If
-        None or non-positive, no absolute clipping is applied.
-
-    Returns
-    -------
-    centered : numpy.ndarray
-        Centered residual values.
-    diagnostics : dict
-        Whether centering was applied and the subtracted offset.
-    """
-    residuals = np.asarray(residuals, dtype=float)
-    ma = moving_average(residuals, ma_window)
-
-    # With the default clip_abs=None the centering sample is all finite
-    # moving-average values.
-    center_mask = np.isfinite(ma)
-    if clip_abs is not None and np.isfinite(clip_abs) and clip_abs > 0 and center_mask.any():
-        center_mask &= np.abs(ma) < clip_abs
-
-    if not center_mask.any():
-        offset = 0.0
-        centered = residuals.copy()
-    else:
-        offset = float(np.nanmedian(ma[center_mask]))
-        centered = residuals - offset
-
-    diagnostics = {
-        "centering_applied": bool(center_mask.any()),
-        "residual_offset_subtracted": float(offset),
-    }
-    return centered, diagnostics
 
 
 def build_safe_final_flare_mask(
     residuals: np.ndarray,
-    sigma_thresh: float = 3.0,
-    previous_mask: np.ndarray | None = None,
+    sigma_thresh: float,
+    previous_mask: np.ndarray,
     max_mask_fraction: float = 0.05,
-) -> tuple[np.ndarray, dict]:
-    """Build a positive-outlier flare mask with a guard against mask explosion.
+) -> np.ndarray:
+    """Mask the residual's positive outliers, with a guard against mask explosion.
 
-    The final flare mask is recomputed after the periodic corrections and optional
-    residual centering. In pathological cases a one-sided threshold can mark nearly
-    the entire light curve as flaring, which then corrupts the later quiescent-noise
-    estimate. This helper rejects such masks and falls back to the previous mask.
+    A cadence is masked if its residual exceeds the median by more than
+    ``sigma_thresh`` robust sigmas.  Median and sigma are estimated from the
+    cadences outside ``previous_mask`` (from all cadences if fewer than 20
+    remain).  If more than ``max_mask_fraction`` of the cadences would be
+    masked, ``previous_mask`` is returned instead: flares should not be almost
+    the whole light curve.
 
     Parameters
     ----------
     residuals : numpy.ndarray
         Final residual flux values.
-    sigma_thresh : float, optional
+    sigma_thresh : float
         Positive-outlier threshold in robust sigma units.
-    previous_mask : numpy.ndarray or None, optional
-        Previous/provisional flare mask to use as the fallback and as the first
-        quiescent sample for estimating the robust noise.
+    previous_mask : numpy.ndarray
+        Previous flare mask: the fallback, and the cadences left out of the
+        noise estimate.
     max_mask_fraction : float, optional
-        Maximum allowed fraction of finite cadences in the candidate final mask.
-        If the candidate exceeds this fraction, ``previous_mask`` is returned.
+        Maximum fraction of cadences in the new mask.
+
     Returns
     -------
-    final_mask : numpy.ndarray
-        Safe final flare mask.
-    diagnostics : dict
-        Diagnostics describing whether the recomputed mask was accepted or rejected.
+    numpy.ndarray
+        Boolean flare mask.
     """
-    residuals = np.asarray(residuals, dtype=float)
-    finite = np.isfinite(residuals)
-
-    if previous_mask is None:
-        previous_mask = np.zeros(len(residuals), dtype=bool)
-    else:
-        previous_mask = np.asarray(previous_mask, dtype=bool)
-        if len(previous_mask) != len(residuals):
-            raise ValueError("previous_mask must have the same length as residuals.")
-
-    n_finite = int(finite.sum())
-    if n_finite == 0:
-        return previous_mask.copy(), {
-            "final_mask_recomputed": False,
-            "final_mask_reject_reason": "no finite residuals",
-            "final_mask_candidate_fraction": np.nan,
-            "final_mask_fraction": float(previous_mask.mean()) if len(previous_mask) else np.nan,
-            "final_mask_center": np.nan,
-            "final_mask_sigma": np.nan,
-            "final_mask_candidate_count": 0,
-        }
-
-    # Estimate the noise from points not already suspected as flares. If too few
-    # remain, use all finite residuals rather than estimating from a tiny sample.
-    q = finite & ~previous_mask
+    q = ~previous_mask
     if q.sum() < 20:
-        q = finite
-
-    center = float(np.nanmedian(residuals[q]))
+        q = np.ones(len(residuals), dtype=bool)
+    center = np.nanmedian(residuals[q])
     sigma = robust_sigma(residuals[q])
+    candidate = residuals > center + sigma_thresh * sigma
+    if candidate.mean() > max_mask_fraction:
+        return previous_mask.copy()
+    return candidate
 
-    if not np.isfinite(sigma) or sigma <= 0:
-        sigma = sigma_clipped_std(residuals[q])
-
-    previous_fraction = float((previous_mask & finite).sum() / n_finite)
-    if not np.isfinite(sigma) or sigma <= 0:
-        return previous_mask.copy(), {
-            "final_mask_recomputed": False,
-            "final_mask_reject_reason": "invalid sigma",
-            "final_mask_candidate_fraction": np.nan,
-            "final_mask_fraction": previous_fraction,
-            "final_mask_center": center,
-            "final_mask_sigma": sigma,
-            "final_mask_candidate_count": 0,
-        }
-
-    candidate = finite & (residuals > center + sigma_thresh * sigma)
-    candidate_count = int(candidate.sum())
-    candidate_fraction = float(candidate_count / n_finite)
-
-    # Safety guard: flares should not be almost the whole light curve. If this
-    # happens, keep the previous/provisional mask so the downstream noise estimate
-    # still has a meaningful quiescent sample.
-    max_mask_fraction = float(max_mask_fraction)
-    if np.isfinite(max_mask_fraction) and max_mask_fraction > 0 and candidate_fraction > max_mask_fraction:
-        return previous_mask.copy(), {
-            "final_mask_recomputed": False,
-            "final_mask_reject_reason": f"candidate mask fraction too high: {candidate_fraction:.4f}",
-            "final_mask_candidate_fraction": candidate_fraction,
-            "final_mask_fraction": previous_fraction,
-            "final_mask_center": center,
-            "final_mask_sigma": sigma,
-            "final_mask_candidate_count": candidate_count,
-        }
-
-    return candidate, {
-        "final_mask_recomputed": True,
-        "final_mask_reject_reason": "",
-        "final_mask_candidate_fraction": candidate_fraction,
-        "final_mask_fraction": candidate_fraction,
-        "final_mask_center": center,
-        "final_mask_sigma": sigma,
-        "final_mask_candidate_count": candidate_count,
-    }
 
 def run_detrending(
     time: np.ndarray,
     flux: np.ndarray,
     flux_err: np.ndarray,
     config: DetrendConfig | None = None,
-    external_flare_mask: np.ndarray | None = None,
-) -> DetrendResult:
+) -> tuple[np.ndarray, np.ndarray]:
     """Run the full two-pass detrending pipeline.
 
     Parameters
@@ -788,72 +530,35 @@ def run_detrending(
         Positive finite flux-error values.
     config : DetrendConfig or None, optional
         Pipeline configuration. If None, the default ``DetrendConfig`` is used.
-    external_flare_mask : numpy.ndarray or None, optional
-        Optional externally supplied boolean mask. True values are included in all
-        flare masks used for fitting/noise estimates, but the original behavior is
-        unchanged when this is None.
 
     Returns
     -------
-    DetrendResult
-        Final detrended table, segment statistics, and summary diagnostics.
+    final_residual : numpy.ndarray
+        Flux minus the second-pass baseline.
+    final_flare_mask : numpy.ndarray
+        Boolean mask of the residual's positive outliers.
 
     Raises
     ------
-    ValueError
-        If array lengths differ, there are too few cadences, non-finite values are
-        present in required inputs, flux errors are not positive and finite, window
-        sizes are invalid, or the polynomial degree is negative.
     RuntimeError
         If no valid combined trend can be built during either pass.
     """
     cfg = config or DetrendConfig()
-    time = np.asarray(time, dtype=float)
-    flux = np.asarray(flux, dtype=float)
-    flux_err = np.asarray(flux_err, dtype=float)
-    if not (len(time) == len(flux) == len(flux_err)):
-        raise ValueError("time, flux, and flux_err must have the same length.")
-    if len(time) < max(cfg.min_fit_pts, cfg.poly_deg + 2):
-        raise ValueError("Not enough cadences to detrend.")
-    if not np.all(np.isfinite(time)):
-        raise ValueError("time must contain only finite values.")
-    if not np.all(np.isfinite(flux)):
-        raise ValueError("flux must contain only finite values.")
-    if not np.all(np.isfinite(flux_err)) or np.any(flux_err <= 0):
-        raise ValueError("flux_err must contain only positive finite values.")
-    if len(cfg.window_sizes) == 0 or any(w <= 0 for w in cfg.window_sizes):
-        raise ValueError("window_sizes must contain at least one positive value.")
-    if cfg.poly_deg < 0:
-        raise ValueError("poly_deg must be zero or greater.")
-    if cfg.min_fit_pts < cfg.poly_deg + 2:
-        warnings.warn(
-            "min_fit_pts is small for the polynomial degree; some fits may be unstable.",
-            RuntimeWarning,
-        )
 
-    if external_flare_mask is None:
-        external_flare_mask_arr = np.zeros(len(time), dtype=bool)
-    else:
-        external_flare_mask_arr = np.asarray(external_flare_mask, dtype=bool)
-        if len(external_flare_mask_arr) != len(time):
-            raise ValueError("external_flare_mask must have the same length as time, flux, and flux_err.")
-
-    preliminary_flare_mask_internal = preliminary_flare_mask(
+    flare_mask_prelim = preliminary_flare_mask(
         time, flux, flux_err,
         sigma_thresh=cfg.flare_mask_sigma,
         rough_window_days=cfg.flare_mask_window_d,
         poly_deg=cfg.poly_deg,
         rolling_pts=cfg.rolling_window_pts,
     )
-    flare_mask_prelim = preliminary_flare_mask_internal | external_flare_mask_arr
 
     all_results_p1 = run_all_windows(
         time, flux, flux_err, flare_mask_prelim, cfg.window_sizes,
         poly_deg=cfg.poly_deg, n_edge=cfg.n_edge, edge_weight=cfg.edge_weight,
         min_fit_pts=cfg.min_fit_pts,
     )
-    seg_stats_p1 = build_segment_stats_df(all_results_p1)
-    fp_trend, *_ = assemble_combined_trend(
+    fp_trend = assemble_combined_trend(
         time, all_results_p1, smooth_sigma_cadences=cfg.smooth_sigma_cadences,
         min_fit_pts=cfg.min_fit_pts,
     )
@@ -868,99 +573,31 @@ def run_detrending(
         poly_deg=cfg.poly_deg, n_edge=cfg.n_edge, edge_weight=cfg.edge_weight,
         min_fit_pts=cfg.min_fit_pts,
     )
-    seg_stats_p2 = build_segment_stats_df(all_results_p2)
-    sp_trend, sp_best_window, sp_best_shift, sp_best_seg, sp_best_score = assemble_combined_trend(
+    sp_trend = assemble_combined_trend(
         time, all_results_p2, smooth_sigma_cadences=cfg.smooth_sigma_cadences,
         min_fit_pts=cfg.min_fit_pts,
     )
-    sp_residuals = flux - sp_trend
+    final_residual = flux - sp_trend
 
-    final_residual = sp_residuals.copy()
-
-    if cfg.center_final_residual:
-        final_residual, centering_diagnostics = center_residual_by_moving_average(
-            final_residual,
-            ma_window=cfg.centering_ma_window,
-            clip_abs=cfg.centering_clip_abs,
-        )
-    else:
-        centering_diagnostics = {"centering_applied": False, "residual_offset_subtracted": 0.0}
-
-    # Rebuild the final flare mask after centering. This releases points that
-    # were provisionally flagged only because they sat on broad crests of the
-    # variability, while true sharp positive outliers should remain. The helper guards against final-mask explosions
-    # that would otherwise mark nearly the full light curve and corrupt the
-    # downstream noise estimate.
-    final_flare_mask, final_mask_diagnostics = build_safe_final_flare_mask(
+    # Recompute the final flare mask on the second-pass residual (thresholded
+    # above its own median). This releases points that the first pass flagged
+    # only because its trend missed broad crests of the variability, while
+    # sharp positive outliers remain. The helper guards against final-mask
+    # explosions that would mark nearly the full light curve.
+    final_flare_mask = build_safe_final_flare_mask(
         final_residual,
         sigma_thresh=cfg.second_pass_sigma,
         previous_mask=flare_mask_p2,
         max_mask_fraction=cfg.final_flare_max_mask_fraction,
     )
-    final_flare_mask = final_flare_mask | external_flare_mask_arr
-
-    sp_sigma_local = compute_rolling_local_sigma(
-        final_residual, window_pts=cfg.rolling_window_pts, flare_mask=final_flare_mask
-    )
-    sp_sigma_total = np.sqrt(sp_sigma_local**2 + flux_err**2)
-    q_sp = final_residual[np.isfinite(final_residual) & ~final_flare_mask]
-    sp_sc_std = sigma_clipped_std(q_sp) if len(q_sp) > 10 else np.nan
-
-    sort_idx = np.argsort(time)
-    final_df = pd.DataFrame({
-        "time": time[sort_idx],
-        "flux": flux[sort_idx],
-        "flux_err": flux_err[sort_idx],
-        "first_pass_trend": fp_trend[sort_idx],
-        "first_pass_residual": fp_residuals[sort_idx],
-        "second_pass_trend": sp_trend[sort_idx],
-        "second_pass_residual": sp_residuals[sort_idx],
-        "final_residual": final_residual[sort_idx],
-        "local_sigma": sp_sigma_local[sort_idx],
-        "total_sigma": sp_sigma_total[sort_idx],
-        "external_flare_mask": external_flare_mask_arr[sort_idx],
-        "flare_mask_prelim_internal": preliminary_flare_mask_internal[sort_idx],
-        "flare_mask_prelim": flare_mask_prelim[sort_idx],
-        "provisional_flare_mask": flare_mask_p2[sort_idx],
-        "final_flare_mask": final_flare_mask[sort_idx],
-        "selected_window_size": sp_best_window[sort_idx],
-        "selected_shift": sp_best_shift[sort_idx],
-        "selected_segment_id": sp_best_seg[sort_idx],
-        "selected_segment_score": sp_best_score[sort_idx],
-    })
-
-    cadence_days = float(np.nanmedian(np.diff(time)))
-    summary = {
-        "span_days": float(time.max() - time.min()),
-        "n_cadences": int(len(time)),
-        "cadence_min": cadence_days * 24 * 60,
-        "window_sizes": tuple(cfg.window_sizes),
-        "poly_deg": cfg.poly_deg,
-        "n_external_flare_masked": int(external_flare_mask_arr.sum()),
-        "n_prelim_internal_masked": int(preliminary_flare_mask_internal.sum()),
-        "n_prelim_masked": int(flare_mask_prelim.sum()),
-        "n_provisional_masked": int(flare_mask_p2.sum()),
-        "n_final_masked": int(final_flare_mask.sum()),
-        "median_local_sigma": float(np.nanmedian(sp_sigma_local)),
-        "sigma_clipped_global_std": float(sp_sc_std),
-        "median_total_sigma": float(np.nanmedian(sp_sigma_total)),
-        **final_mask_diagnostics,
-        **centering_diagnostics,
-    }
-    return DetrendResult(
-        final_df=final_df,
-        seg_stats_p1=seg_stats_p1,
-        seg_stats_p2=seg_stats_p2,
-        summary=summary,
-    )
+    return final_residual, final_flare_mask
 
 
-def fit_lightcurve_detrender(time, flux, flux_err, cont_windows, config=None):
+def fit_lightcurve_detrender(time, flux, flux_err, config=None):
     """Segmented-polynomial baseline fit for ``custom_detrending``.
 
     Adapter that runs :func:`run_detrending` on the finite cadences and
-    returns ``(newflux, model, best_params)`` on the full grid, as
-    ``custom_detrending`` expects.
+    returns ``(newflux, flare_mask)`` on the full grid.
     ``run_detrending`` fits a segmented-polynomial baseline and carries its
     own robust, fraction-capped flare masking.
 
@@ -971,18 +608,13 @@ def fit_lightcurve_detrender(time, flux, flux_err, cont_windows, config=None):
       are mapped back onto the full grid (NaN elsewhere).
     * ``flux_err`` is forced strictly positive and finite (non-finite or
       non-positive values are replaced by the median positive error).
-    * The pipeline's ``final_residual`` is centred near zero; it is rebased to
-      the flux level (``+ median(flux)``), so the trend is at the level of the
-      input flux.
-    * ``cont_windows`` is accepted for signature compatibility but not used directly —
-      ``run_detrending`` detects its own continuous blocks from ``time``.
+    * The residual is rebased to the flux level (``+ median(flux)``), so the
+      detrended flux is at the level of the input flux.
 
     Parameters
     ----------
     time, flux, flux_err : ndarray
         Full-grid arrays in days / flux units (may contain NaNs).
-    cont_windows : list of (int, int)
-        Segment boundaries (unused; see Notes).
     config : DetrendConfig or None
         Optional configuration forwarded to ``run_detrending``.
 
@@ -990,17 +622,11 @@ def fit_lightcurve_detrender(time, flux, flux_err, cont_windows, config=None):
     -------
     newflux : ndarray
         Detrended flux at the original flux level (NaN where input was NaN).
-    model : ndarray
-        Baseline (``second_pass_trend``) on the full grid.
-    best_params : dict
-        ``method='lightcurve_detrender'`` plus selected run-summary fields and
-        the pipeline's ``final_flare_mask`` (full grid) under
-        ``'ld_final_flare_mask'``.
+    flare_mask : ndarray
+        The final flare mask on the full grid (False where input was NaN).
     """
     time = np.asarray(time, dtype=float)
     flux = np.asarray(flux, dtype=float)
-    if np.isscalar(flux_err):
-        flux_err = np.full(len(time), float(flux_err))
     flux_err = np.asarray(flux_err, dtype=float)
 
     finite = np.isfinite(time) & np.isfinite(flux)
@@ -1014,32 +640,10 @@ def fit_lightcurve_detrender(time, flux, flux_err, cont_windows, config=None):
     err = np.where(good_err, err, fill)
 
     # Run the polynomial baseline on the finite subset.
-    result = run_detrending(time[finite], flux[finite], err, config)
+    resid_sub, mask_sub = run_detrending(time[finite], flux[finite], err, config)
 
-    df = result.final_df
-    # run_detrending returns rows time-sorted and 1:1 with its input; the finite
-    # subset is already time-ordered, so rows map back by position.
-    trend_sub = df["second_pass_trend"].to_numpy(dtype=float)
-    resid_sub = df["final_residual"].to_numpy(dtype=float)
-    mask_sub = df["final_flare_mask"].to_numpy(dtype=bool)
-
-    flux_level = np.nanmedian(flux[finite])
-
-    model = np.full_like(flux, np.nan, dtype=float)
     newflux = np.full_like(flux, np.nan, dtype=float)
     final_mask = np.zeros(len(flux), dtype=bool)
-    model[finite] = trend_sub
-    newflux[finite] = resid_sub + flux_level
+    newflux[finite] = resid_sub + np.nanmedian(flux[finite])
     final_mask[finite] = mask_sub
-
-    best_params = {
-        "method": "lightcurve_detrender",
-        "ld_final_flare_mask": final_mask,
-        "ld_n_final_masked": int(final_mask.sum()),
-        "ld_median_local_sigma": float(
-            result.summary.get("median_local_sigma", np.nan)
-        ),
-        "ld_window_sizes": result.summary.get("window_sizes"),
-        "ld_poly_deg": result.summary.get("poly_deg"),
-    }
-    return newflux, model, best_params
+    return newflux, final_mask

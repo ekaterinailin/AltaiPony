@@ -138,20 +138,9 @@ bumps in noisy stars above the 1-in-1000 rate of perfect detrending).
 
 ## Failing tests
 
-The full suite: 244 passed, 4 failed.
+The full suite: 263 passed (2026-10-15). The 4 Quantity failures are fixed:
+`detrended_flux` is dimensionless relative flux.
 
-- **Quantity vs plain number** (4 tests in
-  `altaipony/tests/detrending/test_pipeline.py`): `custom_detrending`
-  returns `detrended_flux` as an astropy Quantity labelled e-/s (but holding
-  relative flux), and these tests combine it with plain numbers
-  (`UnitConversionError`). Decide what type `detrended_flux` should have
-  (review plan, step 1), then fix the tests or the code.
-  - `TestCustomDetrending::test_measure_flare_basic`,
-    `test_measure_flare_has_required_columns`,
-    `test_measure_flare_calculates_duration`: add `500` to
-    `flc.detrended_flux`.
-  - `TestCustomDetrending::test_custom_detrending_removes_variability`:
-    compares `np.nanstd(detrended_flux)` with the std of the plain flux.
 - **Flaky:** `test_flarelc.py::test_sample_flare_recovery` fails about one
   run in six. It injects unseeded random flares; sometimes one lands next to
   the mock's real flare (cadences 15–18) and merges with it.

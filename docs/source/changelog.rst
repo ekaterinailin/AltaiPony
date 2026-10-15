@@ -8,6 +8,7 @@ Changelog (starting 04-2023)
 * The GP in ``custom_detrending`` bins its training data less where binning by 10 would distort the modulation (``gp_bin_max_bias=0.5``): after the first fit, it uses the largest bin factor of 10, 5, 3, 2 or 1 at which binning the fitted model shifts the bins by less than half their noise. On fast, quiet rotators 20-min bins flatten the modulation's sharp peaks, and the GP undercut them. This applies to about 2 % of the synthetic light curves: 13 instead of 19 false positives outside injected flares, 7165 instead of 7172 flares recovered. ``gp_bin_max_bias=None`` always bins by ``gp_bin_factor``.
 * Together, compared with 13-10-2026: 13 instead of 29 false positives outside injected flares and 13 instead of 16 on the tails of bright flares, in 1000 synthetic light curves with 7542 injected flares; 7165 instead of 7166 recovered.
 * Removed the experimental options ``gp_clip_two_sided``, ``gp_edge_pad`` and ``matched_filter_edge_days`` of ``custom_detrending``, which did not improve injection-recovery.
+* ``custom_detrending`` returns ``detrended_flux`` and ``detrended_flux_err`` as dimensionless relative flux (baseline 1.0), like lightkurve's ``normalize()``. They were labelled e-/s, so adding or comparing plain numbers failed.
 
 13-10-2026
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

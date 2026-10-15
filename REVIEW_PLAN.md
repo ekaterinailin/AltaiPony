@@ -56,8 +56,9 @@ going into the helpers yet; then `_apply_gp_step` (309–470).
 - ✓ **Zero point and scale** (resolved): both paths return relative flux at
   1.0, the GP path as `1 + (flux − model) / level` (455–461), the non-GP
   path divided by its global iterative median (230–237).
-- ⚠ `detrended_flux` is relative but still labelled e-/s (237, 461); this
-  causes the 4 failing Quantity tests.
+- ✓ **Unit** (resolved 2026-10-15): `detrended_flux`, `detrended_flux_err`
+  and `it_med` are dimensionless relative flux, like lightkurve's
+  `normalize()`.
 - Which steps only produce *masks*, and which produce the *output*? On the
   GP path, the polynomial baseline only feeds the GP's flare mask and the
   periodogram.
@@ -69,8 +70,7 @@ going into the helpers yet; then `_apply_gp_step` (309–470).
       (`use_gp=False`).
 - [x] Scale invariance: `scale=1` and `scale=3400` give the same relative
       flare amplitude and equivalent duration.
-- [ ] Fix the 4 Quantity failures once the type of `detrended_flux` is
-      decided.
+- [x] Fix the 4 Quantity failures (`detrended_flux` is dimensionless).
 
 ## Step 2: Gaps and cadence
 
@@ -137,8 +137,9 @@ The only baseline (spline, multi-sine and `auto` were removed: same recovery,
 **4c Second pass:** in `run_detrending` (766–949), the 3σ mask from the
 first-pass residual and the refit.
 
-**4d Centring and final mask:** `center_residual_by_moving_average`
-(609–656), `build_safe_final_flare_mask` (659–764).
+**4d Final mask:** `build_safe_final_flare_mask`. (The residual centring
+before it was removed on 2026-10-15: subtracting a constant does not change
+a mask thresholded above the residual's own median.)
 - The final mask falls back to the previous one above 5 % flagged cadences.
   Is 5 % right for very active stars?
 - Masks wider than 3σ (tail extension, 2σ hysteresis, a 2.5σ threshold) were

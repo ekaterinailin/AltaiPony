@@ -105,7 +105,8 @@ def estimate_detrended_noise(
         # Store in output array
         detrended_flux_err[le:ri] = final_err
 
-    # Set the result on the original lightcurve
-    flc.detrended_flux_err = detrended_flux_err
+    # Set the result on the original lightcurve, in the detrended flux's unit
+    unit = getattr(flc.detrended_flux, "unit", None)
+    flc.detrended_flux_err = detrended_flux_err if unit is None else detrended_flux_err * unit
 
     return flc
