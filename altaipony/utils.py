@@ -90,15 +90,9 @@ def medsig(a):
     """Return the median and the robust standard deviation
     (1.4826 x median absolute deviation) of the finite values of ``a``.
     """
-    med, mad = _median_mad(a)
-    return med, MAD_TO_STD * mad
-
-
-def _median_mad(a):
-    """Return the median and the median absolute deviation, ignoring NaNs."""
     a = np.asarray(a, dtype=float)
     med = np.nanmedian(a)
-    return med, np.nanmedian(np.abs(a - med))
+    return med, MAD_TO_STD * np.nanmedian(np.abs(a - med))
 
 
 def robust_sigma(a, n_clip=0, clip_sigma=3.0):
@@ -114,17 +108,15 @@ def robust_sigma(a, n_clip=0, clip_sigma=3.0):
     a = a[np.isfinite(a)]
     if n_clip > 0 and a.size < 3:
         return np.nan
-    med, mad = _median_mad(a)
-    sigma = MAD_TO_STD * float(mad)
+    med, sigma = medsig(a)
     for _ in range(n_clip):
         if sigma == 0 or not np.isfinite(sigma):
             break
         keep = np.abs(a - med) < clip_sigma * sigma
         if keep.sum() < 3:
             break
-        med, mad = _median_mad(a[keep])
-        sigma = MAD_TO_STD * float(mad)
-    return sigma
+        med, sigma = medsig(a[keep])
+    return float(sigma)
 
 
 def upper_outlier_threshold(a, n_sigma, center=None):
@@ -145,10 +137,10 @@ def upper_outlier_threshold(a, n_sigma, center=None):
     -------
     float
     """
-    med, mad = _median_mad(a)
+    med, sigma = medsig(a)
     if center is None:
         center = med
-    return center + n_sigma * mad * MAD_TO_STD
+    return center + n_sigma * sigma
 
 
 def sigma_clip(a, max_iter=10, max_sigma=3., 
