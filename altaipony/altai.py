@@ -6,7 +6,7 @@ import copy
 
 from scipy.stats import chi2, norm
 
-from .utils import sigma_clip
+from .utils import MAD_TO_STD, clipped_stats
 
 
 LOG = logging.getLogger(__name__)
@@ -31,7 +31,7 @@ def _local_beta(z, n, window=720, min_blocks=10):
     means = pd.Series(np.where(np.isfinite(blocks).all(axis=1), blocks.mean(axis=1), np.nan))
     med = means.rolling(k, center=True, min_periods=min_blocks).median()
     mad = (means - med).abs().rolling(k, center=True, min_periods=min_blocks).median()
-    beta_blocks = (1.4826 * mad * np.sqrt(n)).clip(lower=1.0).fillna(1.0).to_numpy()
+    beta_blocks = (MAD_TO_STD * mad * np.sqrt(n)).clip(lower=1.0).fillna(1.0).to_numpy()
     beta[: n_blocks * n] = np.repeat(beta_blocks, n)
     beta[n_blocks * n:] = beta_blocks[-1]
     return beta
@@ -417,7 +417,7 @@ def _find_iterative_median(detrended_flux, cont_windows, n=10, **kwargs):
     cont_windows : list of tuples or None
         List of (start_idx, end_idx) tuples defining continuous windows
     **kwargs : dict
-        Keyword arguments to pass to sigma_clip
+        Keyword arguments to pass to sigma_clip (via clipped_stats)
     
     Returns
     -------
@@ -430,23 +430,15 @@ def _find_iterative_median(detrended_flux, cont_windows, n=10, **kwargs):
     # Initialize it_med with global median
     it_med = np.full_like(detrended_flux, np.nanmedian(detrended_flux))
     
-    # If no windows provided, treat entire array as one segment
+    # Median of each continuous window (the whole array if none are given)
+    # that is not skewed by outliers
     if cont_windows is None or len(cont_windows) == 0:
-        good_mask = sigma_clip(detrended_flux, max_iter=n, **kwargs)
-        good_flux = detrended_flux[good_mask]
-        if len(good_flux) > 0:
-            it_med[:] = np.nanmedian(good_flux)
-    else:
-        # Process each continuous window
-        for (le, ri) in cont_windows:
-            flux_segment = detrended_flux[le:ri]
-            
-            # Find median that is not skewed by outliers
-            good_mask = sigma_clip(flux_segment, max_iter=n, **kwargs)
-            good_flux = flux_segment[good_mask]
-            if len(good_flux) > 0:
-                it_med[le:ri] = np.nanmedian(good_flux)
-    
+        cont_windows = [(0, len(detrended_flux))]
+    for (le, ri) in cont_windows:
+        med, _, good = clipped_stats(detrended_flux[le:ri], max_iter=n, **kwargs)
+        if good.any():  # else keep the global median
+            it_med[le:ri] = med
+
     return it_med
 
 

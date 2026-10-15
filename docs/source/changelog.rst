@@ -5,6 +5,8 @@ Changelog (starting 04-2023)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 * ``custom_detrending`` always fits the GP; the ``use_gp`` option is removed. The polynomial baseline only provides the GP's initial flare mask, and it fits once instead of twice (the second fit made no difference in injection-recovery). Light curves too short for a periodogram raise a ``ValueError``, and a failed GP fit raises its error instead of silently returning the polynomial baseline. In ``DetrendConfig``, ``second_pass_sigma`` is now ``final_mask_sigma``.
+* The polynomial baseline's preliminary flare mask thresholds at 5 times the residual's measured noise. It used to add ``flux_err`` in quadrature, which counted the white noise twice (an effective 7 sigma with correct errors, far more with overestimated ones). In injection-recovery on 1000 synthetic light curves: 7170 instead of 7165 flares recovered, 13 instead of 14 false positives outside injected flares.
+* ``utils.robust_sigma`` (with optional clipping, ``n_clip``), ``utils.clipped_stats`` (median and robust sigma after ``sigma_clip``) and ``utils.sigma_clipped_std`` are the shared noise estimates; the copies in the GP, the matched filter and the polynomial baseline use them.
 
 14-10-2026
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

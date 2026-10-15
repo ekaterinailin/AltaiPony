@@ -14,6 +14,7 @@ import numpy as np
 import pandas as pd
 
 from .fakeflares import flare_model_mendoza2022, template_equivalent_duration
+from .utils import MAD_TO_STD
 
 
 # ---------------------------------------------------------------------------
@@ -262,7 +263,7 @@ def inject_flares(time, flux, n_flares=None, rng=None, flares=None, mean_n_flare
             rng = np.random.default_rng()
         if n_flares is None:
             n_flares = rng.poisson(mean_n_flares)
-        noise_est = np.nanmedian(np.abs(np.diff(flux))) * 1.4826 / np.sqrt(2) / baseline
+        noise_est = np.nanmedian(np.abs(np.diff(flux))) * MAD_TO_STD / np.sqrt(2) / baseline
         fwhm_min_days, fwhm_max_days = 6.0 / 1440.0, 180.0 / 1440.0
         flares = []
         for _ in range(n_flares):

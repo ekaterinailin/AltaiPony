@@ -87,20 +87,11 @@ MAD_TO_STD = 1.4826
 
 
 def medsig(a):
-    """Return median and outlier-robust estimate
-    of standard deviation
-       (1.4826 x median of absolute deviations).
-    Adapted from K2SC (Aigrain et al. 2016).
+    """Return the median and the robust standard deviation
+    (1.4826 x median absolute deviation) of the finite values of ``a``.
     """
-    l = np.isfinite(a)
-    nfinite = l.sum()
-    if nfinite == 0:
-        return np.nan, np.nan
-    if nfinite == 1:
-        return a[l], np.nan
-    med = np.median(a[l])
-    sig = MAD_TO_STD * np.median(np.abs(a[l] - med))
-    return med, sig
+    med, mad = _median_mad(a)
+    return med, MAD_TO_STD * mad
 
 
 def _median_mad(a):
@@ -110,11 +101,30 @@ def _median_mad(a):
     return med, np.nanmedian(np.abs(a - med))
 
 
-def robust_sigma(a):
+def robust_sigma(a, n_clip=0, clip_sigma=3.0):
     """Return the MAD-based standard deviation estimate
     ``1.4826 * median(|a - median(a)|)``. Non-finite values are ignored.
+
+    With ``n_clip`` > 0, values more than ``clip_sigma`` times the estimate
+    from the median are dropped and the estimate is repeated, up to
+    ``n_clip`` times, so that outliers such as flares inflate it less.  It
+    stops early if the estimate is zero or fewer than 3 values would remain.
     """
-    return MAD_TO_STD * float(_median_mad(a)[1])
+    a = np.asarray(a, dtype=float)
+    a = a[np.isfinite(a)]
+    if n_clip > 0 and a.size < 3:
+        return np.nan
+    med, mad = _median_mad(a)
+    sigma = MAD_TO_STD * float(mad)
+    for _ in range(n_clip):
+        if sigma == 0 or not np.isfinite(sigma):
+            break
+        keep = np.abs(a - med) < clip_sigma * sigma
+        if keep.sum() < 3:
+            break
+        med, mad = _median_mad(a[keep])
+        sigma = MAD_TO_STD * float(mad)
+    return sigma
 
 
 def upper_outlier_threshold(a, n_sigma, center=None):
@@ -217,6 +227,66 @@ def sigma_clip(a, max_iter=10, max_sigma=3.,
     
     else:
         return mlow & mhigh
+
+
+def clipped_stats(a, max_iter=10, max_sigma=3., **kwargs):
+    """Median and robust standard deviation of ``a`` after iterative
+    sigma clipping (``sigma_clip``, which also widens the mask around
+    positive outliers such as flares).
+
+    The sigma measures the noise only.  For a scatter that also includes a
+    smooth misfit (e.g. a rough trend that misses the stellar modulation),
+    use ``sigma_clipped_std``.
+
+    Parameters:
+    ------------
+    a : np.array
+        Values; non-finite ones are ignored.
+    max_iter, max_sigma, kwargs :
+        Passed to ``sigma_clip``.
+
+    Return:
+    -------
+    median, sigma : float
+        NaN if no value survives the clipping (or none is finite).
+    good : np.array
+        Boolean mask of the values kept (non-finite values count as kept,
+        as in ``sigma_clip``).
+    """
+    good = sigma_clip(a, max_iter=max_iter, max_sigma=max_sigma, **kwargs)
+    if not good.any():
+        return np.nan, np.nan, good
+    return np.nanmedian(a[good]), robust_sigma(a[good]), good
+
+
+def sigma_clipped_std(arr, n_sigma=3.0, max_iter=20):
+    """Standard deviation of ``arr`` after iterative clipping at ``n_sigma``
+    standard deviations around the median.  Non-finite values are ignored.
+
+    Unlike ``clipped_stats``, the scatter is a standard deviation and the
+    clipping is symmetric, so it keeps a smooth misfit that a MAD ignores.
+    The polynomial baseline uses it as the floor of its preliminary flare
+    threshold, where that is the point: on stars whose modulation the rough
+    fit misses, a MAD floor (``clipped_stats``) let the mask flag thousands
+    of modulation crests (200 synthetic light curves, 2026-10-15).
+
+    Return:
+    -------
+    float
+        NaN if fewer than two finite values are available.
+    """
+    r = arr[np.isfinite(arr)].copy()
+    if len(r) < 2:
+        return np.nan
+    for _ in range(max_iter):
+        med, std = np.median(r), np.std(r)
+        if not np.isfinite(std) or std == 0:
+            break
+        keep = np.abs(r - med) <= n_sigma * std
+        if keep.sum() == len(r) or keep.sum() < 2:
+            break
+        r = r[keep]
+    return float(np.std(r))
 
 
 

@@ -4,7 +4,7 @@ import pytest
 import numpy as np
 
 from ..flarelc import FlareLightCurve
-from ..utils import split_cont_windows, split_gaps, expand_mask
+from ..utils import split_cont_windows, split_gaps, expand_mask, robust_sigma
 
 import copy
 
@@ -355,3 +355,17 @@ def test_split_gaps_is_deprecated_alias():
     windows, splits = [(0., 20.), (21., 34.)], [10.]
     with pytest.warns(DeprecationWarning):
         assert split_gaps(windows, splits) == split_cont_windows(windows, splits)
+
+
+def test_robust_sigma():
+    """MAD-based sigma of Gaussian noise; clipping makes it less sensitive to
+    a block of positive outliers (a flare); NaNs are ignored."""
+    rng = np.random.default_rng(3)
+    a = rng.normal(0, 2.0, 20000)
+    assert robust_sigma(a) == pytest.approx(2.0, rel=0.03)
+    a[:2000] += 8.0  # 10 % of the values in a "flare"
+    a[2000] = np.nan
+    unclipped, clipped = robust_sigma(a), robust_sigma(a, n_clip=1)
+    assert np.isfinite(unclipped) and np.isfinite(clipped)
+    assert abs(clipped - 2.0) < abs(unclipped - 2.0)
+    assert np.isnan(robust_sigma([1.0, 2.0], n_clip=1))

@@ -18,6 +18,7 @@ from .gp import _bin_training_per_segment, fit_gp_rotation
 from .matchedfilter import matched_filter_flare_mask as _matched_filter_mask
 from .noise import estimate_detrended_noise
 from .periodicity import detect_strong_periodicity, lomb_scargle
+from ..utils import robust_sigma
 
 # Common baseline in detrended light curves 
 NORMALIZED_BASELINE = 1.0
@@ -294,7 +295,7 @@ def _bin_factor_for_curvature(time, flux, model, flare_mask, bin_factor, max_bia
     ok = np.isfinite(model) & np.isfinite(flux)
     train = ok & ~flare_mask
     resid = (flux - model)[train]
-    sigma = 1.4826 * np.median(np.abs(resid - np.median(resid)))
+    sigma = robust_sigma(resid)
     for k in sorted({bin_factor, 5, 3, 2, 1}, reverse=True):
         if k > bin_factor:
             continue

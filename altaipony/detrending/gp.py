@@ -5,7 +5,7 @@ import numpy as np
 
 from scipy.optimize import minimize
 
-from ..utils import upper_outlier_threshold
+from ..utils import robust_sigma, upper_outlier_threshold
 
 import celerite2
 from celerite2 import terms as celerite2_terms
@@ -346,7 +346,7 @@ def fit_gp_rotation(
         # white noise from second differences, which cancel the modulation's
         # slope; the errors become relative weights, 1/sqrt(n) after binning
         d2 = f_train[1:-1] - 0.5 * (f_train[:-2] + f_train[2:])
-        noise = 1.4826 * np.median(np.abs(d2 - np.median(d2))) / np.sqrt(1.5)
+        noise = robust_sigma(d2) / np.sqrt(1.5)
         err_train = np.ones(len(t_train))
 
     # ── optional binning ──────────────────────────────────────────────────

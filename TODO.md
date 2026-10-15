@@ -105,6 +105,11 @@ flares (in 12 LCs), 13 on flare tails.** Recovery by S/N: < 3: 58.5 %,
 exactly as the screen predicted: −6 false positives (LCs 966, 172, 918),
 −7 flares (6 fast rotators), nothing else changed. Against the 5σ-mask
 reference: 13 vs. 29 outside flares, 13 vs. 16 on tails, 7165 vs. 7166.
+**Since then** (2026-10-15, 1000 light curves each): one polynomial pass
+instead of two: 7165 recovered, 14 outside flares, 12 on tails (no change
+beyond churn; removed together with the no-GP path). Preliminary mask
+without `flux_err` in its threshold (true 5 sigma): **7170 recovered, 13
+outside flares (12 LCs), 12 on tails** -- current reference.
 Open: the remaining ones (LC 874 edge, short edge ones, 10–20 min noise
 bumps in noisy stars above the 1-in-1000 rate of perfect detrending).
 

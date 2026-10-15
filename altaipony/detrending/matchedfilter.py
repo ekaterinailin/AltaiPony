@@ -32,7 +32,7 @@ import logging
 import numpy as np
 from scipy.signal import fftconvolve
 
-from ..utils import MAD_TO_STD
+from ..utils import robust_sigma
 
 logger = logging.getLogger(__name__)
 
@@ -131,26 +131,6 @@ def _segment_slices(time, segment_gap_factor=10):
     return list(zip(bounds[:-1], bounds[1:]))
 
 
-def _robust_noise(residual, n_iter=2):
-    """Robust per-array scatter (1.4826·MAD) with light outlier rejection so
-    flares themselves do not inflate the noise estimate."""
-    r = residual[np.isfinite(residual)]
-    if r.size < 3:
-        return np.nan
-    keep = np.ones(r.size, dtype=bool)
-    sigma = np.nan
-    for _ in range(n_iter):
-        med = np.median(r[keep])
-        mad = np.median(np.abs(r[keep] - med))
-        sigma = MAD_TO_STD * mad
-        if sigma == 0 or not np.isfinite(sigma):
-            break
-        keep = np.abs(r - med) < 3.0 * sigma
-        if keep.sum() < 3:
-            break
-    return sigma
-
-
 def _cross_correlate(w, s, peak_idx):
     """Cross-correlate whitened residual ``w`` with template ``s`` so the
     output ``c[i]`` is the template amplitude for a flare *peaking* at cadence
@@ -221,7 +201,7 @@ def matched_filter_statistic(
             continue
 
         if noise is None:
-            sig = _robust_noise(seg_r)
+            sig = robust_sigma(seg_r, n_clip=1)
         else:
             seg_noise = np.asarray(noise)[a:b]
             sig = np.nanmedian(seg_noise[np.isfinite(seg_noise)])
@@ -328,7 +308,7 @@ def matched_filter_flare_mask(
 
         # Whitened residual for the grow step.
         if noise_arr is None:
-            sig = _robust_noise(seg_r)
+            sig = robust_sigma(seg_r, n_clip=1)
         else:
             seg_noise = noise_arr[a:b]
             sig = np.nanmedian(seg_noise[np.isfinite(seg_noise)])

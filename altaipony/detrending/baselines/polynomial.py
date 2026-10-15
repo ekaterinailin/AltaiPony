@@ -14,7 +14,7 @@ import numpy as np
 import pandas as pd
 from scipy.ndimage import gaussian_filter1d
 
-from ...utils import MAD_TO_STD, robust_sigma
+from ...utils import MAD_TO_STD, robust_sigma, sigma_clipped_std
 
 logger = logging.getLogger(__name__)
 
@@ -66,37 +66,6 @@ class DetrendConfig:
     final_flare_max_mask_fraction: float = 0.05
     rolling_window_pts: int = 100
     smooth_sigma_cadences: int = 5
-
-def sigma_clipped_std(arr: np.ndarray, n_sigma: float = 3.0, max_iter: int = 20) -> float:
-    """Compute an iterative sigma-clipped standard deviation.
-
-    Parameters
-    ----------
-    arr : numpy.ndarray
-        Array containing values to summarize. Non-finite values are ignored.
-    n_sigma : float, optional
-        Sigma threshold used at each clipping iteration.
-    max_iter : int, optional
-        Maximum number of clipping iterations.
-
-    Returns
-    -------
-    float
-        Standard deviation after clipping. Returns ``numpy.nan`` if fewer than two
-        finite points are available.
-    """
-    r = arr[np.isfinite(arr)].copy()
-    if len(r) < 2:
-        return np.nan
-    for _ in range(max_iter):
-        med, std = np.median(r), np.std(r)
-        if not np.isfinite(std) or std == 0:
-            break
-        keep = np.abs(r - med) <= n_sigma * std
-        if keep.sum() == len(r) or keep.sum() < 2:
-            break
-        r = r[keep]
-    return float(np.std(r))
 
 def compute_rolling_local_sigma(
     residuals: np.ndarray,
@@ -151,9 +120,15 @@ def preliminary_flare_mask(
     flux : array-like
         Flux values.
     flux_err : array-like
-        Flux-error values.
+        Flux-error values, used only to weight the fits.
     sigma_thresh : float, optional
-        Positive-residual threshold in units of effective sigma.
+        Positive-residual threshold in units of the local noise: the rolling
+        MAD of the residual, at least its clipped standard deviation
+        (``utils.sigma_clipped_std``, which includes the rough fit's misfit,
+        so that modulation crests it misses are not flagged).  (Adding
+        ``flux_err`` in quadrature counted
+        the white noise twice and, with overestimated errors, raised the cut
+        far above 5 sigma on quiet stars; removed 2026-10-15.)
     rough_window_days : float, optional
         Rough polynomial-fit segment length, in days.
     poly_deg : int, optional
@@ -181,9 +156,8 @@ def preliminary_flare_mask(
     res_clean = np.where(finite, residuals, 0.0)
 
     sigma_local  = compute_rolling_local_sigma(res_clean, window_pts=rolling_pts)
-    sigma_total  = np.sqrt(sigma_local**2 + flux_err**2)
     sc_floor     = sigma_clipped_std(res_clean[finite]) if finite.sum() > 10 else 0.0
-    eff_sigma    = np.maximum(sigma_total, sc_floor)
+    eff_sigma    = np.maximum(sigma_local, sc_floor)
 
     mask = (res_clean > sigma_thresh * eff_sigma) & finite
     logger.debug(f"Preliminary flare mask: {mask.sum():,} cadences flagged "
