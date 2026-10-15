@@ -47,6 +47,67 @@ Settings behind these numbers:
 Before the window detector (classic 3 x 3 sigma rule): 662 (pipeline) and
 692 (perfect detrending), 0 false positives outside injected flares.
 
+**5σ initial mask** (`second_pass_sigma=5.0`, default since 2026-10-13; 1000
+light curves): 7166 recovered, 45 false positives, 29 outside injected
+flares. Who produces them (2026-10-14):
+
+- 21 at segment edges (< 0.1 d), in 14 light curves: high amplitude over
+  noise (median 810) and low noise (median 300 ppm). Light curves with
+  amplitude/noise > 300 are 7 % of the sample but give 18 of the 21; 20 %
+  of them have one.
+- 16 on tails of injected flares (detector, not detrending): noisy (median
+  1180 ppm), low amplitude/noise (median 19).
+- 8 mid-segment, in 7 light curves: mostly fast rotators (median P_min
+  9 h, amplitude/noise 100–650; LCs 811, 567, 261, 742) where the GP is
+  slightly too smooth at sharp turns, plus two 14-min bumps on noise (LCs
+  55, 897).
+- Spotless stars and amplitude/noise < 100 have no edge false positives.
+
+**GP noise model** (`gp_jitter_only=True, gp_jitter_floor=3`, default since
+2026-10-14; 1000 light curves, scratch run): **7172
+recovered, 33 false positives, 19 outside injected flares** (in 15 light
+curves), 14 on flare tails. Recovery by S/N: < 3: 58.8 % (was 55.6 %),
+3–5: 85.9 % (86.5 %), > 5 unchanged.
+
+- Cause: the old jitter bound, 0.05 x the flux's standard deviation
+  (modulation included), plus the benchmark's flat 1000 ppm `flux_err`.
+  On quiet, strongly spotted stars the GP assumed ~10x the true noise
+  (LC 272: 2749 ppm fitted, 298 ppm true), so it was too stiff at segment
+  edges and turning points.
+- The jitter is now fitted relative to the white noise from second
+  differences, with a floor of 3x that noise. Without a floor (0.1) the GP
+  absorbed flares on fast rotators (screen of 106 LCs: −25 flares, 19 of
+  them at P_min < 12 h); floor 2: 12 false positives / 649 recovered,
+  floor 3: 14 / 660, old model: 29 / 654.
+- Churn on 1000 LCs: 24 false positives gone (16 LCs), 14 new (11 LCs),
+  recovery +88 / −82. New: LC 966 (4; P_min 6.6 h, 279 ppm, largest
+  binning bias), LC 779 (1 → 2), nine single ones.
+- With the jitter at the noise, a single rotation term follows the second
+  mode in `test_gp.py`'s two-period star. Check whether the second-rotation
+  and residual-period terms still earn their keep.
+
+**Bin factor** (`gp_bin_max_bias`, off by default): binning by 10 averages
+a strongly curved modulation over 20 min, which shifts the binned points by
+more than their (sqrt(10)-smaller) error on 27 of 1000 light curves. The
+rule lowers the bin factor to 5, 3, 2 or 1 where the first GP fit, binned,
+shifts by more than 0.5 binned sigma. On the old noise model (56 LCs): 22
+vs. 29 false positives, −6 flares, unchanged where k stays 10. On top of
+the new noise model (67 LCs: those 56 plus the 11 with new false
+positives; the rule lowered k in 17): 13 vs. 19 false positives (LC 966
+4 → 0, LCs 172 and 918 1 → 0), 4 vs. 5 on tails, 360 vs. 367 flares
+(LCs 344 −2; 125, 387, 649, 714, 966 −1, all fast rotators). Default
+since 2026-10-14 (`gp_bin_max_bias=0.5`).
+
+**Current default, 1000 light curves** (jitter floor 3 + bin rule, scratch
+run, 2026-10-14): **7165 recovered, 26 false positives: 13 outside injected
+flares (in 12 LCs), 13 on flare tails.** Recovery by S/N: < 3: 58.5 %,
+3–5: 85.5 %, 5–10: 99.1 %, > 10: 100 %. Against the jitter-only run
+exactly as the screen predicted: −6 false positives (LCs 966, 172, 918),
+−7 flares (6 fast rotators), nothing else changed. Against the 5σ-mask
+reference: 13 vs. 29 outside flares, 13 vs. 16 on tails, 7165 vs. 7166.
+Open: the remaining ones (LC 874 edge, short edge ones, 10–20 min noise
+bumps in noisy stars above the 1-in-1000 rate of perfect detrending).
+
 ## Open
 
 - **Missing cadences.** `custom_detrending` no longer interpolates missing
@@ -314,6 +375,22 @@ GP:
 - Protecting training points within 0.1 d of segment edges from the clip:
   fixed the three edge false positives but cost 3 flares and moved small
   residuals elsewhere (2 new false positives mid-segment).
+- Two-sided post-fit clipping (`gp_clip_two_sided`, 2026-10-13): fixed some
+  edge false positives on the offenders, but worse on the 1000 run. Removed.
+- Not masking matched-filter events within 0.1 d of segment edges
+  (`matched_filter_edge_days`): 39 vs. 45 false positives on 1000 light
+  curves but −13 flares and 4 new false positives elsewhere. Removed.
+- Padding segment edges with an extrapolation before the GP fit
+  (`gp_edge_pad`, 2026-10-14): straight lines and quadratics, 20–50
+  cadences, fitted on 1–3 pad lengths. On high amplitude/noise stars any
+  pad of 5 % of the period misses the trend by 5–15σ (the cubic term), so
+  the GP follows it and the matched-filter mask runs away. Capped at 20
+  cadences with a quadratic: 22 vs. 29 false positives on the 21 offenders,
+  but 1 new false positive in 50 clean controls and −2 flares; at best a
+  wash. Removed. If it comes back: never pad a segment shorter than the
+  fit window (LC 871, a 0.05-d segment, curled off at both ends), pad after
+  binning, and keep padded points out of the clip and the edge-anchor
+  protection.
 - Binning by 2 instead of 10 (−31 flares); minimum damping time 1 or 5 days
   instead of 2 (no better); a non-periodic SHO term (could not follow a
   second fast mode).

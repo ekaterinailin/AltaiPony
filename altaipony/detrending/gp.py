@@ -156,44 +156,6 @@ def _bin_training_per_segment(t, f, e, bin_factor, segment_gap_factor=10):
     return tb[order], fb[order], eb[order]
 
 
-def _pad_segment_edges(time, flux, flux_err, train_mask, t_train, f_train, err_train, n_pad):
-    """Extend the training data of every segment beyond both ends by up to
-    ``n_pad`` cadences on a straight line fitted to the segment's first or
-    last ``n_pad`` training points (see ``fit_gp_rotation(edge_pad=...)``).
-    At gaps between segments each side uses at most half the gap, minus 6
-    cadences, so that the segments stay apart."""
-    err_all = (np.full(len(time), float(flux_err)) if np.isscalar(flux_err)
-               else np.asarray(flux_err, dtype=float))
-    bounds = _segment_bounds(time)
-    pad_t, pad_f, pad_e = [], [], []
-    for j, (a, b) in enumerate(bounds):
-        idx = np.flatnonzero(train_mask[a:b]) + a
-        if len(idx) < 10:
-            continue
-        dt = np.nanmedian(np.diff(time[a:b]))
-        for side in ("start", "end"):
-            sel = idx[:n_pad] if side == "start" else idx[-n_pad:]
-            if side == "start":
-                room = np.inf if j == 0 else (time[a] - time[bounds[j - 1][1] - 1]) / 2
-            else:
-                room = np.inf if j == len(bounds) - 1 else (time[bounds[j + 1][0]] - time[b - 1]) / 2
-            n = int(min(n_pad, np.floor(room / dt) - 6))
-            if n <= 0:
-                continue
-            steps = dt * np.arange(1, n + 1)
-            tn = time[sel[0]] - steps if side == "start" else time[sel[-1]] + steps
-            coef = np.polyfit(time[sel], flux[sel], 1)
-            pad_t.append(tn)
-            pad_f.append(np.polyval(coef, tn))
-            pad_e.append(np.full(n, np.nanmedian(err_all[sel])))
-    if not pad_t:
-        return t_train, f_train, err_train
-    t_all = np.concatenate([t_train] + pad_t)
-    order = np.argsort(t_all, kind="stable")
-    return (t_all[order], np.concatenate([f_train] + pad_f)[order],
-            np.clip(np.abs(np.concatenate([err_train] + pad_e)[order]), 1e-10, None))
-
-
 def fit_gp_rotation(
     time,
     flux,
@@ -213,17 +175,16 @@ def fit_gp_rotation(
     return_std=False,
     extra_periods=(),
     min_damping_days=2.0,
-    clip_two_sided=False,
-    edge_pad=0,
+    jitter_only=True,
+    jitter_floor=3.0,
 ):
     """Fit a celerite2 quasi-periodic GP to flare-masked flux.
 
     Uses ``celerite2.terms.RotationTerm`` — a mixture of two SHO terms at
     the rotation period ``P`` and its first harmonic ``P/2`` — which is the
-    standard kernel for stellar spot-driven variability.  White-noise jitter
-    (excess noise beyond the formal ``flux_err``) is handled via the ``diag``
-    argument to ``gp.compute()`` rather than as a kernel term, which is the
-    correct celerite2 v2 API.
+    standard kernel for stellar spot-driven variability.  White noise is a
+    fitted jitter passed as ``yerr`` to ``gp.compute()`` rather than a kernel
+    term (see ``jitter_only``).
 
     The GP is **trained only on unmasked cadences** (no NaNs, no flagged
     flares).  It is **predicted at every cadence** in ``time``, so it
@@ -245,7 +206,7 @@ def fit_gp_rotation(
                more coherent oscillation.
     dQ         Additional quality for the secondary (P/2) term.
     f          Fractional energy in the secondary term (0 < f < 1).
-    jitter     White-noise amplitude added in quadrature to ``flux_err``.
+    jitter     White-noise amplitude per cadence (see ``jitter_only``).
     =========  ============================================================
 
     For each period in ``extra_periods``, a further ``RotationTerm`` is added
@@ -311,17 +272,25 @@ def fit_gp_rotation(
     extra_periods : sequence of float
         Periods in days of further rotation terms (see above).  Defaults to
         none, a single rotation term.
-    clip_two_sided : bool
-        If True, the post-fit clip also removes training points more than
-        ``gp_clip_sigma`` below the model.  Defaults to False.
-    edge_pad : int
-        If > 0, each segment's training data are extended beyond both ends
-        by up to ``edge_pad`` cadences, and at most 5 % of the shortest
-        period of the kernel, on a straight line fitted to as many of the
-        first and last training points, so that the GP is constrained on
-        both sides of every real edge.  At gaps each side uses at most half
-        the gap.  The model is only predicted at the real cadences.
-        Defaults to 0 (no padding).
+    jitter_only : bool
+        If True (default), ignore ``flux_err``: each training point's error
+        is the fitted jitter alone, divided by the square root of the number
+        of cadences in its bin.  The jitter is bounded to ``jitter_floor`` to
+        ``max(10, 2 * jitter_floor)`` times the white noise estimated from
+        second differences of the training flux, and starts at the larger of
+        the noise and the floor.  If False, the jitter is added to
+        ``flux_err`` in quadrature and bounded to 0.05–2 times the standard
+        deviation of the flux, modulation included; on low-noise stars with
+        large modulation that floor is ~10x the noise.
+    jitter_floor : float
+        With ``jitter_only``, the jitter's lower bound in units of the
+        estimated white noise.  Above 1 it stiffens the GP, which then
+        weights the data as if they were noisier than they are, so that it
+        does not bend into short flares on fast rotators.  Defaults to 3
+        (1000-LC injection-recovery: 19 vs. 29 false positives outside
+        flares, 7172 vs. 7166 flares recovered, compared with the
+        ``flux_err`` + jitter model; a floor of 0.1 lost flares on fast
+        rotators).
     min_damping_days : float
         Minimum damping time of the rotation terms, in days: how long the
         modulation keeps its shape before it evolves.  For an SHO at period
@@ -384,16 +353,12 @@ def fit_gp_rotation(
     else:
         err_train = np.asarray(flux_err)[train_mask]
     err_train = np.clip(np.abs(err_train), 1e-10, None)
-
-    if edge_pad > 0:
-        # at most 5 % of the shortest period, so that a straight line is a
-        # fair continuation of the modulation
-        cadence = np.nanmedian(np.diff(time))
-        shortest = min([period] + list(extra_periods))
-        n_pad = int(min(edge_pad, np.floor(0.05 * shortest / cadence)))
-        if n_pad >= 3:
-            t_train, f_train, err_train = _pad_segment_edges(
-                time, flux, flux_err, train_mask, t_train, f_train, err_train, n_pad)
+    if jitter_only:
+        # white noise from second differences, which cancel the modulation's
+        # slope; the errors become relative weights, 1/sqrt(n) after binning
+        d2 = f_train[1:-1] - 0.5 * (f_train[:-2] + f_train[2:])
+        noise = 1.4826 * np.median(np.abs(d2 - np.median(d2))) / np.sqrt(1.5)
+        err_train = np.ones(len(t_train))
 
     # ── optional binning ──────────────────────────────────────────────────
     # Bin the training arrays before fitting so the GP kernel matrix is
@@ -434,13 +399,16 @@ def fit_gp_rotation(
         return kernel
 
     def _compute(jitter_sq):
-        gp.compute(t_train, yerr=np.sqrt(err_train**2 + jitter_sq), quiet=True)
+        if jitter_only:
+            gp.compute(t_train, yerr=np.sqrt(jitter_sq) * err_train, quiet=True)
+        else:
+            gp.compute(t_train, yerr=np.sqrt(err_train**2 + jitter_sq), quiet=True)
 
     def _q0_min(p):
         """Lower bound on Q0 for a rotation term at period ``p``."""
         return max(1.0, 2.0 * np.pi * min_damping_days / p - 0.5)
 
-    initial_jitter = f_std * 0.1
+    initial_jitter = max(1.0, jitter_floor) * noise if jitter_only else f_std * 0.1
     initial = dict(sigma=initial_sigma, period=period, Q0=max(initial_Q0, _q0_min(period)),
                    dQ=initial_dQ, f=initial_f)
     for k, p in enumerate(extra_periods, start=2):
@@ -481,7 +449,10 @@ def fit_gp_rotation(
         bounds = _rotation_bounds(log_P)
         for p in extra_periods:
             bounds += _rotation_bounds(np.log(p))
-        bounds += [(np.log(0.05 * f_std), np.log(2.0 * f_std))]  # jitter
+        if jitter_only:
+            bounds += [(np.log(jitter_floor * noise), np.log(max(10.0, 2 * jitter_floor) * noise))]  # jitter
+        else:
+            bounds += [(np.log(0.05 * f_std), np.log(2.0 * f_std))]  # jitter
         result = minimize(
             _neg_log_like,
             x0,
@@ -517,8 +488,6 @@ def fit_gp_rotation(
             resid = f_train - mu_tr
             thr = upper_outlier_threshold(resid, gp_clip_sigma)
             keep = resid <= thr  # one-sided: positive only
-            if clip_two_sided:
-                keep &= resid >= 2 * np.nanmedian(resid) - thr
             if anchor_edges:
                 # Never clip the first/last point of a segment: removing an
                 # edge anchor re-opens the extrapolation this whole scheme is

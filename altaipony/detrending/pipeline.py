@@ -17,9 +17,8 @@ import astropy.units as u
 
 from ..altai import _find_iterative_median
 from .baselines.polynomial import fit_lightcurve_detrender
-from .gp import _CELERITE2_AVAILABLE, fit_gp_rotation
+from .gp import _CELERITE2_AVAILABLE, _bin_training_per_segment, fit_gp_rotation
 from .matchedfilter import matched_filter_flare_mask as _matched_filter_mask
-from .matchedfilter import _segment_slices
 from .noise import estimate_detrended_noise
 from .periodicity import detect_strong_periodicity, lomb_scargle
 
@@ -41,17 +40,17 @@ def custom_detrending(
     gp_optimize=True,
     gp_period_tolerance=0.05,
     gp_bin_factor=10,
+    gp_bin_max_bias=0.5,
+    gp_jitter_only=True,
+    gp_jitter_floor=3.0,
     gp_clip_sigma=3.0,
     gp_clip_iters=3,
-    gp_clip_two_sided=False,
-    gp_edge_pad=0,
     gp_anchor_edges=True,
     gp_second_rotation=True,
     gp_residual_term=True,
     matched_filter_flares=True,
     matched_filter_snr=5.0,
     matched_filter_iters=3,
-    matched_filter_edge_days=0.0,
     matched_filter_fwhm_grid=(0.02, 0.05, 0.1, 0.2),
 ):
     """Custom de-trending for TESS and Kepler
@@ -105,6 +104,22 @@ def custom_detrending(
         less flexible on short timescales: with a factor of 2, injection-
         recovery lost 31 of 658 recovered flares (weak ones, S/N 2.6–6.5).
         Defaults to 10.
+    gp_bin_max_bias : float or None
+        If set, lower the bin factor where binning distorts the modulation:
+        after the first GP fit, take the largest factor (at most
+        ``gp_bin_factor``) at which binning the fitted model itself shifts
+        the bins by less than this many binned noise units (99th
+        percentile), and refit with it (see ``_bin_factor_for_curvature``).
+        On fast, quiet rotators binning by 10 otherwise flattens the
+        modulation's sharp peaks, and the GP undercuts them.  None always
+        uses ``gp_bin_factor``.  Defaults to 0.5.
+    gp_jitter_only : bool
+        Weight the GP's training points by a fitted white-noise jitter alone,
+        ignoring ``flux_err`` (see ``fit_gp_rotation(jitter_only=...)``).
+        Defaults to True.
+    gp_jitter_floor : float
+        With ``gp_jitter_only``, the jitter's lower bound in units of the
+        estimated white noise (see ``fit_gp_rotation``).  Defaults to 3.
     gp_clip_sigma : float
         One-sided residual clipping threshold applied after the GP
         optimisation.  Training points whose residual exceeds
@@ -115,12 +130,6 @@ def custom_detrending(
     gp_clip_iters : int
         Maximum number of post-fit residual clipping passes.  Set to 0
         to disable.  Defaults to 3.
-    gp_clip_two_sided : bool
-        Clip training points below the GP as well as above it (see
-        ``fit_gp_rotation``).  Defaults to False.
-    gp_edge_pad : int
-        Extend each segment's GP training data beyond its ends by this many
-        cadences on a straight line (see ``fit_gp_rotation``).  Defaults to 0.
     gp_anchor_edges : bool
         If True (default), pin the first/last cadence of every segment into
         the GP training set and shield them from the clip, so the GP is
@@ -159,10 +168,6 @@ def custom_detrending(
         mask and refits; it stops early when a pass adds no new cadences.
         Defaults to 3 (+5 flares over a single pass in injection-recovery,
         no extra false positives).
-    matched_filter_edge_days : float
-        Matched-filter detections that start within this many days of a
-        segment start, or end within it of a segment end, are not masked
-        (see ``_drop_edge_events``).  Defaults to 0 (all are masked).
     matched_filter_fwhm_grid : sequence of float
         Flare FWHMs (days) the matched filter templates against.  Defaults to
         ``(0.02, 0.05, 0.1, 0.2)``.
@@ -229,10 +234,11 @@ def custom_detrending(
         gp_optimize=gp_optimize,
         gp_period_tolerance=gp_period_tolerance,
         gp_bin_factor=gp_bin_factor,
+        gp_bin_max_bias=gp_bin_max_bias,
+        gp_jitter_only=gp_jitter_only,
+        gp_jitter_floor=gp_jitter_floor,
         gp_clip_sigma=gp_clip_sigma,
         gp_clip_iters=gp_clip_iters,
-        gp_clip_two_sided=gp_clip_two_sided,
-        gp_edge_pad=gp_edge_pad,
         gp_anchor_edges=gp_anchor_edges,
         gp_second_rotation=gp_second_rotation,
         gp_residual_term=gp_residual_term,
@@ -240,7 +246,6 @@ def custom_detrending(
         matched_filter_flares=matched_filter_flares,
         matched_filter_snr=matched_filter_snr,
         matched_filter_iters=matched_filter_iters,
-        matched_filter_edge_days=matched_filter_edge_days,
         matched_filter_fwhm_grid=matched_filter_fwhm_grid,
     )
 
@@ -299,20 +304,33 @@ def _second_period_candidates(time, flux, periods, fap_threshold,
     return candidates
 
 
-def _drop_edge_events(time, mask, edge_days):
-    """Remove the runs of ``mask`` that start within ``edge_days`` of the
-    start of a segment or end within ``edge_days`` of its end (segments split
-    at gaps as in the matched filter).  There the GP has data on one side
-    only, so a masked edge lets it extrapolate freely."""
-    mask = mask.copy()
-    for a, b in _segment_slices(time):
-        seg = mask[a:b]
-        d = np.diff(np.concatenate([[0], seg.astype(int), [0]]))
-        for s0, s1 in zip(np.flatnonzero(d == 1), np.flatnonzero(d == -1)):
-            if (time[a + s0] - time[a] < edge_days) or (time[b - 1] - time[a + s1 - 1] < edge_days):
-                seg[s0:s1] = False
-        mask[a:b] = seg
-    return mask
+def _bin_factor_for_curvature(time, flux, model, flare_mask, bin_factor, max_bias):
+    """Largest bin factor of ``bin_factor``, 5, 3, 2, 1 (at most
+    ``bin_factor``) at which binning shifts the modulation by less than
+    ``max_bias`` binned noise units.
+
+    A bin averages the modulation over its span, which differs from the
+    modulation at the bin's mean time where the modulation curves; the
+    binned error shrinks as 1/sqrt(k), this shift does not.  It is measured
+    by binning ``model`` (the first GP fit) over the unmasked cadences, as
+    the GP's training data are binned, and comparing with ``model`` at the
+    bins' times; its 99th percentile must stay below ``max_bias`` times
+    sigma/sqrt(k), with sigma the robust scatter of ``flux - model`` (not
+    the formal errors)."""
+    ok = np.isfinite(model) & np.isfinite(flux)
+    train = ok & ~flare_mask
+    resid = (flux - model)[train]
+    sigma = 1.4826 * np.median(np.abs(resid - np.median(resid)))
+    for k in sorted({bin_factor, 5, 3, 2, 1}, reverse=True):
+        if k > bin_factor:
+            continue
+        if k == 1:
+            return 1
+        tb, mb, _ = _bin_training_per_segment(time[train], model[train],
+                                              np.ones(train.sum()), k)
+        shift = mb - np.interp(tb, time[ok], model[ok])
+        if np.percentile(np.abs(shift), 99) < max_bias * sigma / np.sqrt(k):
+            return k
 
 
 def _residual_period(time, residual, fap_threshold, period_min=0.1):
@@ -344,10 +362,11 @@ def _apply_gp_step(
     gp_optimize,
     gp_period_tolerance,
     gp_bin_factor,
+    gp_bin_max_bias=0.5,
+    gp_jitter_only=True,
+    gp_jitter_floor=3.0,
     gp_clip_sigma,
     gp_clip_iters,
-    gp_clip_two_sided,
-    gp_edge_pad,
     gp_anchor_edges=True,
     gp_second_rotation=True,
     gp_residual_term=True,
@@ -355,7 +374,6 @@ def _apply_gp_step(
     matched_filter_flares=True,
     matched_filter_snr=5.0,
     matched_filter_iters=3,
-    matched_filter_edge_days=0.0,
     matched_filter_fwhm_grid=(0.02, 0.05, 0.1, 0.2),
 ):
     """Apply the final Gaussian-Process detrending step, in place.
@@ -401,17 +419,25 @@ def _apply_gp_step(
                 flare_mask=mask,
                 optimize_hyperparams=gp_optimize,
                 period_tolerance=gp_period_tolerance,
-                bin_factor=gp_bin_factor,
+                bin_factor=bin_factor,
                 gp_clip_sigma=gp_clip_sigma,
                 gp_clip_iters=gp_clip_iters,
-                clip_two_sided=gp_clip_two_sided,
-                edge_pad=gp_edge_pad,
                 anchor_edges=gp_anchor_edges,
                 extra_periods=extra_periods,
+                jitter_only=gp_jitter_only,
+                jitter_floor=gp_jitter_floor,
             )
             return model, params
 
+        bin_factor = gp_bin_factor
         gp_model, gp_params = _fit(flare_mask)
+        if gp_bin_max_bias is not None and gp_bin_factor > 1:
+            k = _bin_factor_for_curvature(t4_gp, f4_gp / norm, gp_model, flare_mask,
+                                          gp_bin_factor, gp_bin_max_bias)
+            if k != bin_factor:
+                bin_factor = k
+                gp_model, gp_params = _fit(flare_mask)
+        best_params["gp_bin_factor"] = bin_factor
 
         # A second periodic signal at a period unrelated to the first (e.g.
         # from a second star) cannot be fitted by the rotation term.  Its
@@ -473,8 +499,6 @@ def _apply_gp_step(
                 snr_threshold=matched_filter_snr,
                 fwhm_grid=matched_filter_fwhm_grid,
             )
-            if matched_filter_edge_days > 0:
-                mf_mask = _drop_edge_events(t4_gp, mf_mask, matched_filter_edge_days)
             if not (mf_mask & ~flare_mask).any():
                 break
             flare_mask = flare_mask | mf_mask
